@@ -318,3 +318,4 @@ D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\refint\A
 D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\AutoFix.pdb
 D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\AutoFix.genruntimeconfig.cache
 D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\ref\AutoFix.dll
+D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\AutoFix.sourcelink.json

@@ -1,0 +1,13 @@
+[obj]
+[bin]
+*.png
+.vscode/
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+.idea/
+*.swp
+*.bak
+*.log
+docker-compose.override.yml

@@ -1,6 +1,6 @@
 using AutoFix.DTOs.Service;
 using AutoFix.Services.Interfaces;
-using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -9,14 +9,14 @@ namespace AutoFix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    
     public class ServicesController : ControllerBase
     {
         private readonly IServiceService _service;
         public ServicesController(IServiceService service) => _service = service;
 
         [HttpGet]
-        [AllowAnonymous]
+        
         public async Task<ActionResult<List<ServiceResponseDto>>> GetAll()
         {
             return Ok(await _service.GetAllAsync());
@@ -30,7 +30,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        
         public async Task<ActionResult<ServiceResponseDto>> Create([FromBody] CreateServiceDto dto)
         {
             var result = await _service.CreateAsync(dto);

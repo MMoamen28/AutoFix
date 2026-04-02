@@ -1,6 +1,6 @@
 using AutoFix.DTOs.SparePartCategory;
 using AutoFix.Services.Interfaces;
-using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -9,21 +9,21 @@ namespace AutoFix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    
     public class SparePartCategoriesController : ControllerBase
     {
         private readonly ISparePartCategoryService _service;
         public SparePartCategoriesController(ISparePartCategoryService service) => _service = service;
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Mechanic")]
+        
         public async Task<ActionResult<List<SparePartCategoryResponseDto>>> GetAll()
         {
             return Ok(await _service.GetAllAsync());
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = "Admin,Mechanic")]
+        
         public async Task<ActionResult<SparePartCategoryResponseDto>> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id);
@@ -31,7 +31,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
+        
         public async Task<ActionResult<SparePartCategoryResponseDto>> Create([FromBody] CreateSparePartCategoryDto dto)
         {
             var result = await _service.CreateAsync(dto);
@@ -39,7 +39,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
+        
         public async Task<ActionResult<SparePartCategoryResponseDto>> Update(int id, [FromBody] UpdateSparePartCategoryDto dto)
         {
             var result = await _service.UpdateAsync(id, dto);
@@ -47,7 +47,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
+        
         public async Task<IActionResult> Delete(int id)
         {
             var (success, error) = await _service.DeleteAsync(id);

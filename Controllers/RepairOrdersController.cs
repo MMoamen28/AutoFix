@@ -1,6 +1,6 @@
 using AutoFix.DTOs.RepairOrder;
 using AutoFix.Services.Interfaces;
-using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -10,7 +10,7 @@ namespace AutoFix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    
     public class RepairOrdersController : ControllerBase
     {
         private readonly IRepairOrderService _service;
@@ -18,7 +18,7 @@ namespace AutoFix.Controllers
 
         // GET api/repairorders — Admin and Mechanic can see all
         [HttpGet]
-        [Authorize(Roles = "Admin,Mechanic")]
+        
         public async Task<ActionResult<List<RepairOrderResponseDto>>> GetAll()
         {
             var orders = await _service.GetAllAsync();
@@ -35,7 +35,7 @@ namespace AutoFix.Controllers
 
         // GET api/repairorders/my — Customer sees their own
         [HttpGet("my")]
-        [Authorize(Roles = "Customer")]
+        
         public async Task<ActionResult<List<RepairOrderResponseDto>>> GetMyOrders()
         {
             var customerId = GetCurrentCustomerId();
@@ -45,7 +45,7 @@ namespace AutoFix.Controllers
 
         // POST api/repairorders — Customer creates an order for themselves
         [HttpPost]
-        [Authorize(Roles = "Customer")]
+        
         public async Task<ActionResult<RepairOrderResponseDto>> Create([FromBody] CreateRepairOrderDto dto)
         {
             var customerId = GetCurrentCustomerId();
@@ -55,7 +55,7 @@ namespace AutoFix.Controllers
 
         // PUT api/repairorders/{id} — Mechanic or Admin updates status
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin,Mechanic")]
+        
         public async Task<ActionResult<RepairOrderResponseDto>> Update(int id, [FromBody] UpdateRepairOrderDto dto)
         {
             var result = await _service.UpdateAsync(id, dto);
@@ -64,7 +64,7 @@ namespace AutoFix.Controllers
 
         // DELETE api/repairorders/{id} — Admin only
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
+        
         public async Task<IActionResult> Delete(int id)
         {
             var deleted = await _service.DeleteAsync(id);

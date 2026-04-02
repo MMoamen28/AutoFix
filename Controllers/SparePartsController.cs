@@ -1,6 +1,5 @@
 using AutoFix.DTOs.SparePart;
 using AutoFix.Services.Interfaces;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -9,21 +8,18 @@ namespace AutoFix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
     public class SparePartsController : ControllerBase
     {
         private readonly ISparePartService _service;
         public SparePartsController(ISparePartService service) => _service = service;
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Mechanic")]
         public async Task<ActionResult<List<SparePartResponseDto>>> GetAll()
         {
             return Ok(await _service.GetAllAsync());
         }
 
         [HttpGet("{id}")]
-        [Authorize(Roles = "Admin,Mechanic")]
         public async Task<ActionResult<SparePartResponseDto>> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id);
@@ -31,21 +27,18 @@ namespace AutoFix.Controllers
         }
 
         [HttpGet("category/{categoryId}")]
-        [Authorize(Roles = "Admin,Mechanic")]
         public async Task<ActionResult<List<SparePartResponseDto>>> GetByCategory(int categoryId)
         {
             return Ok(await _service.GetByCategoryAsync(categoryId));
         }
 
         [HttpGet("lowstock")]
-        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<List<SparePartResponseDto>>> GetLowStock()
         {
             return Ok(await _service.GetLowStockAsync());
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<SparePartResponseDto>> Create([FromBody] CreateSparePartDto dto)
         {
             var result = await _service.CreateAsync(dto);
@@ -53,7 +46,6 @@ namespace AutoFix.Controllers
         }
 
         [HttpPut("{id}")]
-        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<SparePartResponseDto>> Update(int id, [FromBody] UpdateSparePartDto dto)
         {
             var result = await _service.UpdateAsync(id, dto);
@@ -61,7 +53,6 @@ namespace AutoFix.Controllers
         }
 
         [HttpPatch("{id}/stock")]
-        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<SparePartResponseDto>> AdjustStock(int id, [FromBody] AdjustStockDto dto)
         {
             var (success, error, part) = await _service.AdjustStockAsync(id, dto);
@@ -73,7 +64,6 @@ namespace AutoFix.Controllers
         }
 
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> Delete(int id)
         {
             var success = await _service.DeleteAsync(id);

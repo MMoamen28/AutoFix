@@ -1,6 +1,6 @@
 using AutoFix.DTOs.Car;
 using AutoFix.Services.Interfaces;
-using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -9,7 +9,7 @@ namespace AutoFix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    
     public class CarsController : ControllerBase
     {
         private readonly ICarService _service;
@@ -29,7 +29,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Customer,Admin")]
+        
         public async Task<ActionResult<CarResponseDto>> Create([FromBody] CreateCarDto dto)
         {
             var customerId = 1; // Simplified mapping

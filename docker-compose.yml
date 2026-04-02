@@ -1,54 +1,53 @@
-version: "3.9"
+version: '3.8'
 
+# Define separate services for API and SQL Database
 services:
-
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    command: start-dev
-    container_name: autofix-keycloak
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+  # autofix-api service: ASP.NET Core Web API
+  autofix-api:
+    build: .
+    image: autofix-api:latest
     ports:
       - "8080:8080"
-    networks:
-      - autofix-net
-
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: autofix-sqlserver
+    depends_on:
+      db:
+        condition: service_healthy # Wait for database to be ready
     environment:
-      SA_PASSWORD: "AutoFix_Pass123"
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: "Developer"
+      - ASPNETCORE_ENVIRONMENT=Development
+      # Connection strings linking to the 'db' service name
+      - ConnectionStrings__DefaultConnection=Server=db,1433;Database=AutoFixDB;User Id=sa;Password=AutoFix@1234;TrustServerCertificate=True
+      - ConnectionStrings__Hangfire=Server=db,1433;Database=AutoFixDB;User Id=sa;Password=AutoFix@1234;TrustServerCertificate=True
+    restart: unless-stopped
+    networks:
+      - autofix-network
+
+  # db service: SQL Server 2022 image
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: autofix-db
     ports:
       - "1433:1433"
-    volumes:
-      - sqlserver-data:/var/opt/mssql
-    networks:
-      - autofix-net
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: autofix-api
-    ports:
-      - "5000:8080"
-    depends_on:
-      - sqlserver
-      - keycloak
     environment:
-      - ConnectionStrings__Default=Server=sqlserver,1433;Database=AutoFixDb;User Id=sa;Password=AutoFix_Pass123;TrustServerCertificate=True;
-      - Keycloak__Authority=http://keycloak:8080/realms/autofix
-      - Keycloak__Audience=autofix-api
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=AutoFix@1234
+      - MSSQL_PID=Express
+    volumes:
+      # Data persistence even if container is removed
+      - sqlserver_data:/var/opt/mssql # SQL Server data path changed slightly for 2022/Ubuntu
+    healthcheck:
+      # Use sqlcmd to check if server is responding (Updated path for 2022-latest)
+      test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "AutoFix@1234", "-Q", "SELECT 1", "-C"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
     networks:
-      - autofix-net
+      - autofix-network
 
-volumes:
-  sqlserver-data:
-
+# Network for communication between containers
 networks:
-  autofix-net:
+  autofix-network:
     driver: bridge
+
+# Named volume for persistent database storage
+volumes:
+  sqlserver_data:

@@ -1,6 +1,6 @@
 using AutoFix.DTOs.Customer;
 using AutoFix.Services.Interfaces;
-using Microsoft.AspNetCore.Authorization;
+
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -9,7 +9,7 @@ namespace AutoFix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")]
+    
     public class CustomersController : ControllerBase
     {
         private readonly ICustomerService _service;
