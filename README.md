@@ -71,11 +71,7 @@ The easiest way to start the system is using the pre-configured orchestration:
 2.  **Spin up Services:**
     ```bash
     docker-compose up -d --build
-    ```
-    This command will launch the **API container** and the **SQL Server container**.
-
-3.  **Automatic Seeding:**
-    On the first run, the system automatically initializes the database schema and seeds initial test data (customers, parts, services) via the `DbInitializer`.
+    
 
 ---
 
@@ -84,9 +80,9 @@ The easiest way to start the system is using the pre-configured orchestration:
 Once the services are running, the system provides several dashboards:
 
 *   **Swagger API Docs:** [http://localhost:8080/swagger](http://localhost:8080/swagger)
-    *   *Note: Detailed documentation for each endpoint including schemas and "Try it out" functionality.*
+  
 *   **Hangfire Dashboard:** [http://localhost:8080/hangfire](http://localhost:8080/hangfire)
-    *   *Note: Monitor recurring jobs like overdue order flagging and inventory checks.*
+ 
 
 ---
 
@@ -99,16 +95,4 @@ The application can be configured via environment variables in `docker-compose.y
 
 ---
 
-## 🤝 Contributing
 
-Contributions are welcome! If you'd like to improve the codebase, please open an issue or submit a pull request.
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
-
----
-
-<p align="center">Made with ❤️ for the Automotive Industry</p>
