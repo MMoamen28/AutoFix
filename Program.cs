@@ -60,6 +60,21 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddControllers();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:3000",  // Vite dev server
+                "http://localhost:5173"   // Vite fallback port
+              )
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+
 var app = builder.Build();
 
 // Apply Migrations/Ensure Database on Startup
@@ -99,6 +114,9 @@ RecurringJob.AddOrUpdate<OverdueOrderJob>(
     job => job.FlagLowStockPartsAsync(),
     Cron.Daily);
 
+app.UseCors("AllowFrontend");
+
 app.MapControllers();
+
 
 app.Run();
