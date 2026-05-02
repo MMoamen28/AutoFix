@@ -1,20 +1,30 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
 :root {
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  --info: #06b6d4;
+  /* Core Palette - Deep Midnight Theme */
+  --bg-main: #0B0F1A;
+  --bg-card: #151B2B;
+  --bg-hover: #1E2638;
   
-  --bg-main: #0f172a;
-  --bg-sidebar: #1e293b;
-  --bg-card: #1e293b;
-  --border: #334155;
+  --primary: #3B82F6;
+  --primary-glow: rgba(59, 130, 246, 0.2);
+  --secondary: #8B5CF6;
+  --accent: #10B981;
   
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --text-main: #F8FAFC;
+  --text-muted: #94A3B8;
+  --text-dim: #64748B;
   
-  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --border: #2D3748;
+  --border-light: rgba(255, 255, 255, 0.05);
+  
+  --danger: #EF4444;
+  --warning: #F59E0B;
+  --success: #10B981;
+  
+  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+  --glass: backdrop-filter: blur(12px);
 }
 
 * {
@@ -24,27 +34,94 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-weight: 700;
+/* Premium Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-a {
-  color: var(--primary);
-  text-decoration: none;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-button {
-  cursor: pointer;
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
 }
 
-.page-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
 }
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(21, 27, 43, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-light);
+  border-radius: 1.5rem;
+}
+
+.glass-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+  border: 1px solid var(--border-light);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Typography Utilities */
+.heading-xl { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.025em; }
+.heading-lg { font-size: 1.875rem; font-weight: 700; letter-spacing: -0.025em; }
+.heading-md { font-size: 1.25rem; font-weight: 600; }
+
+/* Animation Keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Layout Classes */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Button Refinement */
+.btn-primary {
+  @apply px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95;
+}
+
+.btn-secondary {
+  @apply px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl transition-all border border-gray-700 active:scale-95;
+}
+
+/* Input Refinement */
+.form-input {
+  @apply w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 transition-all;
+}
+
+/* Badge Styles */
+.badge {
+  @apply px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider;
+}
+
+.badge-success { @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/20; }
+.badge-warning { @apply bg-amber-500/10 text-amber-400 border border-amber-500/20; }
+.badge-danger { @apply bg-red-500/10 text-red-400 border border-red-500/20; }
+.badge-primary { @apply bg-blue-500/10 text-blue-400 border border-blue-500/20; }

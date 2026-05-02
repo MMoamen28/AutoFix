@@ -1,6 +1,6 @@
 using AutoFix.DTOs.Mechanic;
 using AutoFix.Services.Interfaces;
-
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -9,19 +9,21 @@ namespace AutoFix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    
+    [Authorize]
     public class MechanicsController : ControllerBase
     {
         private readonly IMechanicService _service;
         public MechanicsController(IMechanicService service) => _service = service;
 
         [HttpGet]
+        [Authorize(Roles = "Admin,Owner,Mechanic")]
         public async Task<ActionResult<List<MechanicResponseDto>>> GetAll()
         {
             return Ok(await _service.GetAllAsync());
         }
 
         [HttpGet("{id}")]
+        [Authorize(Roles = "Admin,Owner,Mechanic")]
         public async Task<ActionResult<MechanicResponseDto>> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id);
@@ -29,6 +31,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "Owner")]
         public async Task<ActionResult<MechanicResponseDto>> Create([FromBody] CreateMechanicDto dto)
         {
             var result = await _service.CreateAsync(dto);
@@ -36,6 +39,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin,Owner")]
         public async Task<ActionResult<MechanicResponseDto>> Update(int id, [FromBody] UpdateMechanicDto dto)
         {
             var result = await _service.UpdateAsync(id, dto);
@@ -43,6 +47,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Owner")]
         public async Task<IActionResult> Delete(int id)
         {
             var result = await _service.DeleteAsync(id);

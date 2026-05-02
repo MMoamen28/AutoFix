@@ -17,6 +17,8 @@ namespace AutoFix.Data
         public DbSet<SparePartCategory> SparePartCategories => Set<SparePartCategory>();
         public DbSet<RepairOrderServiceJoin> RepairOrderServices => Set<RepairOrderServiceJoin>();
         public DbSet<ServiceSparePartJoin> ServiceSpareParts => Set<ServiceSparePartJoin>();
+        public DbSet<Receipt> Receipts => Set<Receipt>();
+        public DbSet<MechanicActionRequest> MechanicActionRequests => Set<MechanicActionRequest>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -103,6 +105,39 @@ namespace AutoFix.Data
                 .Property(sp => sp.UnitPrice).HasPrecision(10, 2);
             modelBuilder.Entity<RepairOrderServiceJoin>()
                 .Property(ros => ros.PriceAtTime).HasPrecision(10, 2);
+
+            // Receipt → RepairOrder
+            modelBuilder.Entity<Receipt>()
+                .HasOne(r => r.RepairOrder)
+                .WithMany()
+                .HasForeignKey(r => r.RepairOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Receipt → Customer
+            modelBuilder.Entity<Receipt>()
+                .HasOne(r => r.Customer)
+                .WithMany()
+                .HasForeignKey(r => r.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Serialize ServicesPerformed as JSON
+            modelBuilder.Entity<Receipt>()
+                .Property(r => r.ServicesPerformed)
+                .HasConversion(
+                    v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                    v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new()
+                );
+
+            // Receipt decimal precision
+            modelBuilder.Entity<Receipt>()
+                .Property(r => r.TotalCost).HasPrecision(10, 2);
+
+            // MechanicActionRequest → Mechanic
+            modelBuilder.Entity<MechanicActionRequest>()
+                .HasOne(m => m.Mechanic)
+                .WithMany()
+                .HasForeignKey(m => m.MechanicId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

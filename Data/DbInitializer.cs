@@ -55,6 +55,29 @@ namespace AutoFix.Data
                 context.SpareParts.AddRange(parts);
                 context.SaveChanges();
             }
+            // Seed Customers
+            if (!context.Customers.Any())
+            {
+                var customers = new List<Customer>
+                {
+                    new Customer { FullName = "Mohamed Salah", Email = "salah@liverpool.com", Phone = "0123456789", KeycloakUserId = "demo-cust-1", CreatedAt = DateTime.UtcNow },
+                    new Customer { FullName = "Ahmed Hegazy", Email = "hegazy@ittihad.com", Phone = "0987654321", KeycloakUserId = "demo-cust-2", CreatedAt = DateTime.UtcNow }
+                };
+                context.Customers.AddRange(customers);
+                context.SaveChanges();
+            }
+
+            // Seed Mechanics
+            if (!context.Mechanics.Any())
+            {
+                var mechanics = new List<Mechanic>
+                {
+                    new Mechanic { FirstName = "John", LastName = "Wick", Email = "john@high-table.com", KeycloakUserId = "demo-mech-1", HiredAt = DateTime.UtcNow },
+                    new Mechanic { FirstName = "James", LastName = "Bond", Email = "007@mi6.gov", KeycloakUserId = "demo-mech-2", HiredAt = DateTime.UtcNow }
+                };
+                context.Mechanics.AddRange(mechanics);
+                context.SaveChanges();
+            }
         }
     }
 }

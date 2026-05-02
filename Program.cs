@@ -21,7 +21,34 @@ builder.Services.AddScoped<ICarService, CarService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<ISparePartService, SparePartService>();
 builder.Services.AddScoped<ISparePartCategoryService, SparePartCategoryService>();
+builder.Services.AddScoped<IReceiptService, ReceiptService>();
+builder.Services.AddScoped<IMechanicActionRequestService, MechanicActionRequestService>();
 builder.Services.AddHttpClient();
+
+// Authentication
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.Authority = builder.Configuration["Keycloak:Authority"];
+    options.Audience = builder.Configuration["Keycloak:Audience"];
+    options.RequireHttpsMetadata = false; // For dev
+    options.MapInboundClaims = false; // Prevent remapping Keycloak claims to MS claim types
+    options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+    {
+        // Disable issuer validation in dev: Keycloak issues tokens with 'localhost:8080'
+        // but the API resolves Keycloak internally as 'keycloak:8080' (Docker networking).
+        ValidateIssuer = false,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        RoleClaimType = "roles" // Keycloak roles are in 'roles' array
+    };
+});
+
+builder.Services.AddAuthorization();
 
 // Hangfire - Using ConnectionString from environment
 builder.Services.AddHangfire(config =>
@@ -66,6 +93,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 "http://localhost:3000",  // Vite dev server
+                "http://localhost:3001",  // Vite dev server (secondary)
                 "http://localhost:5173"   // Vite fallback port
               )
               .AllowAnyHeader()
@@ -115,6 +143,8 @@ RecurringJob.AddOrUpdate<OverdueOrderJob>(
     Cron.Daily);
 
 app.UseCors("AllowFrontend");
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 

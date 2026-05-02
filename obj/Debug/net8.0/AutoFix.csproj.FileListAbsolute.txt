@@ -319,3 +319,5 @@ D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\AutoFix.
 D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\AutoFix.genruntimeconfig.cache
 D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\ref\AutoFix.dll
 D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\obj\Debug\net8.0\AutoFix.sourcelink.json
+D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\bin\Debug\net8.0\autofix-frontend\package-lock.json
+D:\AAST\A semster 10\web engineering\peoject 1\AutoFix\bin\Debug\net8.0\autofix-frontend\package.json

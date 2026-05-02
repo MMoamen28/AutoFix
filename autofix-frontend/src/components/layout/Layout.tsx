@@ -1,19 +1,21 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { useAuth } from '../../context/AuthContext';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
-  const isPublicPage = location.pathname === '/' || location.pathname === '/login';
+  const { token } = useAuth();
+  const isPublicPage = (!token && location.pathname === '/') || location.pathname === '/login' || location.pathname === '/register';
 
   if (isPublicPage) {
-    return <>{children}</>;
+    return <main className="min-h-screen">{children}</main>;
   }
 
   return (
-    <div style={{ display: 'flex' }}>
+    <div className="flex bg-[#0B0F1A] min-h-screen overflow-hidden">
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: '260px', minHeight: '100vh' }}>
+      <main className="flex-1 h-screen overflow-y-auto relative">
         {children}
       </main>
     </div>

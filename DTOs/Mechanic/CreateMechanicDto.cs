@@ -18,6 +18,13 @@ namespace AutoFix.DTOs.Mechanic
         public string Email { get; set; } = string.Empty;
 
         [Required]
-        public string KeycloakUserId { get; set; } = string.Empty;
+        [MaxLength(50)]
+        [MinLength(3)]
+        public string Username { get; set; } = string.Empty;
+
+        [Required]
+        [MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
+        public string Password { get; set; } = string.Empty;
+        // Owner sets this when creating the mechanic account
     }
 }

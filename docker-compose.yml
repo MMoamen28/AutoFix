@@ -7,15 +7,24 @@ services:
     build: .
     image: autofix-api:latest
     ports:
-      - "8080:8080"
+      - "5000:8080"
     depends_on:
       db:
-        condition: service_healthy # Wait for database to be ready
+        condition: service_healthy
+      keycloak:
+        condition: service_started
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      # Connection strings linking to the 'db' service name
       - ConnectionStrings__DefaultConnection=Server=db,1433;Database=AutoFixDB;User Id=sa;Password=AutoFix@1234;TrustServerCertificate=True
       - ConnectionStrings__Hangfire=Server=db,1433;Database=AutoFixDB;User Id=sa;Password=AutoFix@1234;TrustServerCertificate=True
+      - Keycloak__Authority=http://keycloak:8080/realms/autofix
+      - Keycloak__Audience=autofix-api
+      - Keycloak__ClientId=autofix-api
+      - Keycloak__ClientSecret=autofix-secret-2024
+      - Keycloak__AdminBaseUrl=http://keycloak:8080/admin/realms/autofix
+      - Keycloak__AuthServerUrl=http://keycloak:8080
+      - Keycloak__AdminUsername=admin
+      - Keycloak__AdminPassword=admin
     restart: unless-stopped
     networks:
       - autofix-network
@@ -31,15 +40,51 @@ services:
       - SA_PASSWORD=AutoFix@1234
       - MSSQL_PID=Express
     volumes:
-      # Data persistence even if container is removed
-      - sqlserver_data:/var/opt/mssql # SQL Server data path changed slightly for 2022/Ubuntu
+      - sqlserver_data:/var/opt/mssql
     healthcheck:
-      # Use sqlcmd to check if server is responding (Updated path for 2022-latest)
       test: ["CMD", "/opt/mssql-tools18/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "AutoFix@1234", "-Q", "SELECT 1", "-C"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - autofix-network
+
+  # Keycloak service
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.0
+    container_name: keycloak
+    command: start-dev
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=keycloak
+    ports:
+      - "8080:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - autofix-network
+
+  # Keycloak Database
+  keycloak-db:
+    image: postgres:15
+    container_name: keycloak-db
+    environment:
+      - POSTGRES_DB=keycloak
+      - POSTGRES_USER=keycloak
+      - POSTGRES_PASSWORD=keycloak
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
     networks:
       - autofix-network
 
@@ -51,3 +96,4 @@ networks:
 # Named volume for persistent database storage
 volumes:
   sqlserver_data:
+  keycloak_db_data:

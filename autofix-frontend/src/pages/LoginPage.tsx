@@ -1,126 +1,88 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import axiosClient from '../services/axiosClient';
+import { toast } from 'react-hot-toast';
+import { Wrench } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  
-  // Controlled form state
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  
-  // Status state
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setError(null);
     
     try {
-      // In a real app, we would call authService.login(username, password)
-      // For this assignment, we simulate a successful login and redirect based on role
-      console.log('Logging in with:', { username, password });
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      localStorage.setItem('token', 'fake-jwt-token');
-      
-      // Basic role routing simulation
-      if (username.includes('admin')) navigate('/customers');
-      else if (username.includes('mechanic')) navigate('/mechanic');
-      else navigate('/customer');
-      
+      const response = await axiosClient.post('/auth/login', { username, password });
+      login(response.data.accessToken);
+      toast.success('Logged in successfully');
+      navigate('/');
     } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Invalid credentials');
+      toast.error(err.response?.data?.detail || 'Invalid credentials');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      minHeight: '100vh', 
-      backgroundColor: 'var(--bg-main)' 
-    }}>
-      <div style={{ 
-        backgroundColor: 'var(--bg-card)', 
-        padding: '2.5rem', 
-        borderRadius: '12px', 
-        border: '1px solid var(--border)',
-        width: '100%',
-        maxWidth: '400px',
-        boxShadow: 'var(--shadow)'
-      }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '2rem', color: 'var(--primary)' }}>AutoFix Login</h2>
+    <div className="min-h-screen flex items-center justify-center bg-[#0B0F1A] p-4">
+      <div className="w-full max-w-md bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-3xl p-8 shadow-2xl">
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 mb-4">
+            <Wrench className="text-white" size={24} />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
+          <p className="text-gray-400">Sign in to manage your workshop</p>
+        </div>
         
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Username</label>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Username</label>
             <input 
               type="text" 
               value={username} 
               onChange={(e) => setUsername(e.target.value)} 
-              placeholder="Enter your username"
+              placeholder="e.g. owner"
               required 
-              style={{ 
-                width: '100%', 
-                padding: '0.75rem', 
-                backgroundColor: 'var(--bg-main)', 
-                border: '1px solid var(--border)', 
-                color: 'var(--text-main)', 
-                borderRadius: '6px' 
-              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-all"
             />
           </div>
           
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Password</label>
+            <label className="block text-sm font-medium text-gray-400 mb-2">Password</label>
             <input 
               type="password" 
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
-              placeholder="Enter your password"
+              placeholder="••••••••"
               required 
-              style={{ 
-                width: '100%', 
-                padding: '0.75rem', 
-                backgroundColor: 'var(--bg-main)', 
-                border: '1px solid var(--border)', 
-                color: 'var(--text-main)', 
-                borderRadius: '6px' 
-              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-all"
             />
           </div>
-
-          {error && <div style={{ color: 'var(--danger)', fontSize: '0.9rem' }}>{error}</div>}
 
           <button 
             type="submit" 
             disabled={submitting}
-            style={{ 
-              backgroundColor: 'var(--primary)', 
-              color: 'white', 
-              border: 'none', 
-              padding: '0.75rem', 
-              borderRadius: '6px', 
-              fontWeight: '600',
-              cursor: submitting ? 'not-allowed' : 'pointer',
-              opacity: submitting ? 0.7 : 1
-            }}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 mt-4"
           >
-            {submitting ? 'Logging in...' : 'Sign In'}
+            {submitting ? 'Authenticating...' : 'Sign In'}
           </button>
         </form>
         
-        <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+        <div className="mt-8 text-center space-y-4">
+          <p className="text-gray-400 text-sm">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-blue-400 hover:underline">
+              Create one
+            </Link>
+          </p>
           <button 
             onClick={() => navigate('/')}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+            className="text-gray-500 hover:text-white text-sm transition-colors"
           >
             Back to Home
           </button>

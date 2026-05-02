@@ -23,9 +23,11 @@ namespace AutoFix.Services
                 {
                     Id           = ro.Id,
                     Status       = ro.Status,
+                    CustomerId   = ro.CustomerId,
                     CustomerName = ro.Customer.FullName,
                     CarPlate     = ro.Car.LicensePlate,
                     CarInfo      = $"{ro.Car.Year} {ro.Car.Make} {ro.Car.Model}",
+                    MechanicId   = ro.MechanicId,
                     MechanicName = ro.Mechanic != null
                                      ? $"{ro.Mechanic.FirstName} {ro.Mechanic.LastName}"
                                      : null,
@@ -49,9 +51,11 @@ namespace AutoFix.Services
                 {
                     Id           = ro.Id,
                     Status       = ro.Status,
+                    CustomerId   = ro.CustomerId,
                     CustomerName = ro.Customer.FullName,
                     CarPlate     = ro.Car.LicensePlate,
                     CarInfo      = $"{ro.Car.Year} {ro.Car.Make} {ro.Car.Model}",
+                    MechanicId   = ro.MechanicId,
                     MechanicName = ro.Mechanic != null
                                      ? $"{ro.Mechanic.FirstName} {ro.Mechanic.LastName}"
                                      : null,
@@ -75,9 +79,11 @@ namespace AutoFix.Services
                 {
                     Id           = ro.Id,
                     Status       = ro.Status,
+                    CustomerId   = ro.CustomerId,
                     CustomerName = ro.Customer.FullName,
                     CarPlate     = ro.Car.LicensePlate,
                     CarInfo      = $"{ro.Car.Year} {ro.Car.Make} {ro.Car.Model}",
+                    MechanicId   = ro.MechanicId,
                     MechanicName = ro.Mechanic != null
                                      ? $"{ro.Mechanic.FirstName} {ro.Mechanic.LastName}"
                                      : null,
@@ -139,6 +145,63 @@ namespace AutoFix.Services
             if (dto.Status == "Completed")
             {
                 order.CompletedAt = DateTime.UtcNow;
+
+                // Receipt Generation
+                var orderWithDetails = await _db.RepairOrders
+                    .Include(ro => ro.Customer)
+                    .Include(ro => ro.Car)
+                    .Include(ro => ro.Mechanic)
+                    .Include(ro => ro.RepairOrderServices)
+                        .ThenInclude(ros => ros.Service)
+                    .FirstOrDefaultAsync(ro => ro.Id == id);
+
+                if (orderWithDetails != null)
+                {
+                    var services = orderWithDetails.RepairOrderServices
+                        .Select(ros => ros.Service.Name)
+                        .ToList();
+
+                    var carInfo = $"{orderWithDetails.Car.Year} {orderWithDetails.Car.Make} {orderWithDetails.Car.Model} — {orderWithDetails.Car.LicensePlate}";
+                    var mechanicName = orderWithDetails.Mechanic != null
+                        ? $"{orderWithDetails.Mechanic.FirstName} {orderWithDetails.Mechanic.LastName}"
+                        : "Unassigned";
+
+                    // Customer copy
+                    _db.Receipts.Add(new Receipt
+                    {
+                        RepairOrderId      = orderWithDetails.Id,
+                        CustomerId         = orderWithDetails.CustomerId,
+                        CustomerName       = orderWithDetails.Customer.FullName,
+                        CustomerEmail      = orderWithDetails.Customer.Email,
+                        CustomerPhone      = orderWithDetails.Customer.Phone,
+                        CarInfo            = carInfo,
+                        MechanicName       = mechanicName,
+                        ServicesPerformed  = services,
+                        TotalCost          = orderWithDetails.TotalCost,
+                        Notes              = orderWithDetails.Notes,
+                        IssuedAt           = DateTime.UtcNow,
+                        IsOwnerCopy        = false,
+                        Status             = "Issued"
+                    });
+
+                    // Owner copy
+                    _db.Receipts.Add(new Receipt
+                    {
+                        RepairOrderId      = orderWithDetails.Id,
+                        CustomerId         = orderWithDetails.CustomerId,
+                        CustomerName       = orderWithDetails.Customer.FullName,
+                        CustomerEmail      = orderWithDetails.Customer.Email,
+                        CustomerPhone      = orderWithDetails.Customer.Phone,
+                        CarInfo            = carInfo,
+                        MechanicName       = mechanicName,
+                        ServicesPerformed  = services,
+                        TotalCost          = orderWithDetails.TotalCost,
+                        Notes              = orderWithDetails.Notes,
+                        IssuedAt           = DateTime.UtcNow,
+                        IsOwnerCopy        = true,
+                        Status             = "Issued"
+                    });
+                }
             }
 
             await _db.SaveChangesAsync();
