@@ -8,6 +8,21 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { cartService } from '../../services/cartService';
+import { LucideIcon } from 'lucide-react';
+
+interface MenuItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  roles: string[];
+  badge?: any;
+}
+
+interface MenuSection {
+  title: string;
+  roles?: string[];
+  items: MenuItem[];
+}
 
 const Sidebar: React.FC = () => {
   const { user, logout, role } = useAuth();
@@ -37,7 +52,7 @@ const Sidebar: React.FC = () => {
     navigate('/login');
   };
 
-  const menuSections = [
+  const menuSections: MenuSection[] = [
     {
       title: 'General',
       items: [

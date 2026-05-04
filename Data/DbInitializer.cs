@@ -10,18 +10,14 @@ namespace AutoFix.Data
     {
         public static void Initialize(AppDbContext context)
         {
-            Console.WriteLine("DB_INIT: Starting...");
-
             // 1. Categories
             if (!context.SparePartCategories.Any())
             {
-                Console.WriteLine("DB_INIT: Seeding categories...");
                 context.SparePartCategories.Add(new SparePartCategory { Name = "General", Description = "General Parts" });
                 context.SaveChanges();
             }
 
             var category = context.SparePartCategories.First();
-            Console.WriteLine($"DB_INIT: Using Category: {category.Name} (ID: {category.Id})");
 
             // 2. Services
             var serviceNames = new[] { "Change Oil", "Change Brake Pads", "Change Light Bulbs" };
@@ -29,7 +25,6 @@ namespace AutoFix.Data
             {
                 if (!context.Services.Any(s => s.Name == name))
                 {
-                    Console.WriteLine($"DB_INIT: Seeding Service: {name}");
                     context.Services.Add(new Service { Name = name, Description = "Professional " + name, BasePrice = 50.00m });
                 }
             }
@@ -40,7 +35,6 @@ namespace AutoFix.Data
             {
                 if (!context.SpareParts.Any(p => p.Name == name))
                 {
-                    Console.WriteLine($"DB_INIT: Seeding Part: {name}");
                     context.SpareParts.Add(new SparePart 
                     { 
                         Name = name, 
@@ -55,7 +49,6 @@ namespace AutoFix.Data
             }
 
             context.SaveChanges();
-            Console.WriteLine("DB_INIT: Finished.");
         }
     }
 }

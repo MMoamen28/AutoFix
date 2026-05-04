@@ -5,6 +5,10 @@ export const customerService = {
     const response = await axiosClient.get('/customers');
     return response.data;
   },
+  getAll: async () => {
+    const response = await axiosClient.get('/customers');
+    return response.data;
+  },
   getCustomerById: async (id: string | number) => {
     const response = await axiosClient.get(`/customers/${id}`);
     return response.data;

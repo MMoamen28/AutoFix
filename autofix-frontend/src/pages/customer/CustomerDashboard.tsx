@@ -30,7 +30,7 @@ const CustomerDashboard: React.FC = () => {
       const [carRes, orderRes, repairRes] = await Promise.all([
         carService.getAll().catch(() => []),
         purchaseOrderService.getMyOrders().catch(() => []),
-        repairOrderService.getAll().catch(() => []) // Note: Assuming getAll filters for customer in controller or we use a "my" endpoint
+        repairOrderService.getMyOrders().catch(() => [])
       ]);
       setCars(carRes);
       setOrders(orderRes);

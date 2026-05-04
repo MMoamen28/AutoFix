@@ -62,7 +62,7 @@ namespace AutoFix.Services
             _db.Cars.Add(car);
             await _db.SaveChangesAsync();
 
-            return await GetByIdAsync(car.Id);
+            return (await GetByIdAsync(car.Id))!;
         }
 
         public async Task<bool> DeleteAsync(int id)

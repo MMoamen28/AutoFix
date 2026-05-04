@@ -1,5 +1,4 @@
 using AutoFix.Data;
-using AutoFix.Jobs;
 using AutoFix.Middleware;
 using AutoFix.Services;
 using AutoFix.Services.Interfaces;
@@ -55,7 +54,6 @@ builder.Services.AddAuthorization();
 // Hangfire - Use Memory Storage for testing
 builder.Services.AddHangfire(config => config.UseMemoryStorage());
 builder.Services.AddHangfireServer();
-builder.Services.AddScoped<OverdueOrderJob>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -87,6 +85,7 @@ app.UseSwaggerUI();
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<UserAutoProvisioningMiddleware>();
 app.MapControllers();
 
 app.Run();

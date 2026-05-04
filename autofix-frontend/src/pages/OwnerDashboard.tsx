@@ -128,7 +128,7 @@ const OwnerDashboard: React.FC = () => {
               pendingRequests.slice(0, 4).map(req => (
                 <div key={req.id} style={itemRowStyle}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyCenter: 'center', border: '1px solid var(--border)' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)' }}>
                       <Activity size={18} color="var(--accent)" />
                     </div>
                     <div>

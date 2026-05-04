@@ -58,7 +58,7 @@ namespace AutoFix.Services
             _db.Services.Add(service);
             await _db.SaveChangesAsync();
 
-            return await GetByIdAsync(service.Id);
+            return (await GetByIdAsync(service.Id))!;
         }
 
         public async Task<ServiceResponseDto?> UpdateAsync(int id, UpdateServiceDto dto)

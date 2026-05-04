@@ -1,17 +1,21 @@
 import React from 'react';
 
-const LoadingSpinner: React.FC = () => {
+interface LoadingSpinnerProps {
+  size?: number;
+}
+
+const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ size = 40 }) => {
   return (
     <div style={{ 
       display: 'flex', 
       justifyContent: 'center', 
       alignItems: 'center', 
-      height: '200px',
-      width: '100%'
+      height: 'auto',
+      width: 'auto'
     }}>
       <div style={{
-        width: '40px',
-        height: '40px',
+        width: `${size}px`,
+        height: `${size}px`,
         border: '4px solid var(--border)',
         borderTop: '4px solid var(--primary)',
         borderRadius: '50%',

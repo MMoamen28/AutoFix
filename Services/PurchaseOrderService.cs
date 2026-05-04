@@ -257,9 +257,9 @@ namespace AutoFix.Services
         {
             Id = o.Id,
             CustomerId = o.CustomerId,
-            CustomerName = o.Customer.FullName,
+            CustomerName = o.Customer?.FullName ?? "Unknown Customer",
             CarId = o.CarId,
-            CarInfo = $"{o.Car.Year} {o.Car.Make} {o.Car.Model} ({o.Car.LicensePlate})",
+            CarInfo = o.Car != null ? $"{o.Car.Year} {o.Car.Make} {o.Car.Model} ({o.Car.LicensePlate})" : "Unknown Car",
             MechanicId = o.MechanicId,
             MechanicName = o.Mechanic != null ? $"{o.Mechanic.FirstName} {o.Mechanic.LastName}" : null,
             Status = o.Status,
