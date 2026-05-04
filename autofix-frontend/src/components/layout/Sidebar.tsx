@@ -54,12 +54,6 @@ const Sidebar: React.FC = () => {
 
   const menuSections: MenuSection[] = [
     {
-      title: 'General',
-      items: [
-        { to: '/marketplace', label: 'Marketplace', icon: ShoppingBag, roles: ['Owner', 'Admin', 'Mechanic', 'Customer'] },
-      ]
-    },
-    {
       title: 'Management',
       roles: ['Owner', 'Admin'],
       items: [

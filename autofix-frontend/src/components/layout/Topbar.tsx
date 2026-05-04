@@ -29,7 +29,6 @@ const Topbar: React.FC = () => {
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/') return 'Dashboard';
-    if (path.includes('marketplace')) return 'Marketplace';
     if (path.includes('customers')) return 'Customer Management';
     if (path.includes('mechanics')) return 'Team Management';
     if (path.includes('spare-parts')) return 'Inventory Management';

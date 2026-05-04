@@ -3,10 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/layout/Layout';
 
-import HomePage from '../pages/HomePage';
 import LoginPage from '../pages/LoginPage';
-import RegisterPage from '../pages/RegisterPage';
-import MarketplacePage from '../pages/MarketplacePage';
 
 import CustomersPage from '../pages/admin/CustomersPage';
 import CustomerDetailPage from '../pages/admin/CustomerDetailPage';
@@ -39,13 +36,13 @@ const AppRouter: React.FC = () => {
   const { role, token } = useAuth();
 
   const getHomeElement = () => {
-    if (!token) return <HomePage />;
+    if (!token) return <Navigate to="/login" replace />;
     switch (role) {
       case 'Owner': return <OwnerDashboard />;
       case 'Admin': return <Navigate to="/customers" />;
       case 'Mechanic': return <MechanicDashboard />;
       case 'Customer': return <CustomerDashboard />;
-      default: return <HomePage />;
+      default: return <Navigate to="/login" replace />;
     }
   };
 
@@ -55,8 +52,6 @@ const AppRouter: React.FC = () => {
         {/* Public Routes */}
         <Route path="/" element={getHomeElement()} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/marketplace" element={<MarketplacePage />} />
 
         {/* Admin/Owner Shared Routes */}
         <Route path="/customers" element={<CustomersPage />} />
