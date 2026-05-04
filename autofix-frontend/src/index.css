@@ -1,26 +1,26 @@
 :root {
-  /* Core backgrounds */
-  --bg-primary:       #0d0f14;
-  --bg-secondary:     #13161e;
-  --bg-card:          #1a1e2a;
-  --bg-card-hover:    #1f2435;
-  --bg-glass:         rgba(26, 30, 42, 0.85);
-  --bg-glass-light:   rgba(255, 255, 255, 0.05);
+  /* Core backgrounds - Primary Slate Grey palette */
+  --bg-primary:       #334155;
+  --bg-secondary:     #1e293b;
+  --bg-card:          #475569;
+  --bg-card-hover:    #64748b;
+  --bg-glass:         rgba(51, 65, 85, 0.85);
+  --bg-glass-light:   rgba(255, 255, 255, 0.1);
 
-  /* Borders */
-  --border:           #2a2f42;
-  --border-light:     rgba(255,255,255,0.08);
+  /* Borders - Neutral palette */
+  --border:           #E2E8F0;
+  --border-light:     rgba(226, 232, 240, 0.3);
 
   /* Text */
-  --text-primary:     #f0f2f8;
-  --text-secondary:   #9ba3bc;
-  --text-muted:       #565e7a;
+  --text-primary:     #f8fafc;
+  --text-secondary:   #cbd5e1;
+  --text-muted:       #94a3b8;
 
-  /* Primary accent — vivid orange matching mechanic uniforms */
-  --accent:           #f97316;
-  --accent-hover:     #ea6c0a;
-  --accent-dim:       rgba(249, 115, 22, 0.15);
-  --accent-glow:      rgba(249, 115, 22, 0.3);
+  /* Accent — Racing Red */
+  --accent:           #DC2626;
+  --accent-hover:     #b91c1c;
+  --accent-dim:       rgba(220, 38, 38, 0.15);
+  --accent-glow:      rgba(220, 38, 38, 0.3);
 
   /* Secondary accent — cool blue */
   --blue:             #3b82f6;
@@ -28,28 +28,28 @@
   --blue-dim:         rgba(59, 130, 246, 0.15);
 
   /* Status colors */
-  --success:          #22c55e;
-  --success-dim:      rgba(34, 197, 94, 0.15);
-  --warning:          #eab308;
-  --warning-dim:      rgba(234, 179, 8, 0.15);
+  --success:          #10b981;
+  --success-dim:      rgba(16, 185, 129, 0.15);
+  --warning:          #f59e0b;
+  --warning-dim:      rgba(245, 158, 11, 0.15);
   --danger:           #ef4444;
   --danger-dim:       rgba(239, 68, 68, 0.15);
-  --purple:           #a855f7;
-  --purple-dim:       rgba(168, 85, 247, 0.15);
+  --purple:           #8b5cf6;
+  --purple-dim:       rgba(139, 92, 246, 0.15);
 
   /* Gradients */
-  --gradient-hero:    linear-gradient(135deg, #f97316 0%, #dc2626 50%, #7c3aed 100%);
-  --gradient-card:    linear-gradient(145deg, #1a1e2a 0%, #13161e 100%);
-  --gradient-accent:  linear-gradient(135deg, #f97316 0%, #ea6c0a 100%);
+  --gradient-hero:    linear-gradient(135deg, #DC2626 0%, #991b1b 100%);
+  --gradient-card:    linear-gradient(145deg, #475569 0%, #334155 100%);
+  --gradient-accent:  linear-gradient(135deg, #DC2626 0%, #b91c1c 100%);
 
   /* Dimensions */
   --radius-sm:        6px;
   --radius-md:        12px;
   --radius-lg:        18px;
   --radius-xl:        24px;
-  --shadow:           0 4px 24px rgba(0,0,0,0.5);
-  --shadow-accent:    0 4px 24px rgba(249, 115, 22, 0.25);
-  --shadow-card:      0 8px 32px rgba(0,0,0,0.4);
+  --shadow:           0 4px 24px rgba(15, 23, 42, 0.4);
+  --shadow-accent:    0 4px 24px rgba(220, 38, 38, 0.25);
+  --shadow-card:      0 8px 32px rgba(15, 23, 42, 0.3);
 
   /* Layout Constants */
   --sidebar-width:     260px;

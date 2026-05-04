@@ -1,98 +1,76 @@
 # 🛠️ AutoFix Management System
 
-[![.NET 8.0](https://img.shields.io/badge/.NET-8.0-512bd4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/8.0)
-[![Docker](https://img.shields.io/badge/Docker-Enabled-2496ed?logo=docker)](https://www.docker.com/)
-[![SQL Server](https://img.shields.io/badge/Database-SQL_Server-CC2927?logo=microsoft-sql-server)](https://www.microsoft.com/en-us/sql-server)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-**AutoFix** is a robust, enterprise-grade Auto Management & Repair System built with **ASP.NET Core 8.0**. Designed for high efficiency and scalability, it streamlines the workflow of automotive repair shops by managing customers, inventory, scheduling, and background monitoring tasks.
+AutoFix is a professional full-stack car repair management system designed for workshops. It features a robust ASP.NET Core backend and a modern React frontend, integrated with Keycloak for secure authentication.
 
 ---
 
-## 🚀 Key Features
+## 🚦 Quick Start: How to Run the Project
 
-*   **📋 Comprehensive Repair Orders:** Full lifecycle management of repair orders, transitions from diagnosis to completion.
-*   **👤 Customer & Mechanic Profiles:** Detailed database of clients and staff with dedicated profile management.
-*   **🏎️ Vehicle Database:** Integration with car license plate tracking and detailed model information.
-*   **📦 Inventory & Stock Management:** Tracks spare parts, categories, and inventory health.
-*   **🔐 Identity & Security:** Integrated JWT-based authentication (supporting external providers like Keycloak) with precise role-based access control.
-*   **⚡ Automated Background Jobs:**
-    *   **Flag Overdue Orders:** Detects repairs exceeding time limits.
-    *   **Low Stock Alerts:** Automated check for inventory levels hitting minimum thresholds.
-*   **🛡️ Robust Error Handling:** Centralized middleware for unified exception management.
-*   **📖 Interactive Documentation:** Full OpenAPI/Swagger integration for easy API exploration and testing.
+You can run the project in two ways: **Local Development** (Recommended for editing) or **Full Docker**.
+
+### 1. Prerequisites
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [Node.js & npm](https://nodejs.org/)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
 ---
 
-## 🏗️ Architecture
+### 2. Run in Local Development Mode (Backend + Frontend)
 
-The project follows a modern **N-Layer Architecture**, ensuring separation of concerns and maintainability:
+#### Step A: Start Keycloak (Identity Provider)
+The application requires Keycloak for authentication. Use the provided docker-compose to start it:
+```bash
+docker-compose up -d keycloak keycloak-db
+```
+*Wait ~30 seconds for Keycloak to initialize.*
 
-*   **`Controllers/`**: RESTful API endpoints.
-*   **`Services/`**: Business logic implementations through interfaces (Service-Repository pattern).
-*   **`Models/`**: Domain entities for EF Core mapping.
-*   **`DTOs/`**: Data Transfer Objects for optimized request/response handling.
-*   **`Data/`**: Database context and seeding logic (`DbInitializer`).
-*   **`Jobs/`**: Background execution logic for recurring monitoring (Hangfire).
-*   **`Middleware/`**: Global exception handlers and logging.
+#### Step B: Run the Backend API
+1. Navigate to the root directory (`AutoFix`).
+2. Run the API:
+   ```bash
+   dotnet run
+   ```
+*The API will start on `http://localhost:5005`.*
+
+#### Step C: Run the Frontend
+1. Open a new terminal in the `autofix-frontend` directory.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+*The frontend will start on `http://localhost:3000` (or `3001` if 3000 is occupied).*
 
 ---
 
-## 🛠️ Technology Stack
-
-| Category | Technology |
-| :--- | :--- |
-| **Framework** | ASP.NET Core 8.0 (Web API) |
-| **Database** | MS SQL Server 2022 |
-| **ORM** | Entity Framework Core (Code First) |
-| **Background Processing** | Hangfire |
-| **Containerization** | Docker & Docker Compose |
-| **API Testing** | Swagger UI (OpenAPI v3) |
+### 3. Run in Full Docker Mode
+To launch the entire stack (API, DB, Keycloak) using containers:
+```bash
+docker-compose up -d --build
+```
+- **API**: `http://localhost:5000`
+- **Swagger**: `http://localhost:5000/swagger`
+- **Keycloak**: `http://localhost:8080`
 
 ---
 
-## 🚦 Getting Started
+## 🔐 Default Credentials
+- **Owner Account**: `owner` / `password` (Recommended for testing the Admin Hub)
+- **Mechanic Account**: `mechanic` / `password`
+- **Customer Account**: `customer` / `password`
 
-### Prerequisites
+---
 
-*   [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-*   [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-
-### 🚀 Running with Docker Compose (Recommended)
-
-The easiest way to start the system is using the pre-configured orchestration:
-
-1.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/your-repo/autofix.git
-    cd autofix
-    ```
-
-2.  **Spin up Services:**
-    ```bash
-    docker-compose up -d --build
-    
+## 🏗️ Architecture Overview
+- **Backend**: ASP.NET Core 8.0, Entity Framework Core (SQLite local), Hangfire (Jobs).
+- **Frontend**: React 18, Vite, custom "Pro OS" styling.
+- **Identity**: Keycloak (OIDC) with automated user provisioning.
 
 ---
 
 ## 📄 Accessing Documentation
-
-Once the services are running, the system provides several dashboards:
-
-*   **Swagger API Docs:** [http://localhost:8080/swagger](http://localhost:8080/swagger)
-  
-*   **Hangfire Dashboard:** [http://localhost:8080/hangfire](http://localhost:8080/hangfire)
- 
-
----
-
-## 🔧 Environment Variables
-
-The application can be configured via environment variables in `docker-compose.yml`:
-
-*   `ASPNETCORE_ENVIRONMENT`: Set to `Development` for detailed logging and Swagger.
-*   `ConnectionStrings__DefaultConnection`: Database connection string for SQL Server.
-
----
-
-
+- **Swagger UI**: Access `/swagger` on the API port to test endpoints directly.
+- **Walkthrough**: Refer to [walkthrough.md](./walkthrough.md) for a deep dive into the code logic.

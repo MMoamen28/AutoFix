@@ -70,7 +70,7 @@ const LoginPage: React.FC = () => {
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '100vh', minWidth: '1280px' }}>
       {/* Left Panel - Image */}
       <div style={{
-        backgroundImage: `linear-gradient(135deg, rgba(249,115,22,0.75) 0%, rgba(13,15,20,0.92) 100%),
+        backgroundImage: `linear-gradient(135deg, rgba(220, 38, 38, 0.75) 0%, rgba(30, 41, 59, 0.92) 100%),
                           url('/images/mechanic-laptop.jpg')`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
