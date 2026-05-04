@@ -1,10 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { customerService } from '../../services/customerService';
-import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import { useToast } from '../../hooks/useToast';
+import Table from '../../components/shared/Table';
+import Modal from '../../components/shared/Modal';
+import Input from '../../components/shared/Input';
+import Button from '../../components/shared/Button';
+import Badge from '../../components/shared/Badge';
+import Skeleton from '../../components/shared/Skeleton';
+import { User, Mail, Phone, Plus, Eye, Trash2 } from 'lucide-react';
 
 const CustomersPage: React.FC<{ openModal?: boolean }> = ({ openModal = false }) => {
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   // List State
   const [customers, setCustomers] = useState<any[]>([]);
@@ -17,8 +25,6 @@ const CustomersPage: React.FC<{ openModal?: boolean }> = ({ openModal = false })
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   useEffect(() => {
     fetchCustomers();
@@ -32,6 +38,7 @@ const CustomersPage: React.FC<{ openModal?: boolean }> = ({ openModal = false })
       setCustomers(data);
     } catch (err: any) {
       setError(err.response?.data?.message ?? 'Failed to load customers');
+      showToast('Could not fetch customer records', 'error');
     } finally {
       setLoading(false);
     }
@@ -40,122 +47,136 @@ const CustomersPage: React.FC<{ openModal?: boolean }> = ({ openModal = false })
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    setSubmitSuccess(false);
     try {
       await customerService.createCustomer({ fullName, email, phone });
-      setSubmitSuccess(true);
-      setTimeout(() => setShowForm(false), 1500); // Close after showing success
+      showToast('Customer onboarded successfully', 'success');
+      setShowForm(false);
       setFullName(''); setEmail(''); setPhone('');
-      fetchCustomers(); // Refresh list
+      fetchCustomers();
     } catch (err: any) {
-      setSubmitError(err.response?.data?.message ?? 'Something went wrong');
+      showToast(err.response?.data?.message ?? 'Validation failed', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Are you sure you want to delete this customer?')) return;
+    if (!window.confirm('This will permanently remove the customer record. Proceed?')) return;
     try {
       await customerService.deleteCustomer(id);
+      showToast('Customer record archived', 'success');
       fetchCustomers();
     } catch (err: any) {
-      alert(err.response?.data?.message ?? 'Failed to delete');
+      showToast(err.response?.data?.message ?? 'Action restricted', 'error');
     }
   };
 
+  const columns = [
+    { header: 'Reference', key: 'id', width: '100px', render: (c: any) => <span style={{ fontWeight: 800, color: 'var(--text-muted)' }}>#{c.id}</span> },
+    { header: 'Full Name', key: 'fullName', render: (c: any) => <span style={{ fontWeight: 700 }}>{c.fullName}</span> },
+    { header: 'Email Address', key: 'email', render: (c: any) => <span style={{ color: 'var(--blue)', fontWeight: 600 }}>{c.email}</span> },
+    { header: 'Phone Number', key: 'phone', render: (c: any) => c.phone || <Badge variant="info">NO DATA</Badge> },
+    { 
+      header: 'Actions', 
+      key: 'actions', 
+      width: '120px',
+      render: (c: any) => (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            onClick={() => navigate(`/customers/${c.id}`)} 
+            style={actionBtnStyle}
+            title="View Details"
+          >
+            <Eye size={16} />
+          </button>
+          <button 
+            onClick={() => handleDelete(c.id)} 
+            style={{ ...actionBtnStyle, color: 'var(--danger)' }}
+            title="Remove Record"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ) 
+    }
+  ];
+
   return (
-    <div className="page-container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1>Customers</h1>
-        <button 
-          onClick={() => setShowForm(true)}
-          style={{ backgroundColor: 'var(--success)', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '6px', fontWeight: '600' }}
-        >
-          Add New Customer
-        </button>
-      </div>
-
-      {showForm && (
-        <div style={{ 
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-          backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 
-        }}>
-          <div style={{ backgroundColor: 'var(--bg-card)', padding: '2rem', borderRadius: '12px', width: '100%', maxWidth: '500px', border: '1px solid var(--border)' }}>
-            <h2 style={{ marginBottom: '1.5rem' }}>New Customer</h2>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <input 
-                value={fullName} 
-                onChange={e => setFullName(e.target.value)} 
-                placeholder="Full Name" 
-                required
-                style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-main)', color: 'white' }}
-              />
-              <input 
-                type="email" 
-                value={email} 
-                onChange={e => setEmail(e.target.value)} 
-                placeholder="Email Address" 
-                required
-                style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-main)', color: 'white' }}
-              />
-              <input 
-                value={phone} 
-                onChange={e => setPhone(e.target.value)} 
-                placeholder="Phone Number" 
-                style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-main)', color: 'white' }}
-              />
-              {submitError && <div style={{ color: 'var(--danger)' }}>{submitError}</div>}
-              {submitSuccess && <div style={{ color: 'var(--success)' }}>Customer created successfully!</div>}
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <button type="submit" disabled={submitting} style={{ flex: 1, backgroundColor: 'var(--primary)', color: 'white', padding: '0.75rem', border: 'none', borderRadius: '6px' }}>
-                  {submitting ? 'Creating...' : 'Create Customer'}
-                </button>
-                <button type="button" onClick={() => setShowForm(false)} style={{ flex: 1, backgroundColor: 'transparent', color: 'white', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '6px' }}>
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'white' }}>Customer Directory</h1>
+          <p style={{ color: 'var(--text-secondary)' }}>Manage your client relationships and history</p>
         </div>
+        <Button onClick={() => setShowForm(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Plus size={20} /> Add New Customer
+        </Button>
+      </header>
+
+      {/* New Customer Modal */}
+      <Modal 
+        isOpen={showForm} 
+        onClose={() => setShowForm(false)} 
+        title="Onboard New Customer"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} isLoading={submitting}>Register Customer</Button>
+          </>
+        }
+      >
+        <form style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <Input 
+            label="Full Name" 
+            placeholder="Mohamed Salah" 
+            icon={<User size={18} />}
+            value={fullName}
+            onChange={e => setFullName(e.target.value)}
+            required
+          />
+          <Input 
+            label="Email Address" 
+            type="email"
+            placeholder="salah@liverpool.com" 
+            icon={<Mail size={18} />}
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+          />
+          <Input 
+            label="Phone Number" 
+            placeholder="+20 123 456 789" 
+            icon={<Phone size={18} />}
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+          />
+        </form>
+      </Modal>
+
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {[1,2,3,4,5].map(i => <Skeleton key={i} height="60px" borderRadius="var(--radius-md)" />)}
+        </div>
+      ) : (
+        <Table columns={columns} data={customers} />
       )}
 
-      {loading ? <LoadingSpinner /> : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'var(--bg-card)', borderRadius: '8px', overflow: 'hidden' }}>
-            <thead>
-              <tr style={{ backgroundColor: 'rgba(255,255,255,0.05)', textAlign: 'left' }}>
-                <th style={{ padding: '1rem' }}>ID</th>
-                <th style={{ padding: '1rem' }}>Name</th>
-                <th style={{ padding: '1rem' }}>Email</th>
-                <th style={{ padding: '1rem' }}>Phone</th>
-                <th style={{ padding: '1rem' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {customers.length === 0 ? (
-                <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No records found.</td></tr>
-              ) : (
-                customers.map(c => (
-                  <tr key={c.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: '1rem' }}>{c.id}</td>
-                    <td style={{ padding: '1rem' }}>{c.fullName}</td>
-                    <td style={{ padding: '1rem' }}>{c.email}</td>
-                    <td style={{ padding: '1rem' }}>{c.phone || '-'}</td>
-                    <td style={{ padding: '1rem' }}>
-                      <button onClick={() => navigate(`/customers/${c.id}`)} style={{ marginRight: '0.5rem', color: 'var(--primary)', background: 'none', border: 'none' }}>View</button>
-                      <button onClick={() => handleDelete(c.id)} style={{ color: 'var(--danger)', background: 'none', border: 'none' }}>Delete</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {error && <div style={{ color: 'var(--danger)', marginTop: '1rem' }}>{error}</div>}
+      {error && <Badge variant="danger">{error}</Badge>}
     </div>
   );
+};
+
+const actionBtnStyle: React.CSSProperties = {
+  background: 'var(--bg-primary)',
+  border: '1px solid var(--border)',
+  color: 'var(--text-secondary)',
+  padding: '8px',
+  borderRadius: '8px',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: 'all 0.2s ease'
 };
 
 export default CustomersPage;

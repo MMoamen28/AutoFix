@@ -2,14 +2,18 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axiosClient from '../services/axiosClient';
-import { toast } from 'react-hot-toast';
-import { Wrench } from 'lucide-react';
+import { useToast } from '../hooks/useToast';
+import { Wrench, User, Lock, Eye, EyeOff } from 'lucide-react';
+import Button from '../components/shared/Button';
+import Input from '../components/shared/Input';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { showToast } = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,73 +23,119 @@ const LoginPage: React.FC = () => {
     try {
       const response = await axiosClient.post('/auth/login', { username, password });
       login(response.data.accessToken);
-      toast.success('Logged in successfully');
+      showToast('Logged in successfully', 'success');
       navigate('/');
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Invalid credentials');
+      showToast(err.response?.data?.detail || 'Invalid credentials', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0B0F1A] p-4">
-      <div className="w-full max-w-md bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-3xl p-8 shadow-2xl">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 mb-4">
-            <Wrench className="text-white" size={24} />
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-          <p className="text-gray-400">Sign in to manage your workshop</p>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '100vh', minWidth: '1280px' }}>
+      {/* Left Panel - Image */}
+      <div style={{
+        backgroundImage: `linear-gradient(135deg, rgba(249,115,22,0.75) 0%, rgba(13,15,20,0.92) 100%),
+                          url('/images/mechanic-laptop.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '60px',
+        textAlign: 'center'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+          <Wrench size={64} color="white" />
+          <h1 style={{ fontSize: '72px', fontWeight: 800, color: 'white', textShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>AutoFix</h1>
         </div>
-        
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">Username</label>
-            <input 
-              type="text" 
-              value={username} 
-              onChange={(e) => setUsername(e.target.value)} 
-              placeholder="e.g. owner"
-              required 
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-all"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">Password</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              placeholder="••••••••"
-              required 
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 transition-all"
-            />
+        <p style={{ fontSize: '24px', color: 'rgba(255,255,255,0.8)', maxWidth: '400px' }}>Your trusted car repair partner</p>
+      </div>
+
+      {/* Right Panel - Form */}
+      <div style={{ 
+        backgroundColor: 'var(--bg-primary)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '60px'
+      }}>
+        <div style={{
+          width: '100%',
+          maxWidth: '440px',
+          backgroundColor: 'var(--bg-glass)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid var(--border-light)',
+          borderRadius: 'var(--radius-xl)',
+          padding: '48px',
+          boxShadow: 'var(--shadow-card)'
+        }}>
+          <div style={{ marginBottom: '40px' }}>
+            <h2 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>Welcome Back</h2>
+            <p style={{ color: 'var(--text-secondary)' }}>Sign in to your AutoFix account</p>
           </div>
 
-          <button 
-            type="submit" 
-            disabled={submitting}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 mt-4"
-          >
-            {submitting ? 'Authenticating...' : 'Sign In'}
-          </button>
-        </form>
-        
-        <div className="mt-8 text-center space-y-4">
-          <p className="text-gray-400 text-sm">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-blue-400 hover:underline">
-              Create one
-            </Link>
-          </p>
-          <button 
-            onClick={() => navigate('/')}
-            className="text-gray-500 hover:text-white text-sm transition-colors"
-          >
-            Back to Home
-          </button>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <Input
+              label="Username"
+              icon={<User size={18} />}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              required
+            />
+            
+            <div style={{ position: 'relative' }}>
+              <Input
+                label="Password"
+                type={showPassword ? 'text' : 'password'}
+                icon={<Lock size={18} />}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '16px',
+                  top: '38px',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+
+            <Button 
+              type="submit" 
+              isLoading={submitting} 
+              style={{ 
+                width: '100%', 
+                marginTop: '12px',
+                background: 'var(--gradient-accent)',
+                boxShadow: 'var(--shadow-accent)'
+              }}
+            >
+              Sign In
+            </Button>
+          </form>
+
+          <div style={{ marginTop: '32px', textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+              Don't have an account?{' '}
+              <Link to="/register" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                Register
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>

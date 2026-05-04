@@ -1,14 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Wrench, Shield, Zap, BarChart3, 
-  ChevronRight, ArrowRight, Star, Users
+  Wrench, Shield, ShoppingCart, 
+  ArrowRight, ChevronRight, MousePointer2 
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Button from '../components/shared/Button';
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, role } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   const handleStart = () => {
     if (isAuthenticated) {
@@ -19,129 +20,207 @@ const HomePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] text-white overflow-x-hidden">
-      {/* Navigation Backdrop Overlay */}
-      <div className="absolute top-0 left-0 w-full h-[800px] bg-gradient-to-b from-blue-600/10 to-transparent pointer-events-none"></div>
-
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-6 max-w-7xl mx-auto text-center">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-bold mb-8 animate-fade-in">
-          <Star size={16} fill="currentColor" />
-          <span>Next-Generation Workshop OS</span>
-        </div>
-        
-        <h1 className="text-6xl md:text-8xl font-black tracking-tight leading-none mb-8 animate-fade-in">
-          The Future of <br />
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-500 to-emerald-400">
-            Auto Logistics.
-          </span>
-        </h1>
-        
-        <p className="max-w-2xl mx-auto text-xl text-gray-400 leading-relaxed mb-12 animate-fade-in delay-100">
-          Streamline your automotive empire with precision engineering. From inventory to executive approvals, manage everything in one unified dashboard.
-        </p>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in delay-200">
-          <button 
-            onClick={handleStart}
-            className="group relative px-8 py-4 bg-blue-600 hover:bg-blue-500 rounded-2xl font-bold text-lg flex items-center gap-3 transition-all shadow-2xl shadow-blue-600/20 active:scale-95"
-          >
-            Access System
-            <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-          </button>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', overflowX: 'hidden' }}>
+      
+      {/* Section 1 — Hero */}
+      <section style={{
+        height: '100vh',
+        minWidth: '1280px',
+        position: 'relative',
+        backgroundImage: `linear-gradient(135deg, rgba(13,15,20,0.7) 0%, rgba(249,115,22,0.4) 100%),
+                          url('/images/mechanic-tablet.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        textAlign: 'center',
+        padding: '0 32px'
+      }}>
+        <div style={{ maxWidth: '900px', animation: 'fadeIn 1s ease-out' }}>
+          <h1 style={{ 
+            fontSize: '72px', 
+            fontWeight: 900, 
+            color: 'white', 
+            marginBottom: '24px',
+            textShadow: '0 4px 12px var(--accent-glow)'
+          }}>
+            AutoFix
+          </h1>
+          <p style={{ fontSize: '24px', color: 'var(--text-secondary)', marginBottom: '48px', fontWeight: 500 }}>
+            Professional Car Repair Management System
+          </p>
           
-          <button 
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '16px', justifyContent: 'center' }}>
+            <Button 
+              onClick={() => navigate('/marketplace')}
+              style={{ padding: '16px 32px', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '12px' }}
+            >
+              Browse Marketplace <ArrowRight size={20} />
+            </Button>
+            <Button 
+              variant="ghost" 
+              onClick={handleStart}
+              style={{ padding: '16px 32px', fontSize: '18px', borderColor: 'white', color: 'white' }}
+            >
+              Login to Get Started
+            </Button>
+            {!isAuthenticated && (
+              <Button 
+                variant="ghost" 
+                onClick={() => navigate('/register')}
+                style={{ padding: '16px 32px', fontSize: '18px', borderColor: 'var(--accent)', color: 'var(--accent)' }}
+              >
+                Register Free
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ position: 'absolute', bottom: '40px', animation: 'bounce 2s infinite' }}>
+          <ChevronRight size={32} style={{ transform: 'rotate(90deg)', color: 'var(--text-muted)' }} />
+        </div>
+      </section>
+
+      {/* Section 2 — Features */}
+      <section style={{ padding: '100px 32px', backgroundColor: 'var(--bg-secondary)', position: 'relative' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '60px' }}>
+            <h2 style={{ fontSize: '40px', fontWeight: 800, marginBottom: '16px' }}>Engineered for Excellence</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '18px' }}>Everything you need to run a high-performance workshop</p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px' }}>
+            <FeatureCard 
+              icon={<Wrench size={32} />} 
+              title="Expert Mechanics" 
+              desc="Certified professionals assigned to your vehicle with real-time status updates and direct communication."
+            />
+            <FeatureCard 
+              icon={<ShoppingCart size={32} />} 
+              title="Easy Marketplace" 
+              desc="Browse genuine spare parts and transparently priced services. Everything you need in one place."
+            />
+            <FeatureCard 
+              icon={<Shield size={32} />} 
+              title="Trusted Service" 
+              desc="Comprehensive repair history, digital receipts, and guaranteed work quality from the industry's best."
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Section 3 — Image Strip */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', minWidth: '1280px' }}>
+        <ImageStripItem src="/images/mechanic-laptop.jpg" title="Diagnostics" />
+        <ImageStripItem src="/images/mechanic-engine.jpg" title="Precision" />
+        <ImageStripItem src="/images/mechanic-tablet.jpg" title="Management" />
+      </section>
+
+      {/* Section 4 — CTA Strip */}
+      <section style={{ 
+        background: 'var(--gradient-hero)', 
+        padding: '80px 32px', 
+        textAlign: 'center',
+        color: 'white'
+      }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          <h2 style={{ fontSize: '48px', fontWeight: 900, marginBottom: '24px' }}>Ready to get started?</h2>
+          <p style={{ fontSize: '20px', marginBottom: '40px', opacity: 0.9 }}>Join thousands of car owners and workshop managers who trust AutoFix.</p>
+          <Button 
             onClick={() => navigate('/register')}
-            className="px-8 py-4 bg-gray-900/50 hover:bg-gray-800 border border-gray-800 rounded-2xl font-bold text-lg transition-all backdrop-blur-xl"
+            style={{ 
+              backgroundColor: 'white', 
+              color: 'var(--accent)', 
+              padding: '16px 48px', 
+              fontSize: '20px',
+              fontWeight: 700
+            }}
           >
-            Join as Customer
-          </button>
-        </div>
-      </section>
-
-      {/* Feature Grid */}
-      <section className="max-w-7xl mx-auto px-6 py-32">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <FeatureCard 
-            icon={Shield} 
-            title="Owner Privilege" 
-            desc="Multi-tier RBAC with mandatory executive approvals for critical mechanic actions."
-            color="blue"
-          />
-          <FeatureCard 
-            icon={Zap} 
-            title="Instant Logistics" 
-            desc="Real-time inventory tracking and automated receipt generation upon service completion."
-            color="purple"
-          />
-          <FeatureCard 
-            icon={BarChart3} 
-            title="Revenue Intelligence" 
-            desc="Advanced analytics and consolidated reporting for your entire workshop network."
-            color="emerald"
-          />
-        </div>
-      </section>
-
-      {/* Social Proof */}
-      <section className="bg-gray-900/30 border-y border-gray-800/50 py-20">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-12">
-          <div className="flex items-center gap-4">
-            <div className="flex -space-x-3">
-              {[1,2,3,4].map(i => (
-                <div key={i} className="w-12 h-12 rounded-full border-4 border-[#0B0F1A] bg-gray-800 flex items-center justify-center">
-                  <Users size={20} className="text-gray-400" />
-                </div>
-              ))}
-            </div>
-            <div>
-              <p className="font-bold text-xl">500+ Workshops</p>
-              <p className="text-gray-500 text-sm">Managing 50k+ vehicles monthly</p>
-            </div>
-          </div>
-          
-          <div className="flex gap-12 text-gray-500 font-bold tracking-widest text-sm uppercase">
-            <span>Precision</span>
-            <span>Performance</span>
-            <span>Reliability</span>
-          </div>
+            Create Your Account
+          </Button>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-6 py-20 text-center">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Wrench size={16} />
-          </div>
-          <span className="text-xl font-bold tracking-tight text-white">AutoFix Pro</span>
+      <footer style={{ padding: '60px 32px', backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '24px' }}>
+          <Wrench color="var(--accent)" size={24} />
+          <span style={{ fontSize: '20px', fontWeight: 800 }}>AutoFix Pro</span>
         </div>
-        <p className="text-gray-600 text-sm">© 2026 AutoFix Systems. Built for the elite automotive tier.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>© 2026 AutoFix Premium Services. All rights reserved.</p>
       </footer>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bounce {
+          0%, 20%, 50%, 80%, 100% { transform: translateY(0) rotate(90deg); }
+          40% { transform: translateY(-10px) rotate(90deg); }
+          60% { transform: translateY(-5px) rotate(90deg); }
+        }
+      `}</style>
     </div>
   );
 };
 
-const FeatureCard: React.FC<any> = ({ icon: Icon, title, desc, color }) => {
-  const colors: any = {
-    blue: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    purple: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-    emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-  };
+const FeatureCard: React.FC<{ icon: React.ReactNode; title: string; desc: string }> = ({ icon, title, desc }) => (
+  <div style={{
+    backgroundColor: 'var(--bg-card)',
+    border: '1px solid var(--border)',
+    borderTop: '4px solid var(--accent)',
+    borderRadius: 'var(--radius-lg)',
+    padding: '40px',
+    transition: 'all 0.3s ease',
+    cursor: 'default'
+  }}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.transform = 'translateY(-8px)';
+    e.currentTarget.style.boxShadow = 'var(--shadow-accent)';
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = 'none';
+  }}
+  >
+    <div style={{ color: 'var(--accent)', marginBottom: '24px' }}>{icon}</div>
+    <h3 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '16px', color: 'white' }}>{title}</h3>
+    <p style={{ color: 'var(--text-secondary)', lineHeight: 1.8 }}>{desc}</p>
+  </div>
+);
 
-  return (
-    <div className="group p-10 bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-[2.5rem] hover:border-blue-500/30 transition-all duration-500 cursor-default">
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-8 ${colors[color]} group-hover:scale-110 transition-transform`}>
-        <Icon size={28} />
-      </div>
-      <h3 className="text-2xl font-bold mb-4 text-white group-hover:text-blue-400 transition-colors">{title}</h3>
-      <p className="text-gray-500 leading-relaxed mb-6">{desc}</p>
-      <div className="flex items-center gap-2 text-sm font-bold text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
-        Explore Module
-        <ChevronRight size={16} />
+const ImageStripItem: React.FC<{ src: string; title: string }> = ({ src, title }) => (
+  <div style={{ position: 'relative', height: '300px', overflow: 'hidden', cursor: 'pointer' }} className="image-strip-item">
+    <img src={src} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }} />
+    <div style={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      background: 'linear-gradient(to bottom, transparent, rgba(249,115,22,0.8))',
+      display: 'flex',
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      paddingBottom: '32px',
+      opacity: 0,
+      transition: 'opacity 0.3s ease'
+    }} className="overlay">
+      <div style={{ textAlign: 'center' }}>
+        <h4 style={{ color: 'white', fontSize: '24px', fontWeight: 800, marginBottom: '8px' }}>{title}</h4>
+        <div style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 600 }}>
+          Learn More <ChevronRight size={16} />
+        </div>
       </div>
     </div>
-  );
-};
+    <style>{`
+      .image-strip-item:hover img { transform: scale(1.1); }
+      .image-strip-item:hover .overlay { opacity: 1; }
+    `}</style>
+  </div>
+);
 
 export default HomePage;

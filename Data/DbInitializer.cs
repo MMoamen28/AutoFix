@@ -10,74 +10,52 @@ namespace AutoFix.Data
     {
         public static void Initialize(AppDbContext context)
         {
-            // Seed Categories
+            Console.WriteLine("DB_INIT: Starting...");
+
+            // 1. Categories
             if (!context.SparePartCategories.Any())
             {
-                var categories = new List<SparePartCategory>
-                {
-                    new SparePartCategory { Name = "Engine Components", Description = "Parts related to the internal combustion engine." },
-                    new SparePartCategory { Name = "Braking System", Description = "Pads, rotors, and hydraulics." },
-                    new SparePartCategory { Name = "Suspension & Steering", Description = "Shocks, struts, and linkages." },
-                    new SparePartCategory { Name = "Electrical", Description = "Batteries, alternators, and wiring." },
-                    new SparePartCategory { Name = "Fluids & Lubricants", Description = "Oil, coolant, and brake fluid." }
-                };
-                context.SparePartCategories.AddRange(categories);
+                Console.WriteLine("DB_INIT: Seeding categories...");
+                context.SparePartCategories.Add(new SparePartCategory { Name = "General", Description = "General Parts" });
                 context.SaveChanges();
             }
 
-            // Seed Services
-            if (!context.Services.Any())
+            var category = context.SparePartCategories.First();
+            Console.WriteLine($"DB_INIT: Using Category: {category.Name} (ID: {category.Id})");
+
+            // 2. Services
+            var serviceNames = new[] { "Change Oil", "Change Brake Pads", "Change Light Bulbs" };
+            foreach (var name in serviceNames)
             {
-                var services = new List<Service>
+                if (!context.Services.Any(s => s.Name == name))
                 {
-                    new Service { Name = "Oil Change", Description = "Full synthetic oil and filter replacement.", BasePrice = 80.00m },
-                    new Service { Name = "Brake Pad Replacement", Description = "Front or rear brake pad set.", BasePrice = 150.00m },
-                    new Service { Name = "Tire Rotation", Description = "Balancing and rotation of all four tires.", BasePrice = 50.00m },
-                    new Service { Name = "Battery Installation", Description = "Removal of old battery and installation of new one.", BasePrice = 30.00m },
-                    new Service { Name = "Diagnostic Scan", Description = "Full OBD-II diagnostic report.", BasePrice = 100.00m }
-                };
-                context.Services.AddRange(services);
-                context.SaveChanges();
+                    Console.WriteLine($"DB_INIT: Seeding Service: {name}");
+                    context.Services.Add(new Service { Name = name, Description = "Professional " + name, BasePrice = 50.00m });
+                }
             }
 
-            // Seed a few Spare Parts
-            if (!context.SpareParts.Any())
+            // 3. Spare Parts
+            var partNames = new[] { "Oil Filter", "Brake Pad Set", "Headlight Bulb" };
+            foreach (var name in partNames)
             {
-                var catEngine = context.SparePartCategories.First(c => c.Name == "Engine Components");
-                var catBrakes = context.SparePartCategories.First(c => c.Name == "Braking System");
-
-                var parts = new List<SparePart>
+                if (!context.SpareParts.Any(p => p.Name == name))
                 {
-                    new SparePart { Name = "Oil Filter (OEM)", PartNumber = "OF-123", UnitPrice = 15.00m, StockQuantity = 50, CategoryId = catEngine.Id },
-                    new SparePart { Name = "Ceramic Brake Pads", PartNumber = "BP-456", UnitPrice = 65.00m, StockQuantity = 20, CategoryId = catBrakes.Id },
-                    new SparePart { Name = "Spark Plug", PartNumber = "SP-789", UnitPrice = 8.00m, StockQuantity = 100, CategoryId = catEngine.Id }
-                };
-                context.SpareParts.AddRange(parts);
-                context.SaveChanges();
-            }
-            // Seed Customers
-            if (!context.Customers.Any())
-            {
-                var customers = new List<Customer>
-                {
-                    new Customer { FullName = "Mohamed Salah", Email = "salah@liverpool.com", Phone = "0123456789", KeycloakUserId = "demo-cust-1", CreatedAt = DateTime.UtcNow },
-                    new Customer { FullName = "Ahmed Hegazy", Email = "hegazy@ittihad.com", Phone = "0987654321", KeycloakUserId = "demo-cust-2", CreatedAt = DateTime.UtcNow }
-                };
-                context.Customers.AddRange(customers);
-                context.SaveChanges();
+                    Console.WriteLine($"DB_INIT: Seeding Part: {name}");
+                    context.SpareParts.Add(new SparePart 
+                    { 
+                        Name = name, 
+                        PartNumber = "PN-" + name.Replace(" ", "").ToUpper(), 
+                        UnitPrice = 20.00m, 
+                        StockQuantity = 100, 
+                        CategoryId = category.Id, 
+                        Brand = "AutoFix", 
+                        IsActive = true 
+                    });
+                }
             }
 
-            // Seed Mechanics
-            if (!context.Mechanics.Any())
-            {
-                var mechanics = new List<Mechanic>
-                {
-                    new Mechanic { FirstName = "John", LastName = "Wick", Email = "john@high-table.com", KeycloakUserId = "demo-mech-1", HiredAt = DateTime.UtcNow },
-                    new Mechanic { FirstName = "James", LastName = "Bond", Email = "007@mi6.gov", KeycloakUserId = "demo-mech-2", HiredAt = DateTime.UtcNow }
-                };
-                context.Mechanics.AddRange(mechanics);
-                context.SaveChanges();
-            }
+            context.SaveChanges();
+            Console.WriteLine("DB_INIT: Finished.");
         }
     }
 }

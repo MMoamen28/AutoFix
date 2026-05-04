@@ -27,7 +27,14 @@ namespace AutoFix.Controllers
             return Ok(await _service.GetAllAsync());
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("public-list")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetPublicList()
+        {
+            return Ok(await _service.GetMarketplaceAsync());
+        }
+
+        [HttpGet("{id:int}")]
         [Authorize(Roles = "Admin,Owner,Mechanic")]
         public async Task<ActionResult<SparePartResponseDto>> GetById(int id)
         {

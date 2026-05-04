@@ -10,6 +10,7 @@ namespace AutoFix.Services.Interfaces
         Task<List<SparePartResponseDto>> GetByCategoryAsync(int categoryId);
         Task<List<SparePartResponseDto>> GetLowStockAsync();
         Task<SparePartResponseDto?> GetByIdAsync(int id);
+        Task<List<SparePartResponseDto>> GetMarketplaceAsync();
         Task<SparePartResponseDto> CreateAsync(CreateSparePartDto dto);
         Task<SparePartResponseDto?> UpdateAsync(int id, UpdateSparePartDto dto);
         Task<(bool Success, string Error, SparePartResponseDto? Part)> AdjustStockAsync(int id, AdjustStockDto dto);

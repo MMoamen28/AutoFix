@@ -1,127 +1,107 @@
-@import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 :root {
-  /* Core Palette - Deep Midnight Theme */
-  --bg-main: #0B0F1A;
-  --bg-card: #151B2B;
-  --bg-hover: #1E2638;
-  
-  --primary: #3B82F6;
-  --primary-glow: rgba(59, 130, 246, 0.2);
-  --secondary: #8B5CF6;
-  --accent: #10B981;
-  
-  --text-main: #F8FAFC;
-  --text-muted: #94A3B8;
-  --text-dim: #64748B;
-  
-  --border: #2D3748;
-  --border-light: rgba(255, 255, 255, 0.05);
-  
-  --danger: #EF4444;
-  --warning: #F59E0B;
-  --success: #10B981;
-  
-  --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
-  --glass: backdrop-filter: blur(12px);
+  /* Core backgrounds */
+  --bg-primary:       #0d0f14;
+  --bg-secondary:     #13161e;
+  --bg-card:          #1a1e2a;
+  --bg-card-hover:    #1f2435;
+  --bg-glass:         rgba(26, 30, 42, 0.85);
+  --bg-glass-light:   rgba(255, 255, 255, 0.05);
+
+  /* Borders */
+  --border:           #2a2f42;
+  --border-light:     rgba(255,255,255,0.08);
+
+  /* Text */
+  --text-primary:     #f0f2f8;
+  --text-secondary:   #9ba3bc;
+  --text-muted:       #565e7a;
+
+  /* Primary accent — vivid orange matching mechanic uniforms */
+  --accent:           #f97316;
+  --accent-hover:     #ea6c0a;
+  --accent-dim:       rgba(249, 115, 22, 0.15);
+  --accent-glow:      rgba(249, 115, 22, 0.3);
+
+  /* Secondary accent — cool blue */
+  --blue:             #3b82f6;
+  --blue-hover:       #2563eb;
+  --blue-dim:         rgba(59, 130, 246, 0.15);
+
+  /* Status colors */
+  --success:          #22c55e;
+  --success-dim:      rgba(34, 197, 94, 0.15);
+  --warning:          #eab308;
+  --warning-dim:      rgba(234, 179, 8, 0.15);
+  --danger:           #ef4444;
+  --danger-dim:       rgba(239, 68, 68, 0.15);
+  --purple:           #a855f7;
+  --purple-dim:       rgba(168, 85, 247, 0.15);
+
+  /* Gradients */
+  --gradient-hero:    linear-gradient(135deg, #f97316 0%, #dc2626 50%, #7c3aed 100%);
+  --gradient-card:    linear-gradient(145deg, #1a1e2a 0%, #13161e 100%);
+  --gradient-accent:  linear-gradient(135deg, #f97316 0%, #ea6c0a 100%);
+
+  /* Dimensions */
+  --radius-sm:        6px;
+  --radius-md:        12px;
+  --radius-lg:        18px;
+  --radius-xl:        24px;
+  --shadow:           0 4px 24px rgba(0,0,0,0.5);
+  --shadow-accent:    0 4px 24px rgba(249, 115, 22, 0.25);
+  --shadow-card:      0 8px 32px rgba(0,0,0,0.4);
+
+  /* Layout Constants */
+  --sidebar-width:     260px;
+  --topbar-height:     64px;
+  --content-padding:   32px;
+  --card-gap:          20px;
+  --grid-cols-4:       repeat(4, 1fr);
+  --grid-cols-3:       repeat(3, 1fr);
+  --grid-cols-2:       repeat(2, 1fr);
 }
 
 * {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
 }
 
 body {
-  font-family: 'Inter', -apple-system, sans-serif;
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  min-width: 1280px;
+  overflow-x: auto;
 }
 
-/* Premium Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
+/* Smooth scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 10px;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Global transitions */
+button, a, input, select, textarea {
+  transition: all 0.2s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-dim);
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-/* Glassmorphism Utilities */
-.glass-panel {
-  background: rgba(21, 27, 43, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-light);
-  border-radius: 1.5rem;
+a {
+  color: var(--accent);
+  text-decoration: none;
 }
 
-.glass-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
-  border: 1px solid var(--border-light);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+a:hover {
+  color: var(--accent-hover);
 }
-
-.glass-card:hover {
-  border-color: rgba(59, 130, 246, 0.3);
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-/* Typography Utilities */
-.heading-xl { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.025em; }
-.heading-lg { font-size: 1.875rem; font-weight: 700; letter-spacing: -0.025em; }
-.heading-md { font-size: 1.25rem; font-weight: 600; }
-
-/* Animation Keyframes */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.5s ease-out forwards;
-}
-
-/* Layout Classes */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-/* Button Refinement */
-.btn-primary {
-  @apply px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95;
-}
-
-.btn-secondary {
-  @apply px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl transition-all border border-gray-700 active:scale-95;
-}
-
-/* Input Refinement */
-.form-input {
-  @apply w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500/50 focus:ring-4 focus:ring-blue-500/10 transition-all;
-}
-
-/* Badge Styles */
-.badge {
-  @apply px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider;
-}
-
-.badge-success { @apply bg-emerald-500/10 text-emerald-400 border border-emerald-500/20; }
-.badge-warning { @apply bg-amber-500/10 text-amber-400 border border-amber-500/20; }
-.badge-danger { @apply bg-red-500/10 text-red-400 border border-red-500/20; }
-.badge-primary { @apply bg-blue-500/10 text-blue-400 border border-blue-500/20; }

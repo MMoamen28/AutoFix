@@ -58,6 +58,11 @@ namespace AutoFix.Services
             return await Project(_db.SpareParts.AsNoTracking().Where(sp => sp.Id == id)).FirstOrDefaultAsync();
         }
 
+        public async Task<List<SparePartResponseDto>> GetMarketplaceAsync()
+        {
+            return await Project(_db.SpareParts.AsNoTracking().Where(sp => sp.IsActive && sp.StockQuantity > 0)).ToListAsync();
+        }
+
         public async Task<SparePartResponseDto> CreateAsync(CreateSparePartDto dto)
         {
             var part = new SparePart
