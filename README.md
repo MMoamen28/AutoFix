@@ -19,6 +19,7 @@ AutoFix is a comprehensive solution for modern automotive service centers. It ha
 - **⚡ Real-Time Notifications**: Integrated SignalR connectivity ensures mechanics and owners see new orders and status updates instantly without refreshing.
 - **🔧 Repair Workflow**: Digital tracking of repair orders, mechanic self-assignment (Claiming), and automated receipt generation.
 - **📊 Business Intelligence**: High-level dashboards for owners to track revenue, team efficiency, and inventory health.
+- **🌐 React + Axios Integration**: A modular architecture where all API communication is handled through a centralized Axios client with automated token injection and error handling.
 
 ---
 
@@ -85,7 +86,7 @@ npm start
 
 ## 🏗️ Technical Stack
 
-- **Frontend**: React 18, Axios (Interceptors), React Router 6, Recharts, Lucide Icons.
+- **Frontend**: React 18 + Axios (Centralized modular API layer), React Router 6, Recharts, Lucide Icons.
 - **Backend**: ASP.NET Core 8, Entity Framework Core, SignalR (Real-time), Hangfire.
 - **Identity**: Keycloak OIDC (OpenID Connect) for secure multi-role access.
 - **Styling**: Modern Vanilla CSS with Glassmorphism and Responsive Tokens.
