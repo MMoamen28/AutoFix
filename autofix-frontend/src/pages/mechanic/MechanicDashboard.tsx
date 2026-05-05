@@ -3,7 +3,8 @@ import { ClipboardList, Wrench, Clock, CheckCircle, AlertTriangle, Play, Package
 import { useAuth } from '../../context/AuthContext';
 import { purchaseOrderService } from '../../services/purchaseOrderService';
 import { sparePartService } from '../../services/sparePartService';
-import { Link } from 'react-router-dom';
+import repairOrderService from '../../services/repairOrderService';
+import signalRService from '../../services/signalRService';
 
 const MechanicDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -13,12 +14,14 @@ const MechanicDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+    const unsub = signalRService.on("order-updated", fetchData);
+    return () => { unsub(); };
   }, []);
 
   const fetchData = async () => {
     try {
       const [orderRes, partRes] = await Promise.all([
-        purchaseOrderService.getAssignedOrders(),
+        repairOrderService.getAll(),
         sparePartService.getLowStock()
       ]);
       setOrders(orderRes);
@@ -66,9 +69,9 @@ const MechanicDashboard: React.FC = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-8">
         {/* Active Jobs List */}
-        <div className="lg:col-span-2 bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-[2.5rem] p-10">
+        <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-[2.5rem] p-10">
           <div className="flex items-center justify-between mb-10">
             <h3 className="text-2xl font-bold text-white flex items-center gap-3">
               <Package className="text-blue-400" size={24} />
@@ -109,42 +112,6 @@ const MechanicDashboard: React.FC = () => {
                 <p className="text-gray-500 font-medium">All assigned orders are completed.</p>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Inventory Overview */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-[2.5rem] p-10 flex flex-col">
-            <div className="flex items-center gap-4 mb-8">
-              <div className="p-3 bg-red-500/10 rounded-2xl">
-                <AlertTriangle className="text-red-500" size={24} />
-              </div>
-              <h4 className="text-xl font-bold text-white">Critical Inventory</h4>
-            </div>
-            <p className="text-gray-400 text-sm leading-relaxed mb-8">
-              There are <span className="text-white font-bold">{lowStockCount} items</span> with stock levels below the minimum threshold. 
-            </p>
-            <Link to="/spare-parts" className="mt-auto bg-gray-800 hover:bg-gray-700 text-white py-4 rounded-xl font-bold text-center transition-all">
-              Manage Inventory
-            </Link>
-          </div>
-
-          <div className="bg-blue-600/10 border border-blue-600/20 rounded-[2.5rem] p-10">
-            <Clock className="text-blue-500 mb-6" size={40} />
-            <h4 className="text-xl font-bold text-white mb-2">Technician Status</h4>
-            <div className="space-y-4 mt-6">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Assigned Tasks</span>
-                <span className="text-white font-bold">{orders.filter(o => o.status !== 'Completed').length}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Efficiency Rate</span>
-                <span className="text-white font-bold">94%</span>
-              </div>
-              <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mt-4">
-                <div className="bg-blue-500 h-full w-[94%]"></div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

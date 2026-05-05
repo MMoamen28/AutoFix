@@ -42,13 +42,6 @@ namespace AutoFix.Controllers
             return result == null ? NotFound() : Ok(result);
         }
 
-        [HttpGet("category/{categoryId}")]
-        [Authorize(Roles = "Admin,Owner,Mechanic")]
-        public async Task<ActionResult<List<SparePartResponseDto>>> GetByCategory(int categoryId)
-        {
-            return Ok(await _service.GetByCategoryAsync(categoryId));
-        }
-
         [HttpGet("lowstock")]
         [Authorize(Roles = "Admin,Owner,Mechanic")]
         public async Task<ActionResult<List<SparePartResponseDto>>> GetLowStock()

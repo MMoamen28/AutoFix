@@ -69,7 +69,6 @@ const Sidebar: React.FC = () => {
       items: [
         { to: '/spare-parts', label: 'Stock Items', icon: Package, roles: ['Admin', 'Owner'] },
         { to: '/mechanic/orders', label: 'Inventory Access', icon: Box, roles: ['Mechanic'] },
-        { to: '/spare-part-categories', label: 'Categories', icon: Layers, roles: ['Admin', 'Owner'] },
       ]
     },
     {
@@ -79,8 +78,9 @@ const Sidebar: React.FC = () => {
         { to: '/', label: 'My Repair Jobs', icon: ClipboardList, roles: ['Mechanic'] },
         { to: '/', label: 'My Dashboard', icon: LayoutDashboard, roles: ['Customer'] },
         { to: '/customer/cars', label: 'My Vehicles', icon: Car, roles: ['Customer'] },
-        { to: '/customer/cart', label: 'Shopping Cart', icon: ShoppingCart, roles: ['Customer'], badge: cartCount > 0 ? cartCount : null },
-        { to: '/customer/orders', label: 'Service History', icon: FileText, roles: ['Customer'] },
+        { to: '/marketplace', label: 'Marketplace', icon: ShoppingBag, roles: ['Customer'] },
+        { to: '/cart', label: 'Shopping Cart', icon: ShoppingCart, roles: ['Customer'], badge: cartCount > 0 ? cartCount : null },
+        { to: '/orders', label: 'Service History', icon: FileText, roles: ['Customer'] },
         { to: '/owner/purchase-orders', label: 'Fleet Orders', icon: ClipboardList, roles: ['Owner'] },
         { to: '/owner/purchase-receipts', label: 'Fiscal Archive', icon: Receipt, roles: ['Owner'] },
       ]

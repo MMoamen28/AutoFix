@@ -27,11 +27,25 @@ namespace AutoFix.Controllers
         }
 
         [HttpGet]
-        [Authorize(Roles = "Admin,Owner,Mechanic")]
+        [Authorize(Roles = "Admin,Owner,Mechanic,Customer")]
         public async Task<ActionResult<List<RepairOrderResponseDto>>> GetAll()
         {
-            var orders = await _service.GetAllAsync();
-            return Ok(orders);
+            // Staff and Admins see everything
+            if (User.IsInRole("Admin") || User.IsInRole("Owner") || User.IsInRole("Mechanic"))
+            {
+                var allOrders = await _service.GetAllAsync();
+                return Ok(allOrders);
+            }
+
+            // Customers only see their own
+            if (User.IsInRole("Customer"))
+            {
+                var customerId = await GetCurrentCustomerId();
+                if (customerId == 0) return Ok(new List<RepairOrderResponseDto>());
+                return Ok(await _service.GetByCustomerIdAsync(customerId));
+            }
+            
+            return Forbid();
         }
 
         [HttpGet("{id}")]

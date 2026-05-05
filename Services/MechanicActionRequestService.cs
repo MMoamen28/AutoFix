@@ -19,14 +19,17 @@ namespace AutoFix.Services
         private readonly IRepairOrderService _repairOrderService;
         private readonly ISparePartService _sparePartService;
 
+        private readonly IRealtimeService _realtime;
         public MechanicActionRequestService(
             AppDbContext db,
             IRepairOrderService repairOrderService,
-            ISparePartService sparePartService)
+            ISparePartService sparePartService,
+            IRealtimeService realtime)
         {
             _db = db;
             _repairOrderService = repairOrderService;
             _sparePartService = sparePartService;
+            _realtime = realtime;
         }
 
         public async Task<List<MechanicActionRequestResponseDto>> GetAllPendingAsync()
@@ -69,6 +72,7 @@ namespace AutoFix.Services
 
             _db.MechanicActionRequests.Add(request);
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("request-updated", new { RequestId = request.Id });
 
             return MapToDto(request);
         }
@@ -115,6 +119,7 @@ namespace AutoFix.Services
             }
 
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("request-updated", new { RequestId = id });
             return MapToDto(request);
         }
 

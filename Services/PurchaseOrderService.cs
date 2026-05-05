@@ -13,7 +13,12 @@ namespace AutoFix.Services
     public class PurchaseOrderService : IPurchaseOrderService
     {
         private readonly AppDbContext _db;
-        public PurchaseOrderService(AppDbContext db) => _db = db;
+        private readonly IRealtimeService _realtime;
+        public PurchaseOrderService(AppDbContext db, IRealtimeService realtime)
+        {
+            _db = db;
+            _realtime = realtime;
+        }
 
         public async Task<List<PurchaseOrderResponseDto>> GetAllAsync()
         {
@@ -203,6 +208,7 @@ namespace AutoFix.Services
             });
 
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("order-updated", new { OrderId = order.Id });
             return await GetByIdAsync(order.Id) ?? throw new Exception("Order not found after creation");
         }
 
@@ -214,6 +220,7 @@ namespace AutoFix.Services
             order.MechanicId = dto.MechanicId;
             order.Status = "AssignedToMechanic";
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("order-updated", new { OrderId = orderId });
 
             return await GetByIdAsync(orderId);
         }
@@ -229,6 +236,7 @@ namespace AutoFix.Services
                 order.CompletedAt = DateTime.UtcNow;
             }
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("order-updated", new { OrderId = orderId });
 
             return await GetByIdAsync(orderId);
         }
@@ -250,6 +258,7 @@ namespace AutoFix.Services
 
             order.Status = "Cancelled";
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("order-updated", new { OrderId = orderId });
             return true;
         }
 

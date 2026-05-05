@@ -7,7 +7,6 @@ namespace AutoFix.Services.Interfaces
     public interface ISparePartService
     {
         Task<List<SparePartResponseDto>> GetAllAsync();
-        Task<List<SparePartResponseDto>> GetByCategoryAsync(int categoryId);
         Task<List<SparePartResponseDto>> GetLowStockAsync();
         Task<SparePartResponseDto?> GetByIdAsync(int id);
         Task<List<SparePartResponseDto>> GetMarketplaceAsync();

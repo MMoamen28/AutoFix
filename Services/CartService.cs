@@ -13,7 +13,12 @@ namespace AutoFix.Services
     public class CartService : ICartService
     {
         private readonly AppDbContext _db;
-        public CartService(AppDbContext db) => _db = db;
+        private readonly IRealtimeService _realtime;
+        public CartService(AppDbContext db, IRealtimeService realtime)
+        {
+            _db = db;
+            _realtime = realtime;
+        }
 
         public async Task<List<CartItemResponseDto>> GetCartAsync(int customerId)
         {
@@ -69,6 +74,7 @@ namespace AutoFix.Services
                     if (part!.StockQuantity < existing.Quantity) throw new Exception("Insufficient stock");
                 }
                 await _db.SaveChangesAsync();
+                await _realtime.NotifyAsync("cart-updated", new { CustomerId = customerId });
                 return MapToDto(existing);
             }
 
@@ -86,6 +92,7 @@ namespace AutoFix.Services
 
             _db.CartItems.Add(newItem);
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("cart-updated", new { CustomerId = customerId });
             return MapToDto(newItem);
         }
 
@@ -102,6 +109,7 @@ namespace AutoFix.Services
 
             item.Quantity = dto.Quantity;
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("cart-updated", new { CustomerId = customerId });
             return MapToDto(item);
         }
 
@@ -112,6 +120,7 @@ namespace AutoFix.Services
 
             _db.CartItems.Remove(item);
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("cart-updated", new { CustomerId = customerId });
             return true;
         }
 
@@ -122,6 +131,7 @@ namespace AutoFix.Services
 
             _db.CartItems.RemoveRange(items);
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("cart-updated", new { CustomerId = customerId });
             return true;
         }
 

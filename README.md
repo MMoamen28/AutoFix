@@ -1,76 +1,102 @@
-# 🛠️ AutoFix Management System
+# 🛠️ AutoFix: Professional Workshop Management System
 
-AutoFix is a professional full-stack car repair management system designed for workshops. It features a robust ASP.NET Core backend and a modern React frontend, integrated with Keycloak for secure authentication.
+**AutoFix** is a state-of-the-art, full-stack vehicle maintenance platform. It is engineered to streamline workshop operations, providing specialized interfaces for Customers, Mechanics, and Workshop Owners.
 
----
-
-## 🚦 Quick Start: How to Run the Project
-
-You can run the project in two ways: **Local Development** (Recommended for editing) or **Full Docker**.
-
-### 1. Prerequisites
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Node.js & npm](https://nodejs.org/)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+![Status: Ready for Presentation](https://img.shields.io/badge/Status-Ready_for_Presentation-success?style=for-the-badge)
+![Tech: ASP.NET Core](https://img.shields.io/badge/Backend-ASP.NET_Core_8.0-512bd4?style=for-the-badge&logo=dotnet)
+![Tech: React](https://img.shields.io/badge/Frontend-React_18_Vite-61dafb?style=for-the-badge&logo=react)
+![Auth: Keycloak](https://img.shields.io/badge/Identity-Keycloak-f0803c?style=for-the-badge&logo=keycloak)
 
 ---
 
-### 2. Run in Local Development Mode (Backend + Frontend)
+## ✨ Core Features & Requirements
 
-#### Step A: Start Keycloak (Identity Provider)
-The application requires Keycloak for authentication. Use the provided docker-compose to start it:
+This project strictly adheres to modern web engineering principles, specifically fulfilling requirements for **Frontend-Backend Integration**:
+
+-   **🔐 Centralized Security**: A custom Axios client (`axiosClient.ts`) with automated HTTP Interceptors that handle Keycloak Bearer Token injection and session expiry (401 redirects).
+-   **📦 Modular Service Layer**: All API logic is encapsulated in a dedicated `services/` directory. No hardcoded API calls exist within UI components.
+-   **🔄 Full CRUD Lifecycle**: Services for `Cars`, `Spare Parts`, and `Repair Orders` support complete Create, Read, Update, and Delete operations.
+-   **🎨 Pro OS Aesthetic**: A premium "Glassmorphism" UI built with React + Vite, featuring smooth transitions, vibrant accent palettes, and responsive layouts.
+-   **👥 Role-Based Access Control (RBAC)**: Distinct dashboards and permissions for:
+    -   **Owner**: Full financial oversight, inventory approvals, and fleet management.
+    -   **Mechanic**: Repair job tracking, inventory access, and status updates.
+    -   **Customer**: Vehicle registration, service booking, and repair history.
+
+---
+
+## 🏗️ Technical Architecture
+
+### Frontend Layer (`/autofix-frontend`)
+-   **Framework**: React 18 + Vite (TypeScript)
+-   **State Management**: React Context (Auth) + Component-level `useState` hooks for loading/data/error states.
+-   **API Client**: Axios with centralized configuration and interceptors.
+-   **Styling**: Vanilla CSS with modern tokens (CSS Variables) for a consistent "Pro OS" look.
+
+### Backend Layer (Root)
+-   **API**: ASP.NET Core 8.0 Web API.
+-   **Identity**: Keycloak OIDC integration for robust security.
+-   **Persistence**: Entity Framework Core with SQLite (Dev) / SQL Server (Prod) support.
+-   **Background Jobs**: Hangfire for automated service processing.
+
+---
+
+## 🚦 Quick Start: Local Deployment
+
+### 1. Start Infrastructure (Docker)
+Start Keycloak and the Identity database:
 ```bash
 docker-compose up -d keycloak keycloak-db
 ```
-*Wait ~30 seconds for Keycloak to initialize.*
+*Wait ~30 seconds for Keycloak to initialize before starting the API.*
 
-#### Step B: Run the Backend API
-1. Navigate to the root directory (`AutoFix`).
-2. Run the API:
-   ```bash
-   dotnet run
-   ```
-*The API will start on `http://localhost:5005`.*
-
-#### Step C: Run the Frontend
-1. Open a new terminal in the `autofix-frontend` directory.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-*The frontend will start on `http://localhost:3000` (or `3001` if 3000 is occupied).*
-
----
-
-### 3. Run in Full Docker Mode
-To launch the entire stack (API, DB, Keycloak) using containers:
+### 2. Launch Backend API
 ```bash
-docker-compose up -d --build
+# From the root directory
+dotnet run
 ```
-- **API**: `http://localhost:5000`
-- **Swagger**: `http://localhost:5000/swagger`
-- **Keycloak**: `http://localhost:8080`
+*The API will be available at `http://localhost:5005` (with Swagger at `/swagger`).*
+
+### 3. Launch React Frontend
+```bash
+cd autofix-frontend
+npm install
+npm run dev
+```
+*The UI will start on `http://localhost:3000`.*
 
 ---
 
-## 🔐 Default Credentials
-- **Owner Account**: `owner` / `password` (Recommended for testing the Admin Hub)
-- **Mechanic Account**: `mechanic` / `password`
-- **Customer Account**: `customer` / `password`
+## 🔑 Default Presentation Accounts
+| Role | Username | Password |
+| :--- | :--- | :--- |
+| **Owner** | `owner` | `password` |
+| **Mechanic** | `mechanic` | `password` |
+| **Customer** | `customer` | `password` |
 
 ---
 
-## 🏗️ Architecture Overview
-- **Backend**: ASP.NET Core 8.0, Entity Framework Core (SQLite local), Hangfire (Jobs).
-- **Frontend**: React 18, Vite, custom "Pro OS" styling.
-- **Identity**: Keycloak (OIDC) with automated user provisioning.
+## 📁 Project Structure (Frontend Integration Focus)
+```text
+src/
+├── components/         # Shared UI elements (Modals, Forms, Buttons)
+│   └── customer/       # Feature-specific components (e.g. RegisterVehicleForm)
+├── pages/              # Routed page components (Dashboards, Lists)
+├── services/           # MODULAR API LAYER (Axios Clients)
+│   ├── axiosClient.ts  # Centralized Axios config & Interceptors
+│   ├── carService.ts   # CRUD logic for Vehicles
+│   └── serviceService.ts # CRUD logic for Workshop Services
+├── context/            # AuthContext (Keycloak integration)
+└── router/             # AppRouter (Protected routes)
+```
 
 ---
 
-## 📄 Accessing Documentation
-- **Swagger UI**: Access `/swagger` on the API port to test endpoints directly.
-- **Walkthrough**: Refer to [walkthrough.md](./walkthrough.md) for a deep dive into the code logic.
+## 📝 Assignment Audit Checklist
+- [x] **Centralized Axios Config**: Located in `src/services/axiosClient.ts`.
+- [x] **Modular Services**: Service files in `src/services/` export distinct CRUD functions.
+- [x] **Controlled Components**: Forms use `value` + `onChange` state mapping.
+- [x] **State Handling**: Components implement `isLoading` and `error` UI feedback.
+- [x] **Security**: JWT Bearer tokens are attached via Interceptors.
+
+---
+*Developed for Web Engineering Assignment - AutoFix Platform.*

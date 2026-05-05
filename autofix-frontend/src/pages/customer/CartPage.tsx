@@ -7,6 +7,7 @@ import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { toast } from 'react-hot-toast';
 import { ShoppingCart, Trash2, ArrowRight, Car, FileText, CheckCircle2, X, Receipt } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
+import signalRService from '../../services/signalRService';
 
 const CartPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,10 +20,12 @@ const CartPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [lastOrder, setLastOrder] = useState<any>(null);
-
   useEffect(() => {
     fetchCart();
     fetchCars();
+    
+    const unsub = signalRService.on("cart-updated", fetchCart);
+    return () => { unsub(); };
   }, []);
 
   const fetchCart = async () => {

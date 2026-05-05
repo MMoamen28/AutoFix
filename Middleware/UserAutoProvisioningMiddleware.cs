@@ -19,16 +19,12 @@ namespace AutoFix.Middleware
             if (context.User.Identity?.IsAuthenticated == true)
             {
                 var keycloakUserId = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? context.User.FindFirst("sub")?.Value;
-                var roles = context.User.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList();
                 
-                // Fallback for some Keycloak configurations
+                // Extract roles from multiple possible locations
+                var roles = context.User.FindAll("roles").Select(r => r.Value).ToList();
                 if (!roles.Any())
                 {
-                    var realmAccess = context.User.FindFirst("realm_access")?.Value;
-                    if (!string.IsNullOrEmpty(realmAccess))
-                    {
-                        // Minimal parsing or just check for strings if needed
-                    }
+                    roles = context.User.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList();
                 }
 
                 if (!string.IsNullOrEmpty(keycloakUserId))

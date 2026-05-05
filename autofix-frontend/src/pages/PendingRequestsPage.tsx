@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import actionRequestService, { ActionRequest } from '../services/actionRequestService';
 import { toast } from 'react-hot-toast';
+import signalRService from '../services/signalRService';
 
 const PendingRequestsPage: React.FC = () => {
   const [requests, setRequests] = useState<ActionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [note, setNote] = useState('');
-
   useEffect(() => {
     loadRequests();
+    const unsub = signalRService.on("request-updated", loadRequests);
+    return () => { unsub(); };
   }, []);
 
   const loadRequests = async () => {

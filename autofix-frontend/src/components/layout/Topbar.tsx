@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { Bell, ShoppingCart, Search, User } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ShoppingCart, Search, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { cartService } from '../../services/cartService';
 
 const Topbar: React.FC = () => {
   const { user, role } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
@@ -54,17 +55,11 @@ const Topbar: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
         {/* Customer Cart */}
         {role === 'Customer' && (
-          <Link to="/customer/cart" style={iconButtonStyle}>
+          <button onClick={() => navigate('/cart')} style={iconButtonStyle}>
             <ShoppingCart size={20} />
             {cartCount > 0 && <span style={cartBadgeStyle}>{cartCount}</span>}
-          </Link>
+          </button>
         )}
-
-        {/* Notifications */}
-        <button style={iconButtonStyle}>
-          <Bell size={20} />
-          <span style={dotStyle}></span>
-        </button>
 
         <div style={dividerStyle}></div>
 
@@ -140,16 +135,7 @@ const cartBadgeStyle: React.CSSProperties = {
   transform: 'translate(40%, -40%)'
 };
 
-const dotStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: '8px',
-  right: '8px',
-  width: '8px',
-  height: '8px',
-  backgroundColor: 'var(--accent)',
-  borderRadius: '50%',
-  border: '2px solid var(--bg-secondary)'
-};
+
 
 const dividerStyle: React.CSSProperties = {
   width: '1px',

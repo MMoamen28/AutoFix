@@ -1,30 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { sparePartService } from '../../services/sparePartService';
-import { sparePartCategoryService } from '../../services/sparePartCategoryService';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import signalRService from '../../services/signalRService';
 
 const SparePartsPage: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Form related data
-  const [categories, setCategories] = useState<any[]>([]);
-
-  // Form state
   const [name, setName] = useState('');
   const [partNumber, setPartNumber] = useState('');
   const [price, setPrice] = useState('');
   const [stockQuantity, setStockQuantity] = useState('');
-  const [categoryId, setCategoryId] = useState('');
   
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
-
   useEffect(() => {
     fetchParts();
-    fetchCategories();
+    const unsub = signalRService.on("inventory-updated", fetchParts);
+    return () => { unsub(); };
   }, []);
 
   const fetchParts = () => {
@@ -36,14 +31,7 @@ const SparePartsPage: React.FC = () => {
       .finally(() => setLoading(false));
   };
 
-  const fetchCategories = async () => {
-    try {
-      const data = await sparePartCategoryService.getAll();
-      setCategories(data);
-    } catch (err) {
-      console.error('Failed to load categories', err);
-    }
-  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,10 +43,9 @@ const SparePartsPage: React.FC = () => {
         name, 
         partNumber, 
         price: parseFloat(price), 
-        stockQuantity: parseInt(stockQuantity),
-        categoryId: parseInt(categoryId)
+        stockQuantity: parseInt(stockQuantity)
       });
-      setName(''); setPartNumber(''); setPrice(''); setStockQuantity(''); setCategoryId('');
+      setName(''); setPartNumber(''); setPrice(''); setStockQuantity('');
       setSubmitSuccess(true);
       fetchParts();
     } catch (err: any) {
@@ -92,13 +79,7 @@ const SparePartsPage: React.FC = () => {
             <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Part Number</label>
             <input value={partNumber} onChange={e => setPartNumber(e.target.value)} placeholder="e.g. BP-101" required style={{ width: '100%', padding: '0.75rem', backgroundColor: 'var(--bg-main)', color: 'white', border: '1px solid var(--border)', borderRadius: '6px' }} />
           </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Category</label>
-            <select value={categoryId} onChange={e => setCategoryId(e.target.value)} required style={{ width: '100%', padding: '0.75rem', backgroundColor: 'var(--bg-main)', color: 'white', border: '1px solid var(--border)', borderRadius: '6px' }}>
-              <option value="">-- Select Category --</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
+
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Price ($)</label>
             <input value={price} onChange={e => setPrice(e.target.value)} type="number" step="0.01" required style={{ width: '100%', padding: '0.75rem', backgroundColor: 'var(--bg-main)', color: 'white', border: '1px solid var(--border)', borderRadius: '6px' }} />
@@ -129,7 +110,6 @@ const SparePartsPage: React.FC = () => {
               <tr style={{ textAlign: 'left', backgroundColor: 'rgba(255,255,255,0.03)' }}>
                 <th style={{ padding: '1rem' }}>Part Name</th>
                 <th style={{ padding: '1rem' }}>Part #</th>
-                <th style={{ padding: '1rem' }}>Category</th>
                 <th style={{ padding: '1rem' }}>Stock</th>
                 <th style={{ padding: '1rem' }}>Price</th>
                 <th style={{ padding: '1rem' }}>Actions</th>
@@ -143,7 +123,6 @@ const SparePartsPage: React.FC = () => {
                   <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '1rem' }}>{p.name}</td>
                     <td style={{ padding: '1rem' }}>{p.partNumber}</td>
-                    <td style={{ padding: '1rem' }}>{p.category?.name}</td>
                     <td style={{ padding: '1rem' }}>
                       <span style={{ color: p.stockQuantity < 10 ? 'var(--danger)' : 'inherit' }}>{p.stockQuantity}</span>
                     </td>

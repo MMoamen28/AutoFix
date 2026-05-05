@@ -5,6 +5,7 @@ import { PurchaseOrder } from '../../types';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { toast } from 'react-hot-toast';
 import { Package, Clock, CheckCircle, XCircle, Search, Eye, Receipt, Trash2, X, FileText, User, Car } from 'lucide-react';
+import signalRService from '../../services/signalRService';
 
 const MyOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -12,9 +13,10 @@ const MyOrdersPage: React.FC = () => {
   const [filter, setFilter] = useState('All');
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
   const [receipt, setReceipt] = useState<any>(null);
-
   useEffect(() => {
     fetchOrders();
+    const unsub = signalRService.on("order-updated", fetchOrders);
+    return () => { unsub(); };
   }, []);
 
   const fetchOrders = async () => {

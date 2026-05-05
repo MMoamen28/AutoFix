@@ -26,14 +26,13 @@ namespace AutoFix.Controllers
         [HttpGet]
         public async Task<ActionResult<List<CarResponseDto>>> GetAll()
         {
-            // For customers, show only their cars. For staff, show all.
             if (User.IsInRole("Customer"))
             {
                 var customerId = await GetCurrentCustomerId();
-                // Note: I might need to update ICarService to support filtering by CustomerId
-                // For now, I'll return all, but this should be filtered in a real app.
-                // However, the user said "it don't add anything", let's fix the creation first.
+                if (customerId == 0) return Ok(new List<CarResponseDto>());
+                return Ok(await _service.GetByCustomerIdAsync(customerId));
             }
+            
             return Ok(await _service.GetAllAsync());
         }
 

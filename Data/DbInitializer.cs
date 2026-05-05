@@ -10,16 +10,7 @@ namespace AutoFix.Data
     {
         public static void Initialize(AppDbContext context)
         {
-            // 1. Categories
-            if (!context.SparePartCategories.Any())
-            {
-                context.SparePartCategories.Add(new SparePartCategory { Name = "General", Description = "General Parts" });
-                context.SaveChanges();
-            }
-
-            var category = context.SparePartCategories.First();
-
-            // 2. Services
+            // 1. Services
             var serviceNames = new[] { "Change Oil", "Change Brake Pads", "Change Light Bulbs" };
             foreach (var name in serviceNames)
             {
@@ -29,7 +20,7 @@ namespace AutoFix.Data
                 }
             }
 
-            // 3. Spare Parts
+            // 2. Spare Parts
             var partNames = new[] { "Oil Filter", "Brake Pad Set", "Headlight Bulb" };
             foreach (var name in partNames)
             {
@@ -41,7 +32,6 @@ namespace AutoFix.Data
                         PartNumber = "PN-" + name.Replace(" ", "").ToUpper(), 
                         UnitPrice = 20.00m, 
                         StockQuantity = 100, 
-                        CategoryId = category.Id, 
                         Brand = "AutoFix", 
                         IsActive = true 
                     });

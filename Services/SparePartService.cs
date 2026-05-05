@@ -13,15 +13,18 @@ namespace AutoFix.Services
     public class SparePartService : ISparePartService
     {
         private readonly AppDbContext _db;
-        public SparePartService(AppDbContext db) => _db = db;
+        private readonly IRealtimeService _realtime;
+        public SparePartService(AppDbContext db, IRealtimeService realtime)
+        {
+            _db = db;
+            _realtime = realtime;
+        }
 
         private IQueryable<SparePartResponseDto> Project(IQueryable<SparePart> query)
         {
             return query.Select(sp => new SparePartResponseDto
             {
                 Id = sp.Id,
-                CategoryId = sp.CategoryId,
-                CategoryName = sp.Category.Name,
                 Name = sp.Name,
                 PartNumber = sp.PartNumber,
                 Description = sp.Description,
@@ -41,10 +44,7 @@ namespace AutoFix.Services
             return await Project(_db.SpareParts.AsNoTracking()).ToListAsync();
         }
 
-        public async Task<List<SparePartResponseDto>> GetByCategoryAsync(int categoryId)
-        {
-            return await Project(_db.SpareParts.AsNoTracking().Where(sp => sp.CategoryId == categoryId)).ToListAsync();
-        }
+
 
         public async Task<List<SparePartResponseDto>> GetLowStockAsync()
         {
@@ -67,7 +67,6 @@ namespace AutoFix.Services
         {
             var part = new SparePart
             {
-                CategoryId = dto.CategoryId,
                 Name = dto.Name,
                 PartNumber = dto.PartNumber,
                 Description = dto.Description,
@@ -81,6 +80,7 @@ namespace AutoFix.Services
 
             _db.SpareParts.Add(part);
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("inventory-updated", new { PartId = part.Id });
 
             return (await GetByIdAsync(part.Id))!;
         }
@@ -90,7 +90,6 @@ namespace AutoFix.Services
             var part = await _db.SpareParts.FindAsync(id);
             if (part == null) return null;
 
-            part.CategoryId = dto.CategoryId;
             part.Name = dto.Name;
             part.Description = dto.Description;
             part.Brand = dto.Brand;
@@ -119,6 +118,7 @@ namespace AutoFix.Services
             part.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("inventory-updated", new { PartId = id });
 
             var updatedDto = await GetByIdAsync(id);
             return (true, string.Empty, updatedDto);

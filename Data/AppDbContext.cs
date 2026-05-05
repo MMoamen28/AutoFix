@@ -14,7 +14,6 @@ namespace AutoFix.Data
         public DbSet<RepairOrder> RepairOrders => Set<RepairOrder>();
         public DbSet<Service> Services => Set<Service>();
         public DbSet<SparePart> SpareParts => Set<SparePart>();
-        public DbSet<SparePartCategory> SparePartCategories => Set<SparePartCategory>();
         public DbSet<RepairOrderServiceJoin> RepairOrderServices => Set<RepairOrderServiceJoin>();
         public DbSet<ServiceSparePartJoin> ServiceSpareParts => Set<ServiceSparePartJoin>();
         public DbSet<Receipt> Receipts => Set<Receipt>();
@@ -26,12 +25,7 @@ namespace AutoFix.Data
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // One-to-many: SparePartCategory → SparePart
-            modelBuilder.Entity<SparePart>()
-                .HasOne(sp => sp.Category)
-                .WithMany(c => c.SpareParts)
-                .HasForeignKey(sp => sp.CategoryId)
-                .OnDelete(DeleteBehavior.Restrict);
+
 
             // Unique index on PartNumber
             modelBuilder.Entity<SparePart>()

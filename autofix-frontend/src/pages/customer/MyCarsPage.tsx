@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { carService } from '../../services/carService';
 import { repairOrderService } from '../../services/repairOrderService';
+import { serviceService } from '../../services/serviceService';
 import { useToast } from '../../hooks/useToast';
 import { Car, Plus, Shield, Hash, Calendar, Trash2, Info, Wrench, ChevronRight, ClipboardList } from 'lucide-react';
 import Button from '../../components/shared/Button';
@@ -9,6 +9,7 @@ import Input from '../../components/shared/Input';
 import Badge from '../../components/shared/Badge';
 import Skeleton from '../../components/shared/Skeleton';
 import Modal from '../../components/shared/Modal';
+import RegisterVehicleModal from '../../components/customer/RegisterVehicleModal';
 
 const MyCarsPage: React.FC = () => {
   const { showToast } = useToast();
@@ -18,12 +19,6 @@ const MyCarsPage: React.FC = () => {
 
   // Registration Modal state
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
-  const [make, setMake] = useState('');
-  const [model, setModel] = useState('');
-  const [year, setYear] = useState('');
-  const [licensePlate, setLicensePlate] = useState('');
-  const [vin, setVin] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
   // Booking Modal state
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
@@ -52,27 +47,14 @@ const MyCarsPage: React.FC = () => {
 
   const fetchServices = async () => {
     try {
-      const res = await axios.get('/api/Services');
-      setServices(res.data);
-    } catch (err) {}
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (vin.length !== 17) return showToast('VIN must be 17 chars', 'error');
-    setSubmitting(true);
-    try {
-      await carService.create({ make, model, year: parseInt(year), licensePlate, vin });
-      showToast('Vehicle registered!', 'success');
-      setIsRegModalOpen(false);
-      resetRegForm();
-      fetchCars();
-    } catch (err: any) {
-      showToast(err.response?.data?.message ?? 'Error', 'error');
-    } finally {
-      setSubmitting(false);
+      const data = await serviceService.getAll();
+      setServices(data);
+    } catch (err) {
+      showToast('Could not load services', 'error');
     }
   };
+
+
 
   const handleBookService = async () => {
     if (selectedServices.length === 0) return showToast('Select at least one service', 'error');
@@ -104,9 +86,7 @@ const MyCarsPage: React.FC = () => {
     }
   };
 
-  const resetRegForm = () => {
-    setMake(''); setModel(''); setYear(''); setLicensePlate(''); setVin('');
-  };
+
 
   const resetBookForm = () => {
     setSelectedServices([]); setNotes(''); setSelectedCar(null);
@@ -131,20 +111,11 @@ const MyCarsPage: React.FC = () => {
       </header>
 
       {/* Registration Modal */}
-      <Modal isOpen={isRegModalOpen} onClose={() => setIsRegModalOpen(false)} title="Register New Vehicle">
-        <form style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <Input label="Make" value={make} onChange={e => setMake(e.target.value)} icon={<Shield size={18}/>} required />
-            <Input label="Model" value={model} onChange={e => setModel(e.target.value)} icon={<Car size={18}/>} required />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-            <Input label="Year" type="number" value={year} onChange={e => setYear(e.target.value)} icon={<Calendar size={18}/>} required />
-            <Input label="Plate" value={licensePlate} onChange={e => setLicensePlate(e.target.value)} icon={<Hash size={18}/>} required />
-          </div>
-          <Input label="VIN (17 characters)" value={vin} onChange={e => setVin(e.target.value.toUpperCase())} maxLength={17} icon={<Info size={18}/>} required />
-          <Button onClick={handleRegister} isLoading={submitting} style={{ marginTop: '10px' }}>Register</Button>
-        </form>
-      </Modal>
+      <RegisterVehicleModal 
+        isOpen={isRegModalOpen} 
+        onClose={() => setIsRegModalOpen(false)} 
+        onSuccess={fetchCars} 
+      />
 
       {/* Booking Modal */}
       <Modal 

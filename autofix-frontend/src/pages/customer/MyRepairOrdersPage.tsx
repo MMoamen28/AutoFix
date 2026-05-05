@@ -61,8 +61,8 @@ const MyRepairOrdersPage: React.FC = () => {
     try {
       await repairOrderService.create({ 
         carId: parseInt(carId), 
-        serviceId: parseInt(serviceId), 
-        description 
+        serviceIds: [parseInt(serviceId)], 
+        notes: description 
       });
       setCarId(''); 
       setServiceId(''); 

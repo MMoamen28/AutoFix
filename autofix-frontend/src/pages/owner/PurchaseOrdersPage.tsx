@@ -10,6 +10,7 @@ import {
   X, User, Car, FileText, CheckCircle, Clock, AlertCircle, Trash2,
   ChevronRight
 } from 'lucide-react';
+import signalRService from '../../services/signalRService';
 
 const PurchaseOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
@@ -22,10 +23,12 @@ const PurchaseOrdersPage: React.FC = () => {
   const [selectedMechanicId, setSelectedMechanicId] = useState<number | string>('');
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [receipt, setReceipt] = useState<any>(null);
-
   useEffect(() => {
     fetchOrders();
     fetchMechanics();
+    
+    const unsub = signalRService.on("order-updated", fetchOrders);
+    return () => { unsub(); };
   }, []);
 
   const fetchOrders = async () => {

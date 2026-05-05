@@ -14,37 +14,32 @@ namespace AutoFix.Services
         private readonly AppDbContext _db;
         public CarService(AppDbContext db) => _db = db;
 
+        private IQueryable<CarResponseDto> Project(IQueryable<Car> query)
+        {
+            return query.Select(c => new CarResponseDto
+            {
+                Id = c.Id,
+                Make = c.Make,
+                Model = c.Model,
+                Year = c.Year,
+                LicensePlate = c.LicensePlate,
+                VIN = c.VIN
+            });
+        }
+
         public async Task<List<CarResponseDto>> GetAllAsync()
         {
-            return await _db.Cars
-                .AsNoTracking()
-                .Select(c => new CarResponseDto
-                {
-                    Id = c.Id,
-                    Make = c.Make,
-                    Model = c.Model,
-                    Year = c.Year,
-                    LicensePlate = c.LicensePlate,
-                    VIN = c.VIN
-                })
-                .ToListAsync();
+            return await Project(_db.Cars.AsNoTracking()).ToListAsync();
+        }
+
+        public async Task<List<CarResponseDto>> GetByCustomerIdAsync(int customerId)
+        {
+            return await Project(_db.Cars.AsNoTracking().Where(c => c.CustomerId == customerId)).ToListAsync();
         }
 
         public async Task<CarResponseDto?> GetByIdAsync(int id)
         {
-            return await _db.Cars
-                .AsNoTracking()
-                .Where(c => c.Id == id)
-                .Select(c => new CarResponseDto
-                {
-                    Id = c.Id,
-                    Make = c.Make,
-                    Model = c.Model,
-                    Year = c.Year,
-                    LicensePlate = c.LicensePlate,
-                    VIN = c.VIN
-                })
-                .FirstOrDefaultAsync();
+            return await Project(_db.Cars.AsNoTracking().Where(c => c.Id == id)).FirstOrDefaultAsync();
         }
 
         public async Task<CarResponseDto> CreateAsync(CreateCarDto dto, int customerId)

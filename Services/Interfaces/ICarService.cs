@@ -7,6 +7,7 @@ namespace AutoFix.Services.Interfaces
     public interface ICarService
     {
         Task<List<CarResponseDto>> GetAllAsync();
+        Task<List<CarResponseDto>> GetByCustomerIdAsync(int customerId);
         Task<CarResponseDto?> GetByIdAsync(int id);
         Task<CarResponseDto> CreateAsync(CreateCarDto dto, int customerId);
         Task<bool> DeleteAsync(int id);

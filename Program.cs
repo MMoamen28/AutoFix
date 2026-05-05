@@ -2,6 +2,7 @@ using AutoFix.Data;
 using AutoFix.Middleware;
 using AutoFix.Services;
 using AutoFix.Services.Interfaces;
+using AutoFix.Hubs;
 using Hangfire;
 using Hangfire.MemoryStorage;
 using Microsoft.EntityFrameworkCore;
@@ -10,8 +11,15 @@ using System.Text.Json;
 var builder = WebApplication.CreateBuilder(args);
 
 // --- SQLITE FALLBACK FOR TESTING ---
+// --- SQL SERVER CONFIGURATION (RESILIENT) ---
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=autofix_local.db"));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null)
+    ));
 
 // Services (Dependency Injection)
 builder.Services.AddScoped<ICustomerService, CustomerService>();
@@ -20,13 +28,15 @@ builder.Services.AddScoped<IRepairOrderService, RepairOrderService>();
 builder.Services.AddScoped<ICarService, CarService>();
 builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<ISparePartService, SparePartService>();
-builder.Services.AddScoped<ISparePartCategoryService, SparePartCategoryService>();
+
 builder.Services.AddScoped<IReceiptService, ReceiptService>();
 builder.Services.AddScoped<IMechanicActionRequestService, MechanicActionRequestService>();
 builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
 builder.Services.AddScoped<IPurchaseReceiptService, PurchaseReceiptService>();
+builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddHttpClient();
+builder.Services.AddSignalR();
 
 // Authentication - Keep configuration but allow optional validation
 builder.Services.AddAuthentication(options =>
@@ -86,6 +96,7 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<UserAutoProvisioningMiddleware>();
+app.MapHub<AutoFixHub>("/hubs/autofix");
 app.MapControllers();
 
 app.Run();

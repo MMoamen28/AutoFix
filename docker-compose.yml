@@ -26,6 +26,8 @@ services:
       - Keycloak__AdminUsername=admin
       - Keycloak__AdminPassword=admin
     restart: unless-stopped
+    volumes:
+      - api_uploads:/app/wwwroot/uploads
     networks:
       - autofix-network
 
@@ -97,3 +99,4 @@ networks:
 volumes:
   sqlserver_data:
   keycloak_db_data:
+  api_uploads:

@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/layout/Layout';
+import { LayoutDashboard } from 'lucide-react';
 
 import LoginPage from '../pages/LoginPage';
 
@@ -11,7 +12,6 @@ import MechanicsPage from '../pages/admin/MechanicsPage';
 import RepairOrdersPage from '../pages/admin/RepairOrdersPage';
 import ServicesPage from '../pages/admin/ServicesPage';
 import SparePartsPage from '../pages/admin/SparePartsPage';
-import SparePartCategoriesPage from '../pages/admin/SparePartCategoriesPage';
 
 import MechanicDashboard from '../pages/mechanic/MechanicDashboard';
 import MyRepairOrdersPageMechanic from '../pages/mechanic/MyRepairOrdersPage';
@@ -24,6 +24,7 @@ import MyCarsPage from '../pages/customer/MyCarsPage';
 import MyRepairOrdersPageCustomer from '../pages/customer/MyRepairOrdersPage';
 import CartPage from '../pages/customer/CartPage';
 import MyOrdersPage from '../pages/customer/MyOrdersPage';
+import MarketplacePage from '../pages/customer/MarketplacePage';
 
 import OwnerDashboard from '../pages/OwnerDashboard';
 import PendingRequestsPage from '../pages/PendingRequestsPage';
@@ -33,7 +34,15 @@ import PurchaseReceiptsPage from '../pages/owner/PurchaseReceiptsPage';
 import AllDataPage from '../pages/AllDataPage';
 
 const AppRouter: React.FC = () => {
-  const { role, token } = useAuth();
+  const { role, token, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)' }}>
+        <LayoutDashboard className="animate-spin text-accent" size={48} />
+      </div>
+    );
+  }
 
   const getHomeElement = () => {
     if (!token) return <Navigate to="/login" replace />;
@@ -61,7 +70,6 @@ const AppRouter: React.FC = () => {
         <Route path="/repair-orders" element={<RepairOrdersPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/spare-parts" element={<SparePartsPage />} />
-        <Route path="/spare-part-categories" element={<SparePartCategoriesPage />} />
 
         {/* Owner-Specific Routes */}
         <Route path="/owner/requests" element={<PendingRequestsPage />} />
@@ -82,8 +90,9 @@ const AppRouter: React.FC = () => {
         <Route path="/customer" element={<Navigate to="/" replace />} />
         <Route path="/customer/cars" element={<MyCarsPage />} />
         <Route path="/customer/repair-orders" element={<MyRepairOrdersPageCustomer />} />
-        <Route path="/customer/cart" element={<CartPage />} />
-        <Route path="/customer/orders" element={<MyOrdersPage />} />
+        <Route path="/cart" element={<CartPage />} />
+        <Route path="/orders" element={<MyOrdersPage />} />
+        <Route path="/marketplace" element={<MarketplacePage />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

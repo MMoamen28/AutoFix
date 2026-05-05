@@ -116,8 +116,8 @@ const CustomerDashboard: React.FC = () => {
           <Table 
             columns={[
               { header: 'Vehicle', key: 'carInfo' },
-              { header: 'Status', key: 'status', render: (val) => <Badge variant={val === 'Completed' ? 'success' : 'warning'}>{val}</Badge> },
-              { header: 'Date', key: 'createdAt', render: (val) => new Date(val).toLocaleDateString() }
+              { header: 'Status', key: 'status', render: (item) => <Badge variant={item.status === 'Completed' ? 'success' : 'warning'}>{item.status}</Badge> },
+              { header: 'Date', key: 'createdAt', render: (item) => new Date(item.createdAt).toLocaleDateString() }
             ]}
             data={repairRequests}
           />

@@ -13,89 +13,50 @@ namespace AutoFix.Services
     public class RepairOrderService : IRepairOrderService
     {
         private readonly AppDbContext _db;
-        public RepairOrderService(AppDbContext db) => _db = db;
+        private readonly IRealtimeService _realtime;
+        public RepairOrderService(AppDbContext db, IRealtimeService realtime)
+        {
+            _db = db;
+            _realtime = realtime;
+        }
+
+        private IQueryable<RepairOrderResponseDto> Project(IQueryable<RepairOrder> query)
+        {
+            return query.Select(ro => new RepairOrderResponseDto
+            {
+                Id           = ro.Id,
+                Status       = ro.Status,
+                CustomerId   = ro.CustomerId,
+                CustomerName = ro.Customer.FullName,
+                CarPlate     = ro.Car.LicensePlate,
+                CarInfo      = $"{ro.Car.Year} {ro.Car.Make} {ro.Car.Model}",
+                MechanicId   = ro.MechanicId,
+                MechanicName = ro.Mechanic != null
+                                 ? $"{ro.Mechanic.FirstName} {ro.Mechanic.LastName}"
+                                 : null,
+                TotalCost    = ro.TotalCost,
+                Notes        = ro.Notes,
+                CreatedAt    = ro.CreatedAt,
+                CompletedAt  = ro.CompletedAt,
+                Services     = ro.RepairOrderServices
+                                 .Select(ros => ros.Service.Name)
+                                 .ToList()
+            });
+        }
 
         public async Task<List<RepairOrderResponseDto>> GetAllAsync()
         {
-            return await _db.RepairOrders
-                .AsNoTracking()
-                .Select(ro => new RepairOrderResponseDto
-                {
-                    Id           = ro.Id,
-                    Status       = ro.Status,
-                    CustomerId   = ro.CustomerId,
-                    CustomerName = ro.Customer.FullName,
-                    CarPlate     = ro.Car.LicensePlate,
-                    CarInfo      = $"{ro.Car.Year} {ro.Car.Make} {ro.Car.Model}",
-                    MechanicId   = ro.MechanicId,
-                    MechanicName = ro.Mechanic != null
-                                     ? $"{ro.Mechanic.FirstName} {ro.Mechanic.LastName}"
-                                     : null,
-                    TotalCost    = ro.TotalCost,
-                    Notes        = ro.Notes,
-                    CreatedAt    = ro.CreatedAt,
-                    CompletedAt  = ro.CompletedAt,
-                    Services     = ro.RepairOrderServices
-                                     .Select(ros => ros.Service.Name)
-                                     .ToList()
-                })
-                .ToListAsync();
+            return await Project(_db.RepairOrders.AsNoTracking()).ToListAsync();
         }
 
         public async Task<RepairOrderResponseDto?> GetByIdAsync(int id)
         {
-            return await _db.RepairOrders
-                .AsNoTracking()
-                .Where(ro => ro.Id == id)
-                .Select(ro => new RepairOrderResponseDto
-                {
-                    Id           = ro.Id,
-                    Status       = ro.Status,
-                    CustomerId   = ro.CustomerId,
-                    CustomerName = ro.Customer.FullName,
-                    CarPlate     = ro.Car.LicensePlate,
-                    CarInfo      = $"{ro.Car.Year} {ro.Car.Make} {ro.Car.Model}",
-                    MechanicId   = ro.MechanicId,
-                    MechanicName = ro.Mechanic != null
-                                     ? $"{ro.Mechanic.FirstName} {ro.Mechanic.LastName}"
-                                     : null,
-                    TotalCost    = ro.TotalCost,
-                    Notes        = ro.Notes,
-                    CreatedAt    = ro.CreatedAt,
-                    CompletedAt  = ro.CompletedAt,
-                    Services     = ro.RepairOrderServices
-                                     .Select(ros => ros.Service.Name)
-                                     .ToList()
-                })
-                .FirstOrDefaultAsync();
+            return await Project(_db.RepairOrders.AsNoTracking().Where(ro => ro.Id == id)).FirstOrDefaultAsync();
         }
 
         public async Task<List<RepairOrderResponseDto>> GetByCustomerIdAsync(int customerId)
         {
-            return await _db.RepairOrders
-                .AsNoTracking()
-                .Where(ro => ro.CustomerId == customerId)
-                .Select(ro => new RepairOrderResponseDto
-                {
-                    Id           = ro.Id,
-                    Status       = ro.Status,
-                    CustomerId   = ro.CustomerId,
-                    CustomerName = ro.Customer.FullName,
-                    CarPlate     = ro.Car.LicensePlate,
-                    CarInfo      = $"{ro.Car.Year} {ro.Car.Make} {ro.Car.Model}",
-                    MechanicId   = ro.MechanicId,
-                    MechanicName = ro.Mechanic != null
-                                     ? $"{ro.Mechanic.FirstName} {ro.Mechanic.LastName}"
-                                     : null,
-                    TotalCost    = ro.TotalCost,
-                    Notes        = ro.Notes,
-                    CreatedAt    = ro.CreatedAt,
-                    CompletedAt  = ro.CompletedAt,
-                    Services     = ro.RepairOrderServices
-                                     .Select(ros => ros.Service.Name)
-                                     .ToList()
-                })
-                .ToListAsync();
+            return await Project(_db.RepairOrders.AsNoTracking().Where(ro => ro.CustomerId == customerId)).ToListAsync();
         }
 
         public async Task<RepairOrderResponseDto> CreateAsync(CreateRepairOrderDto dto, int customerId)
@@ -126,6 +87,7 @@ namespace AutoFix.Services
 
             _db.RepairOrders.Add(order);
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("repair-updated", new { OrderId = order.Id });
 
             return await GetByIdAsync(order.Id) ?? throw new Exception("Order not found after creation");
         }
@@ -205,6 +167,7 @@ namespace AutoFix.Services
             }
 
             await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("repair-updated", new { OrderId = order.Id });
 
             return await GetByIdAsync(order.Id);
         }

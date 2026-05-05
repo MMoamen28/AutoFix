@@ -9,12 +9,14 @@ import actionRequestService, { ActionRequest } from '../services/actionRequestSe
 import customerService from '../services/customerService';
 import mechanicService from '../services/mechanicService';
 import sparePartService from '../services/sparePartService';
+import repairOrderService from '../services/repairOrderService';
 import { useToast } from '../hooks/useToast';
 import StatCard from '../components/shared/StatCard';
 import Table from '../components/shared/Table';
 import Button from '../components/shared/Button';
 import Badge from '../components/shared/Badge';
 import Skeleton from '../components/shared/Skeleton';
+import signalRService from '../services/signalRService';
 
 const OwnerDashboard: React.FC = () => {
   const { showToast } = useToast();
@@ -23,35 +25,41 @@ const OwnerDashboard: React.FC = () => {
     customers: 0,
     mechanics: 0,
     parts: 0,
-    pendingApprovals: 0
+    pendingApprovals: 0,
+    activeRepairs: 0
   });
   const [pendingRequests, setPendingRequests] = useState<ActionRequest[]>([]);
   const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([]);
+  const [recentRepairs, setRecentRepairs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [receipts, customers, mechanics, parts, requests] = await Promise.all([
+        const [receipts, customers, mechanics, parts, requests, repairs] = await Promise.all([
           receiptService.getAll().catch(() => []),
           customerService.getAllCustomers().catch(() => []),
           mechanicService.getAll().catch(() => []),
           sparePartService.getAll().catch(() => []),
-          actionRequestService.getPending().catch(() => [])
+          actionRequestService.getPending().catch(() => []),
+          repairOrderService.getAll().catch(() => [])
         ]);
 
         const totalRevenue = receipts.reduce((sum: number, r: any) => sum + (r.totalCost || r.totalAmount || 0), 0);
+        const activeRepairs = repairs.filter((r: any) => r.status !== 'Completed' && r.status !== 'Cancelled').length;
 
         setStats({
           revenue: totalRevenue,
           customers: customers.length,
           mechanics: mechanics.length,
           parts: parts.length,
-          pendingApprovals: requests.length
+          pendingApprovals: requests.length,
+          activeRepairs: activeRepairs
         });
 
         setPendingRequests(requests);
         setRecentReceipts(receipts.slice(0, 5));
+        setRecentRepairs(repairs.slice(0, 5));
       } catch (err) {
         showToast('Failed to load dashboard intelligence', 'error');
       } finally {
@@ -60,6 +68,16 @@ const OwnerDashboard: React.FC = () => {
     };
 
     fetchDashboardData();
+
+    const unsub1 = signalRService.on("order-updated", fetchDashboardData);
+    const unsub2 = signalRService.on("request-updated", fetchDashboardData);
+    const unsub3 = signalRService.on("repair-updated", fetchDashboardData);
+    
+    return () => { 
+      unsub1(); 
+      unsub2(); 
+      unsub3();
+    };
   }, []);
 
   if (loading) return (
@@ -93,17 +111,10 @@ const OwnerDashboard: React.FC = () => {
           trend={{ value: '+12%', isPositive: true }}
         />
         <StatCard 
-          label="Total Customers" 
-          value={stats.customers} 
-          icon={<Users size={24} />} 
+          label="Active Repair Jobs" 
+          value={stats.activeRepairs} 
+          icon={<Activity size={24} />} 
           color="var(--blue)"
-          trend={{ value: '+5', isPositive: true }}
-        />
-        <StatCard 
-          label="Active Mechanics" 
-          value={stats.mechanics} 
-          icon={<Wrench size={24} />} 
-          color="var(--purple)"
         />
         <StatCard 
           label="Pending Approvals" 
@@ -141,6 +152,23 @@ const OwnerDashboard: React.FC = () => {
               ))
             )}
           </div>
+        </section>
+
+        {/* Recent Repairs Section */}
+        <section style={sectionCardStyle}>
+          <div style={sectionHeaderStyle}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800 }}>Recent Repair Orders</h2>
+            <Link to="/owner/all-data" style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}>VIEW ALL</Link>
+          </div>
+          <Table 
+            columns={[
+              { header: 'Customer', key: 'customerName' },
+              { header: 'Vehicle', key: 'carInfo' },
+              { header: 'Status', key: 'status', render: (r) => <Badge variant={r.status === 'Pending' ? 'warning' : 'info'}>{r.status}</Badge> },
+              { header: 'Date', key: 'createdAt', render: (r) => new Date(r.createdAt).toLocaleDateString() }
+            ]}
+            data={recentRepairs}
+          />
         </section>
 
         {/* Recent Transactions */}
