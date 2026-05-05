@@ -1,6 +1,6 @@
 # 🛠️ AutoFix: Professional Workshop Management System
 
-**AutoFix** is a state-of-the-art, full-stack vehicle maintenance platform. It is engineered to streamline workshop operations, providing specialized interfaces for Customers, Mechanics, and Workshop Owners.
+**AutoFix** is a state-of-the-art, full-stack vehicle maintenance and spare parts marketplace platform. It is engineered to streamline workshop operations, providing specialized interfaces for Customers, Mechanics, and Workshop Owners with real-time connectivity.
 
 ![Status: Ready for Presentation](https://img.shields.io/badge/Status-Ready_for_Presentation-success?style=for-the-badge)
 ![Tech: ASP.NET Core](https://img.shields.io/badge/Backend-ASP.NET_Core_8.0-512bd4?style=for-the-badge&logo=dotnet)
@@ -10,94 +10,85 @@
 
 ---
 
-## ✨ Core Features & Requirements
+## ✨ Application Description
 
-This project strictly adheres to modern web engineering principles, specifically fulfilling requirements for **Frontend-Backend Integration**:
+AutoFix is a comprehensive solution for modern automotive service centers. It handles the entire lifecycle of car repairs—from customer registration and service booking to inventory management and automated billing.
 
--   **🔐 Centralized Security**: A custom Axios client (`axiosClient.ts`) with automated HTTP Interceptors that handle Keycloak Bearer Token injection and session expiry (401 redirects).
--   **📦 Modular Service Layer**: All API logic is encapsulated in a dedicated `services/` directory. No hardcoded API calls exist within UI components.
--   **🔄 Full CRUD Lifecycle**: Services for `Cars`, `Spare Parts`, and `Repair Orders` support complete Create, Read, Update, and Delete operations.
--   **🎨 Pro OS Aesthetic**: A premium "Glassmorphism" UI built with React, featuring smooth transitions, vibrant accent palettes, and responsive layouts.
--   **👥 Role-Based Access Control (RBAC)**: Distinct dashboards and permissions for:
-    -   **Owner**: Full financial oversight, inventory approvals, and fleet management.
-    -   **Mechanic**: Repair job tracking, inventory access, and status updates.
-    -   **Customer**: Vehicle registration, service booking, and repair history.
+### Key Modules:
+- **🛒 Spare Parts Marketplace**: A public-facing catalog where users can browse parts by category, view real-time stock, and manage private shopping carts.
+- **⚡ Real-Time Notifications**: Integrated SignalR connectivity ensures mechanics and owners see new orders and status updates instantly without refreshing.
+- **🔧 Repair Workflow**: Digital tracking of repair orders, mechanic self-assignment (Claiming), and automated receipt generation.
+- **📊 Business Intelligence**: High-level dashboards for owners to track revenue, team efficiency, and inventory health.
 
 ---
 
-## 🏗️ Technical Architecture
+## 🚀 Setup & Installation
 
-### Frontend Layer (`/autofix-frontend`)
--   **Framework**: React 18
--   **State Management**: React Context (Auth) + Component-level `useState` hooks for loading/data/error states.
--   **API Client**: Axios with centralized configuration and interceptors.
--   **Styling**: Vanilla CSS with modern tokens (CSS Variables) for a consistent "Pro OS" look.
+### Prerequisites
+- **Node.js** (v18+)
+- **.NET SDK** (v8.0)
+- **Docker Desktop** (for Keycloak and SQL Server)
 
-### Backend Layer (Root)
--   **API**: ASP.NET Core 8.0 Web API.
--   **Identity**: Keycloak OIDC integration for robust security.
--   **Persistence**: Entity Framework Core with SQLite (Dev) / SQL Server (Prod) support.
--   **Background Jobs**: Hangfire for automated service processing.
-
----
-
-## 🚦 Quick Start: Local Deployment
-
-### 1. Start Infrastructure (Docker)
-Start Keycloak and the Identity database:
+### 1. Backend Setup
 ```bash
-docker-compose up -d keycloak keycloak-db
-```
-*Wait ~30 seconds for Keycloak to initialize before starting the API.*
+# 1. Start Infrastructure (Keycloak + DB)
+docker-compose up -d
 
-### 2. Launch Backend API
-```bash
+# 2. Initialize Database & Run API
 # From the root directory
 dotnet run
 ```
-*The API will be available at `http://localhost:5005` (with Swagger at `/swagger`).*
+*The backend runs at `http://localhost:5005`. Swagger UI is available at `/swagger`.*
 
-### 3. Launch React Frontend
+### 2. Frontend Setup
 ```bash
+# 1. Navigate to frontend directory
 cd autofix-frontend
+
+# 2. Install dependencies
 npm install
+
+# 3. Launch application
 npm start
 ```
-*The UI will start on `http://localhost:3000`.*
+*The frontend runs at `http://localhost:3000`.*
 
 ---
 
-## 🔑 Default Presentation Accounts
-| Role | Username | Password |
-| :--- | :--- | :--- |
-| **Owner** | `owner` | `password` |
-| **Mechanic** | `mechanic` | `password` |
-| **Customer** | `customer` | `password` |
+## 🔑 Access Roles
+| Role | Responsibility |
+| :--- | :--- |
+| **Owner** | Full oversight, financial reports, team management, and catalog control. |
+| **Mechanic** | Order claiming, repair execution, and inventory stock adjustment. |
+| **Customer** | Vehicle management, service booking, and marketplace shopping. |
 
 ---
 
-## 📁 Project Structure (Frontend Integration Focus)
-```text
-src/
-├── components/         # Shared UI elements (Modals, Forms, Buttons)
-│   └── customer/       # Feature-specific components (e.g. RegisterVehicleForm)
-├── pages/              # Routed page components (Dashboards, Lists)
-├── services/           # MODULAR API LAYER (Axios Clients)
-│   ├── axiosClient.ts  # Centralized Axios config & Interceptors
-│   ├── carService.ts   # CRUD logic for Vehicles
-│   └── serviceService.ts # CRUD logic for Workshop Services
-├── context/            # AuthContext (Keycloak integration)
-└── router/             # AppRouter (Protected routes)
-```
+## 📡 API Routes Overview
+
+| Category | Method | Endpoint | Description |
+| :--- | :--- | :--- | :--- |
+| **Auth** | `POST` | `/api/auth/login` | System authentication |
+| **Cars** | `GET/POST` | `/api/cars` | Manage customer vehicles |
+| **Marketplace** | `GET` | `/api/spareparts/public-list` | View public catalog |
+| | `GET` | `/api/spareparts/category/{id}` | Filter parts by category |
+| **Cart** | `POST` | `/api/cart/add` | Add part to private cart |
+| | `POST` | `/api/cart/checkout` | Convert cart to order/receipt |
+| **Repairs** | `GET` | `/api/repairorders` | List all repair jobs |
+| | `PATCH` | `/api/repairorders/{id}/claim` | Mechanic claims an order |
+| | `PUT` | `/api/repairorders/{id}` | Update repair status |
+| **Inventory** | `PATCH` | `/api/spareparts/{id}/stock` | Adjust stock levels |
+| **Admin** | `GET` | `/api/customers` | List all registered users |
+| | `GET` | `/api/receipts` | View all transaction history |
 
 ---
 
-## 📝 Assignment Audit Checklist
-- [x] **Centralized Axios Config**: Located in `src/services/axiosClient.ts`.
-- [x] **Modular Services**: Service files in `src/services/` export distinct CRUD functions.
-- [x] **Controlled Components**: Forms use `value` + `onChange` state mapping.
-- [x] **State Handling**: Components implement `isLoading` and `error` UI feedback.
-- [x] **Security**: JWT Bearer tokens are attached via Interceptors.
+## 🏗️ Technical Stack
+
+- **Frontend**: React 18, Axios (Interceptors), React Router 6, Recharts, Lucide Icons.
+- **Backend**: ASP.NET Core 8, Entity Framework Core, SignalR (Real-time), Hangfire.
+- **Identity**: Keycloak OIDC (OpenID Connect) for secure multi-role access.
+- **Styling**: Modern Vanilla CSS with Glassmorphism and Responsive Tokens.
 
 ---
-*Developed for Web Engineering Assignment - AutoFix Platform.*
+*Developed for Web Engineering - AutoFix Professional Platform.*
