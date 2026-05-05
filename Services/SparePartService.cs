@@ -20,6 +20,21 @@ namespace AutoFix.Services
             _realtime = realtime;
         }
 
+        private string GetCategoryName(int id)
+        {
+            return id switch
+            {
+                1 => "Engine",
+                2 => "Brakes",
+                3 => "Suspension",
+                4 => "Electrical",
+                5 => "Body",
+                6 => "Filters",
+                7 => "Tires",
+                _ => "General"
+            };
+        }
+
         private IQueryable<SparePartResponseDto> Project(IQueryable<SparePart> query)
         {
             return query.Select(sp => new SparePartResponseDto
@@ -87,6 +102,8 @@ namespace AutoFix.Services
                 UnitPrice = dto.UnitPrice,
                 StockQuantity = dto.StockQuantity,
                 MinimumStockLevel = dto.MinimumStockLevel,
+                CategoryId = dto.CategoryId,
+                CategoryName = GetCategoryName(dto.CategoryId),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
