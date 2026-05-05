@@ -4,7 +4,8 @@
 
 ![Status: Ready for Presentation](https://img.shields.io/badge/Status-Ready_for_Presentation-success?style=for-the-badge)
 ![Tech: ASP.NET Core](https://img.shields.io/badge/Backend-ASP.NET_Core_8.0-512bd4?style=for-the-badge&logo=dotnet)
-![Tech: React](https://img.shields.io/badge/Frontend-React_18_Vite-61dafb?style=for-the-badge&logo=react)
+![Tech: React](https://img.shields.io/badge/Frontend-React_18-61dafb?style=for-the-badge&logo=react)
+![Tech: Axios](https://img.shields.io/badge/API_Client-Axios-5a29e4?style=for-the-badge&logo=axios)
 ![Auth: Keycloak](https://img.shields.io/badge/Identity-Keycloak-f0803c?style=for-the-badge&logo=keycloak)
 
 ---
@@ -16,7 +17,7 @@ This project strictly adheres to modern web engineering principles, specifically
 -   **🔐 Centralized Security**: A custom Axios client (`axiosClient.ts`) with automated HTTP Interceptors that handle Keycloak Bearer Token injection and session expiry (401 redirects).
 -   **📦 Modular Service Layer**: All API logic is encapsulated in a dedicated `services/` directory. No hardcoded API calls exist within UI components.
 -   **🔄 Full CRUD Lifecycle**: Services for `Cars`, `Spare Parts`, and `Repair Orders` support complete Create, Read, Update, and Delete operations.
--   **🎨 Pro OS Aesthetic**: A premium "Glassmorphism" UI built with React + Vite, featuring smooth transitions, vibrant accent palettes, and responsive layouts.
+-   **🎨 Pro OS Aesthetic**: A premium "Glassmorphism" UI built with React, featuring smooth transitions, vibrant accent palettes, and responsive layouts.
 -   **👥 Role-Based Access Control (RBAC)**: Distinct dashboards and permissions for:
     -   **Owner**: Full financial oversight, inventory approvals, and fleet management.
     -   **Mechanic**: Repair job tracking, inventory access, and status updates.
@@ -27,7 +28,7 @@ This project strictly adheres to modern web engineering principles, specifically
 ## 🏗️ Technical Architecture
 
 ### Frontend Layer (`/autofix-frontend`)
--   **Framework**: React 18 + Vite (TypeScript)
+-   **Framework**: React 18
 -   **State Management**: React Context (Auth) + Component-level `useState` hooks for loading/data/error states.
 -   **API Client**: Axios with centralized configuration and interceptors.
 -   **Styling**: Vanilla CSS with modern tokens (CSS Variables) for a consistent "Pro OS" look.
@@ -60,7 +61,7 @@ dotnet run
 ```bash
 cd autofix-frontend
 npm install
-npm run dev
+npm start
 ```
 *The UI will start on `http://localhost:3000`.*
 

@@ -12,8 +12,7 @@ AutoFix ASP.NET Core 8 Web API. It supports three user roles:
 
 ## Tech Stack
 
-- React 18 + TypeScript
-- Vite (build tool and dev server)
+- React 18
 - React Router v6 (client-side routing)
 - Axios (HTTP client for API communication)
 - Recharts (dashboard charts)
@@ -36,8 +35,8 @@ cd autofix-frontend
 # Install dependencies
 npm install
 
-# Start the development server
-npm run dev
+# Start the application
+npm start
 ```
 
 Open http://localhost:3000 in your browser.
@@ -63,7 +62,7 @@ docker compose up --build
 
 # In a separate terminal, start the frontend
 cd ../autofix-frontend
-npm run dev
+npm start
 ```
 
 ### Option B — Backend without Docker
@@ -75,7 +74,7 @@ dotnet run
 
 # In a separate terminal
 cd ../autofix-frontend
-npm run dev
+npm start
 ```
 
 ## API Routes Used
