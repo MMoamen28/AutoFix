@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { customerService } from '../../services/customerService';
 import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../context/AuthContext';
 import Table from '../../components/shared/Table';
 import Modal from '../../components/shared/Modal';
 import Input from '../../components/shared/Input';
 import Button from '../../components/shared/Button';
 import Badge from '../../components/shared/Badge';
 import Skeleton from '../../components/shared/Skeleton';
-import { User, Mail, Phone, Plus, Eye, Trash2 } from 'lucide-react';
+import { User, Mail, Phone, Plus, Trash2 } from 'lucide-react';
 
 const CustomersPage: React.FC<{ openModal?: boolean }> = ({ openModal = false }) => {
-  const navigate = useNavigate();
   const { showToast } = useToast();
+  const { role } = useAuth();
 
   // List State
   const [customers, setCustomers] = useState<any[]>([]);
@@ -60,45 +60,120 @@ const CustomersPage: React.FC<{ openModal?: boolean }> = ({ openModal = false })
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('This will permanently remove the customer record. Proceed?')) return;
+  const handleDelete = async (id: number, name: string) => {
+    if (!window.confirm(
+      `Are you sure you want to permanently delete customer "${name}"?\nThis will remove all their data and cannot be undone.`
+    )) return;
     try {
       await customerService.deleteCustomer(id);
-      showToast('Customer record archived', 'success');
+      showToast(`Customer "${name}" has been deleted`, 'success');
       fetchCustomers();
     } catch (err: any) {
-      showToast(err.response?.data?.message ?? 'Action restricted', 'error');
+      showToast(
+        err.response?.data?.message ?? 
+        'Cannot delete customer — they may have active orders', 
+        'error'
+      );
     }
   };
 
   const columns = [
-    { header: 'Reference', key: 'id', width: '100px', render: (c: any) => <span style={{ fontWeight: 800, color: 'var(--text-muted)' }}>#{c.id}</span> },
-    { header: 'Full Name', key: 'fullName', render: (c: any) => <span style={{ fontWeight: 700 }}>{c.fullName}</span> },
-    { header: 'Email Address', key: 'email', render: (c: any) => <span style={{ color: 'var(--blue)', fontWeight: 600 }}>{c.email}</span> },
-    { header: 'Phone Number', key: 'phone', render: (c: any) => c.phone || <Badge variant="info">NO DATA</Badge> },
     { 
-      header: 'Actions', 
-      key: 'actions', 
-      width: '120px',
+      header: 'Reference', 
+      key: 'id', 
+      width: '100px', 
       render: (c: any) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button 
-            onClick={() => navigate(`/customers/${c.id}`)} 
-            style={actionBtnStyle}
-            title="View Details"
-          >
-            <Eye size={16} />
-          </button>
-          <button 
-            onClick={() => handleDelete(c.id)} 
-            style={{ ...actionBtnStyle, color: 'var(--danger)' }}
-            title="Remove Record"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        <span style={{ fontWeight: 800, color: 'var(--text-muted)' }}>
+          #{c.id}
+        </span>
       ) 
-    }
+    },
+    { 
+      header: 'Full Name', 
+      key: 'fullName', 
+      render: (c: any) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--accent-dim)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--accent)',
+            fontSize: '13px',
+            fontWeight: 800,
+            flexShrink: 0
+          }}>
+            {c.fullName?.charAt(0)?.toUpperCase() || 'C'}
+          </div>
+          <span style={{ fontWeight: 700 }}>{c.fullName}</span>
+        </div>
+      )
+    },
+    { 
+      header: 'Email Address', 
+      key: 'email', 
+      render: (c: any) => (
+        <span style={{ color: 'var(--blue)', fontWeight: 600 }}>
+          {c.email}
+        </span>
+      ) 
+    },
+    { 
+      header: 'Phone Number', 
+      key: 'phone', 
+      render: (c: any) => c.phone || (
+        <Badge variant="info">NO DATA</Badge>
+      )
+    },
+    { 
+      header: 'Joined', 
+      key: 'createdAt', 
+      render: (c: any) => (
+        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+          {new Date(c.createdAt).toLocaleDateString()}
+        </span>
+      )
+    },
+    // Only show delete column for Owner role
+    ...(role === 'Owner' ? [{
+      header: 'Action',
+      key: 'action',
+      width: '100px',
+      render: (c: any) => (
+        <button
+          onClick={() => handleDelete(c.id, c.fullName)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            backgroundColor: 'var(--danger-dim)',
+            border: '1px solid var(--danger)',
+            color: 'var(--danger)',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '12px',
+            fontWeight: 700,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = 'var(--danger)';
+            e.currentTarget.style.color = 'white';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = 'var(--danger-dim)';
+            e.currentTarget.style.color = 'var(--danger)';
+          }}
+          title={`Delete ${c.fullName}`}
+        >
+          <Trash2 size={14} />
+          Delete
+        </button>
+      )
+    }] : [])
   ];
 
   return (
@@ -164,19 +239,6 @@ const CustomersPage: React.FC<{ openModal?: boolean }> = ({ openModal = false })
       {error && <Badge variant="danger">{error}</Badge>}
     </div>
   );
-};
-
-const actionBtnStyle: React.CSSProperties = {
-  background: 'var(--bg-primary)',
-  border: '1px solid var(--border)',
-  color: 'var(--text-secondary)',
-  padding: '8px',
-  borderRadius: '8px',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  transition: 'all 0.2s ease'
 };
 
 export default CustomersPage;

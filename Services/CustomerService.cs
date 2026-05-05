@@ -90,8 +90,22 @@ namespace AutoFix.Services
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var customer = await _db.Customers.FindAsync(id);
+            var customer = await _db.Customers
+                .Include(c => c.Cars)
+                .Include(c => c.RepairOrders)
+                .FirstOrDefaultAsync(c => c.Id == id);
+            
             if (customer == null) return false;
+
+            // Check if customer has active repair orders
+            var hasActiveOrders = customer.RepairOrders
+                .Any(ro => ro.Status == "Pending" || ro.Status == "InProgress");
+            
+            if (hasActiveOrders)
+                throw new System.InvalidOperationException(
+                    "Cannot delete customer with active repair orders. " +
+                    "Please complete or cancel their orders first."
+                );
 
             _db.Customers.Remove(customer);
             await _db.SaveChangesAsync();

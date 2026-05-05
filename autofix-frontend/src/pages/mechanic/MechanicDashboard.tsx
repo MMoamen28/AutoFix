@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { ClipboardList, Wrench, Clock, CheckCircle, AlertTriangle, Play, Package, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ClipboardList, Wrench, CheckCircle, Play, Package, ArrowRight, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { purchaseOrderService } from '../../services/purchaseOrderService';
-import { sparePartService } from '../../services/sparePartService';
 import repairOrderService from '../../services/repairOrderService';
 import signalRService from '../../services/signalRService';
 
 const MechanicDashboard: React.FC = () => {
   const { user } = useAuth();
   const [orders, setOrders] = useState<any[]>([]);
-  const [lowStockCount, setLowStockCount] = useState(0);
+  const [availableCount, setAvailableCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,12 +19,12 @@ const MechanicDashboard: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [orderRes, partRes] = await Promise.all([
+      const [orderRes, availableRes] = await Promise.all([
         repairOrderService.getAll(),
-        sparePartService.getLowStock()
+        repairOrderService.getAvailable().catch(() => [])
       ]);
       setOrders(orderRes);
-      setLowStockCount(partRes.length);
+      setAvailableCount(availableRes.length);
     } catch (err) {
       console.error('Failed to fetch mechanic dashboard data');
     } finally {
@@ -38,10 +37,34 @@ const MechanicDashboard: React.FC = () => {
   const completedToday = orders.filter(o => o.status === 'Completed' && new Date(o.completedAt || '').toDateString() === new Date().toDateString());
 
   const stats = [
-    { label: 'Assigned Jobs', value: assignedOrders.length, icon: ClipboardList, color: 'text-blue-400' },
-    { label: 'In Progress', value: inProgressOrders.length, icon: Play, color: 'text-amber-400' },
-    { label: 'Completed Today', value: completedToday.length, icon: CheckCircle, color: 'text-emerald-400' },
-    { label: 'Low Stock Parts', value: lowStockCount, icon: AlertTriangle, color: 'text-red-400' },
+    { 
+      label: 'Assigned Jobs', 
+      value: assignedOrders.length, 
+      icon: ClipboardList, 
+      color: 'text-blue-400',
+      bgColor: 'rgba(59,130,246,0.1)'
+    },
+    { 
+      label: 'In Progress', 
+      value: inProgressOrders.length, 
+      icon: Play, 
+      color: 'text-amber-400',
+      bgColor: 'rgba(245,158,11,0.1)'
+    },
+    { 
+      label: 'Completed Today', 
+      value: completedToday.length, 
+      icon: CheckCircle, 
+      color: 'text-emerald-400',
+      bgColor: 'rgba(16,185,129,0.1)'
+    },
+    { 
+      label: 'Available Requests', 
+      value: availableCount, 
+      icon: ClipboardList, 
+      color: 'text-yellow-400',
+      bgColor: 'rgba(234,179,8,0.1)'
+    },
   ];
 
   return (
@@ -53,12 +76,47 @@ const MechanicDashboard: React.FC = () => {
         <p className="text-gray-400 mt-2 text-lg">System online. Managing active repair and marketplace workflows.</p>
       </header>
 
+      {availableCount > 0 && (
+        <div style={{
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          border: '1px solid var(--warning)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '16px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <ClipboardList size={20} color="var(--warning)" />
+            <p style={{ fontWeight: 700, color: 'white', fontSize: '14px' }}>
+              {availableCount} customer repair request(s) waiting for a mechanic
+            </p>
+          </div>
+          <Link to="/mechanic/available-orders" style={{
+            backgroundColor: 'var(--warning)',
+            color: 'black',
+            fontWeight: 800,
+            fontSize: '12px',
+            padding: '10px 20px',
+            borderRadius: 'var(--radius-md)',
+            textDecoration: 'none',
+            transition: 'all 0.2s ease'
+          }}>
+            VIEW & CLAIM
+          </Link>
+        </div>
+      )}
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-4 gap-6">
         {stats.map((stat, i) => (
           <div key={i} className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-3xl p-8 hover:border-blue-500/50 transition-all group">
             <div className="flex items-center justify-between mb-6">
-              <div className="w-14 h-14 bg-gray-800 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div 
+                className="w-14 h-14 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform"
+                style={{ backgroundColor: stat.bgColor }}
+              >
                 <stat.icon className={stat.color} size={28} />
               </div>
               <Wrench className="text-gray-800" size={24} />
@@ -95,7 +153,7 @@ const MechanicDashboard: React.FC = () => {
                           {order.status}
                         </span>
                       </div>
-                      <h4 className="text-lg font-bold text-white">{order.carInfo.split('—')[0]}</h4>
+                      <h4 className="text-lg font-bold text-white">{order.carInfo?.split('—')[0]}</h4>
                       <p className="text-sm text-gray-500">Customer: {order.customerName}</p>
                     </div>
                   </div>
@@ -113,6 +171,69 @@ const MechanicDashboard: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+        
+        {/* Quick Links */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Link to="/marketplace" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'var(--accent-dim)',
+            border: '1px solid var(--accent)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '16px 20px',
+            textDecoration: 'none',
+          }}>
+            <div style={{ 
+              display: 'flex', alignItems: 'center', gap: '12px' 
+            }}>
+              <ShoppingBag size={20} color="var(--accent)" />
+              <div>
+                <p style={{ 
+                  fontWeight: 700, color: 'white', fontSize: '14px' 
+                }}>
+                  Parts Marketplace
+                </p>
+                <p style={{ 
+                  fontSize: '12px', color: 'var(--text-muted)' 
+                }}>
+                  Browse shared inventory and check part availability
+                </p>
+              </div>
+            </div>
+            <ArrowRight size={18} color="var(--accent)" />
+          </Link>
+
+          <Link to="/mechanic/available-orders" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: 'rgba(59,130,246,0.1)',
+            border: '1px solid rgba(59,130,246,0.5)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '16px 20px',
+            textDecoration: 'none',
+          }}>
+            <div style={{ 
+              display: 'flex', alignItems: 'center', gap: '12px' 
+            }}>
+              <ClipboardList size={20} color="var(--blue)" />
+              <div>
+                <p style={{ 
+                  fontWeight: 700, color: 'white', fontSize: '14px' 
+                }}>
+                  Customer Requests
+                </p>
+                <p style={{ 
+                  fontSize: '12px', color: 'var(--text-muted)' 
+                }}>
+                  {availableCount} new requests waiting for a technician
+                </p>
+              </div>
+            </div>
+            <ArrowRight size={18} color="var(--blue)" />
+          </Link>
         </div>
       </div>
     </div>

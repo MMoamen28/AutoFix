@@ -1,5 +1,4 @@
 using AutoFix.DTOs.RepairOrder;
-using AutoFix.DTOs.MechanicActionRequest;
 using AutoFix.Services.Interfaces;
 using AutoFix.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -16,13 +15,11 @@ namespace AutoFix.Controllers
     public class RepairOrdersController : ControllerBase
     {
         private readonly IRepairOrderService _service;
-        private readonly IMechanicActionRequestService _actionRequestService;
         private readonly AppDbContext _db;
 
-        public RepairOrdersController(IRepairOrderService service, IMechanicActionRequestService actionRequestService, AppDbContext db)
+        public RepairOrdersController(IRepairOrderService service, AppDbContext db)
         {
             _service = service;
-            _actionRequestService = actionRequestService;
             _db = db;
         }
 
@@ -95,25 +92,8 @@ namespace AutoFix.Controllers
         [Authorize(Roles = "Admin,Owner,Mechanic")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateRepairOrderDto dto)
         {
-            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
-
-            if (userRole == "Admin" || userRole == "Owner")
-            {
-                var result = await _service.UpdateAsync(id, dto);
-                return result is null ? NotFound() : Ok(result);
-            }
-
-            var mechanicId = await GetCurrentMechanicId();
-            var mechanicName = User.FindFirst("preferred_username")?.Value ?? "Mechanic";
-            var payload = System.Text.Json.JsonSerializer.Serialize(new { repairOrderId = id, dto.Status, dto.MechanicId, dto.Notes });
-
-            await _actionRequestService.CreateAsync(new CreateMechanicActionRequestDto
-            {
-                ActionType = "UpdateRepairOrderStatus",
-                ActionPayload = payload
-            }, mechanicId, mechanicName);
-
-            return Accepted(new { message = "Your request has been submitted for Owner approval." });
+            var result = await _service.UpdateAsync(id, dto);
+            return result is null ? NotFound() : Ok(result);
         }
 
         [HttpDelete("{id}")]
@@ -122,6 +102,48 @@ namespace AutoFix.Controllers
         {
             var deleted = await _service.DeleteAsync(id);
             return deleted ? NoContent() : NotFound();
+        }
+
+        [HttpPatch("{id}/claim")]
+        [Authorize(Roles = "Mechanic")]
+        public async Task<IActionResult> ClaimOrder(int id)
+        {
+            var mechanicId = await GetCurrentMechanicId();
+            if (mechanicId == 0) 
+                return BadRequest(new { message = "Mechanic profile not found" });
+
+            var order = await _service.GetByIdAsync(id);
+            if (order == null) return NotFound();
+            
+            if (order.Status != "Pending")
+                return BadRequest(new { 
+                    message = "This repair order is no longer available. It may have already been claimed." 
+                });
+
+            if (order.MechanicId != null)
+                return BadRequest(new { 
+                    message = "This order has already been assigned to a mechanic." 
+                });
+
+            var result = await _service.ClaimOrderAsync(id, mechanicId);
+            return result == null ? NotFound() : Ok(result);
+        }
+
+        [HttpGet("available")]
+        [Authorize(Roles = "Mechanic")]
+        public async Task<ActionResult<List<RepairOrderResponseDto>>> GetAvailable()
+        {
+            var orders = await _service.GetAvailableAsync();
+            return Ok(orders);
+        }
+
+        [HttpGet("my-assigned")]
+        [Authorize(Roles = "Mechanic")]
+        public async Task<ActionResult<List<RepairOrderResponseDto>>> GetMyAssigned()
+        {
+            var mechanicId = await GetCurrentMechanicId();
+            var orders = await _service.GetByMechanicIdAsync(mechanicId);
+            return Ok(orders);
         }
 
         private async Task<int> GetCurrentCustomerId()
@@ -137,5 +159,6 @@ namespace AutoFix.Controllers
             var mechanic = await _db.Mechanics.AsNoTracking().FirstOrDefaultAsync(m => m.KeycloakUserId == keycloakUserId);
             return mechanic?.Id ?? 0;
         }
+
     }
 }

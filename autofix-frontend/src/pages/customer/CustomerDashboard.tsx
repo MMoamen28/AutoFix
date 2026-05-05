@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Car, Clock, CheckCircle, Star, ShoppingBag, 
-  ArrowRight, Wrench, Shield, Calendar, Activity 
+  Wrench, Shield, Calendar, Activity 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { carService } from '../../services/carService';
 import { repairOrderService } from '../../services/repairOrderService';
-import { purchaseOrderService } from '../../services/purchaseOrderService';
 import { Link } from 'react-router-dom';
 import StatCard from '../../components/shared/StatCard';
 import Table from '../../components/shared/Table';
@@ -17,7 +16,6 @@ import Skeleton from '../../components/shared/Skeleton';
 const CustomerDashboard: React.FC = () => {
   const { user } = useAuth();
   const [cars, setCars] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
   const [repairRequests, setRepairRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -27,15 +25,12 @@ const CustomerDashboard: React.FC = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [carRes, orderRes, repairRes] = await Promise.all([
+      const [carRes, repairRes] = await Promise.all([
         carService.getAll().catch(() => []),
-        purchaseOrderService.getMyOrders().catch(() => []),
         repairOrderService.getMyOrders().catch(() => [])
       ]);
       setCars(carRes);
-      setOrders(orderRes);
-      // Filter repair requests for this customer if needed
-      setRepairRequests(repairRes.slice(0, 5));
+      setRepairRequests(repairRes);
     } catch (err) {
       console.error('Failed to load customer dashboard data');
     } finally {
@@ -43,9 +38,11 @@ const CustomerDashboard: React.FC = () => {
     }
   };
 
-  const activeOrders = orders.filter(o => ['Pending', 'AssignedToMechanic', 'InProgress'].includes(o.status));
-  const completedOrders = orders.filter(o => o.status === 'Completed');
-  const totalSpent = completedOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const activeRepairs = repairRequests.filter(r => ['Pending', 'InProgress', 'AssignedToMechanic'].includes(r.status));
+  const completedRepairs = repairRequests.filter(r => r.status === 'Completed');
+  
+  // Estimate investment from completed repair costs if available
+  const totalInvestment = completedRepairs.reduce((sum, r) => sum + (r.totalCost || 0), 0);
 
   if (loading) return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
@@ -62,13 +59,27 @@ const CustomerDashboard: React.FC = () => {
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'white' }}>
             Welcome, <span style={{ color: 'var(--accent)' }}>{user?.preferred_username || 'Customer'}</span>
           </h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Your vehicle maintenance and parts overview</p>
+          <p style={{ color: 'var(--text-secondary)' }}>Your vehicle maintenance and history overview</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <Button variant="ghost" onClick={() => window.location.href='/customer/cars'}>My Garage</Button>
-          <Button onClick={() => window.location.href='/marketplace'} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShoppingBag size={18} /> Marketplace
-          </Button>
+          <Link
+            to="/marketplace"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: 'var(--accent)',
+              color: 'white',
+              padding: '10px 20px',
+              borderRadius: 'var(--radius-md)',
+              fontWeight: 700,
+              fontSize: '14px',
+              textDecoration: 'none'
+            }}
+          >
+            <ShoppingBag size={18} /> Browse Marketplace
+          </Link>
         </div>
       </header>
 
@@ -81,20 +92,20 @@ const CustomerDashboard: React.FC = () => {
           color="var(--blue)"
         />
         <StatCard 
-          label="Active Orders" 
-          value={activeOrders.length} 
+          label="Active Repairs" 
+          value={activeRepairs.length} 
           icon={<Clock size={24} />} 
           color="var(--warning)"
         />
         <StatCard 
-          label="Completed Repairs" 
-          value={completedOrders.length} 
+          label="Service History" 
+          value={completedRepairs.length} 
           icon={<CheckCircle size={24} />} 
           color="var(--success)"
         />
         <StatCard 
-          label="Total Investment" 
-          value={`$${totalSpent.toFixed(0)}`} 
+          label="Repair Spend" 
+          value={`$${totalInvestment.toFixed(0)}`} 
           icon={<Star size={24} />} 
           color="var(--purple)"
         />
@@ -119,7 +130,7 @@ const CustomerDashboard: React.FC = () => {
               { header: 'Status', key: 'status', render: (item) => <Badge variant={item.status === 'Completed' ? 'success' : 'warning'}>{item.status}</Badge> },
               { header: 'Date', key: 'createdAt', render: (item) => new Date(item.createdAt).toLocaleDateString() }
             ]}
-            data={repairRequests}
+            data={repairRequests.slice(0, 5)}
           />
           {repairRequests.length === 0 && (
             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>

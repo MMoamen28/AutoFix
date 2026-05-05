@@ -15,6 +15,7 @@ services:
         condition: service_started
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__DefaultConnection=Server=db,1433;Database=AutoFixDB;User Id=sa;Password=AutoFix@1234;TrustServerCertificate=True
       - ConnectionStrings__Hangfire=Server=db,1433;Database=AutoFixDB;User Id=sa;Password=AutoFix@1234;TrustServerCertificate=True
       - Keycloak__Authority=http://keycloak:8080/realms/autofix

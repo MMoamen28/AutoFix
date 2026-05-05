@@ -17,11 +17,7 @@ namespace AutoFix.Data
         public DbSet<RepairOrderServiceJoin> RepairOrderServices => Set<RepairOrderServiceJoin>();
         public DbSet<ServiceSparePartJoin> ServiceSpareParts => Set<ServiceSparePartJoin>();
         public DbSet<Receipt> Receipts => Set<Receipt>();
-        public DbSet<MechanicActionRequest> MechanicActionRequests => Set<MechanicActionRequest>();
         public DbSet<CartItem> CartItems => Set<CartItem>();
-        public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
-        public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
-        public DbSet<PurchaseReceipt> PurchaseReceipts => Set<PurchaseReceipt>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -130,13 +126,6 @@ namespace AutoFix.Data
             modelBuilder.Entity<Receipt>()
                 .Property(r => r.TotalCost).HasPrecision(10, 2);
 
-            // MechanicActionRequest → Mechanic
-            modelBuilder.Entity<MechanicActionRequest>()
-                .HasOne(m => m.Mechanic)
-                .WithMany()
-                .HasForeignKey(m => m.MechanicId)
-                .OnDelete(DeleteBehavior.Restrict);
-
             // CartItem → Customer
             modelBuilder.Entity<CartItem>()
                 .HasOne(c => c.Customer)
@@ -146,58 +135,6 @@ namespace AutoFix.Data
 
             modelBuilder.Entity<CartItem>()
                 .Property(c => c.UnitPrice).HasPrecision(10, 2);
-
-            // PurchaseOrder → Customer
-            modelBuilder.Entity<PurchaseOrder>()
-                .HasOne(po => po.Customer)
-                .WithMany()
-                .HasForeignKey(po => po.CustomerId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // PurchaseOrder → Car
-            modelBuilder.Entity<PurchaseOrder>()
-                .HasOne(po => po.Car)
-                .WithMany()
-                .HasForeignKey(po => po.CarId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // PurchaseOrder → Mechanic (nullable)
-            modelBuilder.Entity<PurchaseOrder>()
-                .HasOne(po => po.Mechanic)
-                .WithMany()
-                .HasForeignKey(po => po.MechanicId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            // PurchaseOrder → PurchaseOrderItems
-            modelBuilder.Entity<PurchaseOrderItem>()
-                .HasOne(poi => poi.PurchaseOrder)
-                .WithMany(po => po.Items)
-                .HasForeignKey(poi => poi.PurchaseOrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            // PurchaseOrder → PurchaseReceipt (one-to-one)
-            modelBuilder.Entity<PurchaseReceipt>()
-                .HasOne(pr => pr.PurchaseOrder)
-                .WithOne(po => po.Receipt)
-                .HasForeignKey<PurchaseReceipt>(pr => pr.PurchaseOrderId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // PurchaseReceipt → Customer
-            modelBuilder.Entity<PurchaseReceipt>()
-                .HasOne(pr => pr.Customer)
-                .WithMany()
-                .HasForeignKey(pr => pr.CustomerId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            // Decimal precision
-            modelBuilder.Entity<PurchaseOrder>()
-                .Property(po => po.TotalAmount).HasPrecision(10, 2);
-            modelBuilder.Entity<PurchaseOrderItem>()
-                .Property(poi => poi.UnitPrice).HasPrecision(10, 2);
-            modelBuilder.Entity<PurchaseOrderItem>()
-                .Property(poi => poi.Subtotal).HasPrecision(10, 2);
-            modelBuilder.Entity<PurchaseReceipt>()
-                .Property(pr => pr.TotalAmount).HasPrecision(10, 2);
         }
     }
 }

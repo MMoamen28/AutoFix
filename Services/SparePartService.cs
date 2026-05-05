@@ -34,6 +34,8 @@ namespace AutoFix.Services
                 MinimumStockLevel = sp.MinimumStockLevel,
                 IsLowStock = sp.StockQuantity <= sp.MinimumStockLevel,
                 IsActive = sp.IsActive,
+                CategoryId = sp.CategoryId,
+                CategoryName = sp.CategoryName,
                 CreatedAt = sp.CreatedAt,
                 UpdatedAt = sp.UpdatedAt
             });
@@ -61,6 +63,17 @@ namespace AutoFix.Services
         public async Task<List<SparePartResponseDto>> GetMarketplaceAsync()
         {
             return await Project(_db.SpareParts.AsNoTracking().Where(sp => sp.IsActive && sp.StockQuantity > 0)).ToListAsync();
+        }
+
+        public async Task<List<SparePartResponseDto>> GetMarketplaceByCategoryAsync(int categoryId)
+        {
+            return await Project(
+                _db.SpareParts
+                   .AsNoTracking()
+                   .Where(sp => sp.IsActive && 
+                                sp.StockQuantity > 0 && 
+                                sp.CategoryId == categoryId)
+            ).ToListAsync();
         }
 
         public async Task<SparePartResponseDto> CreateAsync(CreateSparePartDto dto)

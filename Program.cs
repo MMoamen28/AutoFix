@@ -30,10 +30,7 @@ builder.Services.AddScoped<IServiceService, ServiceService>();
 builder.Services.AddScoped<ISparePartService, SparePartService>();
 
 builder.Services.AddScoped<IReceiptService, ReceiptService>();
-builder.Services.AddScoped<IMechanicActionRequestService, MechanicActionRequestService>();
 builder.Services.AddScoped<ICartService, CartService>();
-builder.Services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();
-builder.Services.AddScoped<IPurchaseReceiptService, PurchaseReceiptService>();
 builder.Services.AddScoped<IRealtimeService, RealtimeService>();
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
@@ -66,7 +63,41 @@ builder.Services.AddHangfire(config => config.UseMemoryStorage());
 builder.Services.AddHangfireServer();
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "AutoFix API",
+        Version = "v1",
+        Description = "AutoFix Car Repair Management System API"
+    });
+
+    // Add JWT Bearer authentication to Swagger UI
+    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Enter: Bearer {your JWT token here}"
+    });
+
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 builder.Services.AddControllers();
 
 builder.Services.AddCors(options =>
@@ -90,8 +121,19 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwagger(c =>
+{
+    c.RouteTemplate = "swagger/{documentName}/swagger.json";
+});
+
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "AutoFix API v1");
+    c.RoutePrefix = "swagger";
+    c.DocumentTitle = "AutoFix API Documentation";
+    c.DefaultModelsExpandDepth(-1); // Hide schemas section by default
+    c.DisplayRequestDuration();
+});
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();

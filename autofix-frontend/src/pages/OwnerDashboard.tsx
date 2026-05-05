@@ -2,10 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   TrendingUp, Users, Wrench, Package, 
-  DollarSign, Activity, Bell, FileText
+  DollarSign, FileText, ShoppingBag
 } from 'lucide-react';
 import receiptService, { Receipt } from '../services/receiptService';
-import actionRequestService, { ActionRequest } from '../services/actionRequestService';
 import customerService from '../services/customerService';
 import mechanicService from '../services/mechanicService';
 import sparePartService from '../services/sparePartService';
@@ -25,10 +24,8 @@ const OwnerDashboard: React.FC = () => {
     customers: 0,
     mechanics: 0,
     parts: 0,
-    pendingApprovals: 0,
     activeRepairs: 0
   });
-  const [pendingRequests, setPendingRequests] = useState<ActionRequest[]>([]);
   const [recentReceipts, setRecentReceipts] = useState<Receipt[]>([]);
   const [recentRepairs, setRecentRepairs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,30 +33,27 @@ const OwnerDashboard: React.FC = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [receipts, customers, mechanics, parts, requests, repairs] = await Promise.all([
+        const [receipts, customers, mechanics, parts, repairOrders] = await Promise.all([
           receiptService.getAll().catch(() => []),
           customerService.getAllCustomers().catch(() => []),
           mechanicService.getAll().catch(() => []),
           sparePartService.getAll().catch(() => []),
-          actionRequestService.getPending().catch(() => []),
           repairOrderService.getAll().catch(() => [])
         ]);
 
         const totalRevenue = receipts.reduce((sum: number, r: any) => sum + (r.totalCost || r.totalAmount || 0), 0);
-        const activeRepairs = repairs.filter((r: any) => r.status !== 'Completed' && r.status !== 'Cancelled').length;
+        const activeRepairs = repairOrders.filter((r: any) => r.status !== 'Completed' && r.status !== 'Cancelled').length;
 
         setStats({
           revenue: totalRevenue,
           customers: customers.length,
           mechanics: mechanics.length,
           parts: parts.length,
-          pendingApprovals: requests.length,
           activeRepairs: activeRepairs
         });
 
-        setPendingRequests(requests);
-        setRecentReceipts(receipts.slice(0, 5));
-        setRecentRepairs(repairs.slice(0, 5));
+        setRecentReceipts(repairOrders.slice(0, 6));
+        setRecentRepairs(repairOrders.slice(0, 5));
       } catch (err) {
         showToast('Failed to load dashboard intelligence', 'error');
       } finally {
@@ -70,15 +64,31 @@ const OwnerDashboard: React.FC = () => {
     fetchDashboardData();
 
     const unsub1 = signalRService.on("order-updated", fetchDashboardData);
-    const unsub2 = signalRService.on("request-updated", fetchDashboardData);
     const unsub3 = signalRService.on("repair-updated", fetchDashboardData);
     
     return () => { 
       unsub1(); 
-      unsub2(); 
       unsub3();
     };
   }, []);
+
+  const thStyle: React.CSSProperties = {
+    padding: '10px 16px',
+    fontSize: '10px',
+    fontWeight: 800,
+    color: 'var(--text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    textAlign: 'left',
+    whiteSpace: 'nowrap'
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: '10px 16px',
+    fontSize: '13px',
+    color: 'var(--text-primary)',
+    whiteSpace: 'nowrap'
+  };
 
   if (loading) return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
@@ -89,20 +99,43 @@ const OwnerDashboard: React.FC = () => {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+    <div style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: '24px',
+      width: '100%'
+    }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: 'white' }}>Admin Intelligence</h1>
           <p style={{ color: 'var(--text-secondary)' }}>Strategic overview of workshop operations</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+          <Link
+            to="/marketplace"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              backgroundColor: 'var(--bg-card)',
+              color: 'var(--text-secondary)',
+              padding: '10px 20px',
+              borderRadius: 'var(--radius-md)',
+              fontWeight: 700,
+              fontSize: '14px',
+              textDecoration: 'none',
+              border: '1px solid var(--border)'
+            }}
+          >
+            <ShoppingBag size={18} /> View Marketplace
+          </Link>
           <Button variant="secondary" onClick={() => window.location.href='/owner/all-data'}>System Data</Button>
           <Button onClick={() => window.location.href='/mechanics'}>Team Management</Button>
         </div>
       </header>
 
       {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
         <StatCard 
           label="Total Revenue" 
           value={`$${stats.revenue.toLocaleString()}`} 
@@ -113,78 +146,168 @@ const OwnerDashboard: React.FC = () => {
         <StatCard 
           label="Active Repair Jobs" 
           value={stats.activeRepairs} 
-          icon={<Activity size={24} />} 
+          icon={<TrendingUp size={24} />} 
           color="var(--blue)"
-        />
-        <StatCard 
-          label="Pending Approvals" 
-          value={stats.pendingApprovals} 
-          icon={<Bell size={24} />} 
-          color="var(--warning)"
-          trend={{ value: '-2', isPositive: false }}
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-        {/* Approvals Section */}
-        <section style={sectionCardStyle}>
-          <div style={sectionHeaderStyle}>
-            <h2 style={{ fontSize: '18px', fontWeight: 800 }}>Critical Approvals</h2>
-            <Link to="/owner/requests" style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}>VIEW ALL</Link>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '32px' }}>
+        {/* Recent Repair Orders Section */}
+        <section style={{
+          backgroundColor: 'var(--bg-card)',
+          borderRadius: 'var(--radius-xl)',
+          border: '1px solid var(--border)',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          {/* Header */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingBottom: '12px',
+            borderBottom: '1px solid var(--border)'
+          }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, color: 'white' }}>
+              Recent Repair Orders
+            </h2>
+            <Link 
+              to="/repair-orders" 
+              style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}
+            >
+              VIEW ALL
+            </Link>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {pendingRequests.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px' }}>No pending actions to review.</p>
-            ) : (
-              pendingRequests.slice(0, 4).map(req => (
-                <div key={req.id} style={itemRowStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)' }}>
-                      <Activity size={18} color="var(--accent)" />
-                    </div>
-                    <div>
-                      <p style={{ fontWeight: 700, fontSize: '14px' }}>{req.actionType}</p>
-                      <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{req.mechanicName} • {new Date(req.requestedAt).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <Badge variant="warning">PENDING</Badge>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
 
-        {/* Recent Repairs Section */}
-        <section style={sectionCardStyle}>
-          <div style={sectionHeaderStyle}>
-            <h2 style={{ fontSize: '18px', fontWeight: 800 }}>Recent Repair Orders</h2>
-            <Link to="/owner/all-data" style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}>VIEW ALL</Link>
+          {/* Compact Table */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ 
+              width: '100%', 
+              borderCollapse: 'collapse',
+              fontSize: '13px'
+            }}>
+              <thead>
+                <tr style={{ 
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderBottom: '1px solid var(--border)'
+                }}>
+                  <th style={thStyle}>Customer</th>
+                  <th style={thStyle}>Vehicle</th>
+                  <th style={thStyle}>Mechanic</th>
+                  <th style={thStyle}>Status</th>
+                  <th style={thStyle}>Amount</th>
+                  <th style={thStyle}>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentReceipts.length === 0 ? (
+                  <tr>
+                    <td 
+                      colSpan={6} 
+                      style={{ 
+                        padding: '24px', 
+                        textAlign: 'center', 
+                        color: 'var(--text-muted)',
+                        fontSize: '13px'
+                      }}
+                    >
+                      No recent repair orders found.
+                    </td>
+                  </tr>
+                ) : (
+                  recentReceipts.slice(0, 6).map((r: any, idx: number) => (
+                    <tr 
+                      key={idx} 
+                      style={{ 
+                        borderBottom: '1px solid var(--border)',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={e => 
+                        (e.currentTarget.style.backgroundColor = 
+                          'var(--bg-card-hover)')
+                      }
+                      onMouseLeave={e => 
+                        (e.currentTarget.style.backgroundColor = 'transparent')
+                      }
+                    >
+                      <td style={tdStyle}>
+                        <span style={{ fontWeight: 700, color: 'white' }}>
+                          {r.customerName}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          {r.carInfo}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          {r.mechanicName || (
+                            <span style={{ 
+                              color: 'var(--warning)', 
+                              fontSize: '11px', 
+                              fontWeight: 700 
+                            }}>
+                              Unassigned
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '3px 10px',
+                          borderRadius: '99px',
+                          fontSize: '10px',
+                          fontWeight: 800,
+                          textTransform: 'uppercase' as const,
+                          letterSpacing: '0.5px',
+                          backgroundColor: 
+                            r.status === 'Completed' 
+                              ? 'var(--success-dim)' 
+                              : r.status === 'InProgress' 
+                              ? 'var(--blue-dim)' 
+                              : r.status === 'Cancelled'
+                              ? 'var(--danger-dim)'
+                              : 'var(--warning-dim)',
+                          color: 
+                            r.status === 'Completed' 
+                              ? 'var(--success)' 
+                              : r.status === 'InProgress' 
+                              ? 'var(--blue)' 
+                              : r.status === 'Cancelled' 
+                              ? 'var(--danger)'
+                              : 'var(--warning)',
+                        }}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{ 
+                          fontWeight: 800, 
+                          color: 'var(--success)' 
+                        }}>
+                          ${(r.totalCost ?? r.totalAmount ?? 0).toFixed(2)}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{ 
+                          color: 'var(--text-muted)', 
+                          fontSize: '12px' 
+                        }}>
+                          {new Date(r.issuedAt ?? r.placedAt ?? 
+                            r.createdAt).toLocaleDateString()}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-          <Table 
-            columns={[
-              { header: 'Customer', key: 'customerName' },
-              { header: 'Vehicle', key: 'carInfo' },
-              { header: 'Status', key: 'status', render: (r) => <Badge variant={r.status === 'Pending' ? 'warning' : 'info'}>{r.status}</Badge> },
-              { header: 'Date', key: 'createdAt', render: (r) => new Date(r.createdAt).toLocaleDateString() }
-            ]}
-            data={recentRepairs}
-          />
-        </section>
-
-        {/* Recent Transactions */}
-        <section style={sectionCardStyle}>
-          <div style={sectionHeaderStyle}>
-            <h2 style={{ fontSize: '18px', fontWeight: 800 }}>Recent Transactions</h2>
-            <Link to="/owner/receipts" style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: 700 }}>VIEW ALL</Link>
-          </div>
-          <Table 
-            columns={[
-              { header: 'Customer', key: 'customerName' },
-              { header: 'Vehicle', key: 'carInfo' },
-              { header: 'Amount', key: 'totalCost', render: (r) => <span style={{ fontWeight: 800, color: 'var(--success)' }}>${r.totalCost.toFixed(2)}</span> }
-            ]}
-            data={recentReceipts}
-          />
         </section>
       </div>
     </div>

@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Wrench, Package, 
   ClipboardList, Car, LogOut, Shield,
-  Bell, FileText, ShoppingBag, ShoppingCart, Receipt,
+  FileText, ShoppingBag, ShoppingCart,
   Settings, Layers, Box
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -54,13 +54,23 @@ const Sidebar: React.FC = () => {
 
   const menuSections: MenuSection[] = [
     {
+      title: 'Marketplace',
+      items: [
+        { 
+          to: '/marketplace', 
+          label: 'Spare Parts Market', 
+          icon: ShoppingBag, 
+          roles: ['Owner', 'Admin', 'Mechanic', 'Customer'] 
+        },
+      ]
+    },
+    {
       title: 'Management',
       roles: ['Owner', 'Admin'],
       items: [
         { to: '/', label: 'Admin Hub', icon: LayoutDashboard, roles: ['Owner'] },
         { to: '/customers', label: 'Customers', icon: Users, roles: ['Admin', 'Owner'] },
         { to: '/mechanics', label: 'Team Members', icon: Wrench, roles: ['Admin', 'Owner'] },
-        { to: '/owner/requests', label: 'Approvals', icon: Bell, roles: ['Owner'] },
       ]
     },
     {
@@ -68,21 +78,22 @@ const Sidebar: React.FC = () => {
       roles: ['Owner', 'Admin', 'Mechanic'],
       items: [
         { to: '/spare-parts', label: 'Stock Items', icon: Package, roles: ['Admin', 'Owner'] },
-        { to: '/mechanic/orders', label: 'Inventory Access', icon: Box, roles: ['Mechanic'] },
       ]
     },
     {
       title: 'Operations',
       roles: ['Owner', 'Mechanic', 'Customer'],
       items: [
+        { 
+          to: '/mechanic/available-orders', 
+          label: 'Customer Requests', 
+          icon: ClipboardList, 
+          roles: ['Mechanic'] 
+        },
         { to: '/', label: 'My Repair Jobs', icon: ClipboardList, roles: ['Mechanic'] },
         { to: '/', label: 'My Dashboard', icon: LayoutDashboard, roles: ['Customer'] },
         { to: '/customer/cars', label: 'My Vehicles', icon: Car, roles: ['Customer'] },
-        { to: '/marketplace', label: 'Marketplace', icon: ShoppingBag, roles: ['Customer'] },
         { to: '/cart', label: 'Shopping Cart', icon: ShoppingCart, roles: ['Customer'], badge: cartCount > 0 ? cartCount : null },
-        { to: '/orders', label: 'Service History', icon: FileText, roles: ['Customer'] },
-        { to: '/owner/purchase-orders', label: 'Fleet Orders', icon: ClipboardList, roles: ['Owner'] },
-        { to: '/owner/purchase-receipts', label: 'Fiscal Archive', icon: Receipt, roles: ['Owner'] },
       ]
     }
   ];

@@ -181,5 +181,36 @@ namespace AutoFix.Services
             await _db.SaveChangesAsync();
             return true;
         }
+
+        public async Task<RepairOrderResponseDto?> ClaimOrderAsync(int id, int mechanicId)
+        {
+            var order = await _db.RepairOrders
+                .Include(ro => ro.RepairOrderServices)
+                .FirstOrDefaultAsync(ro => ro.Id == id);
+
+            if (order == null || order.Status != "Pending" || order.MechanicId != null) 
+                return null;
+
+            order.MechanicId = mechanicId;
+            order.Status = "InProgress";
+
+            await _db.SaveChangesAsync();
+            await _realtime.NotifyAsync("repair-updated", new { OrderId = order.Id });
+            return await GetByIdAsync(id);
+        }
+
+        public async Task<List<RepairOrderResponseDto>> GetAvailableAsync()
+        {
+            return await Project(_db.RepairOrders.AsNoTracking()
+                .Where(ro => ro.Status == "Pending" && ro.MechanicId == null))
+                .ToListAsync();
+        }
+
+        public async Task<List<RepairOrderResponseDto>> GetByMechanicIdAsync(int mechanicId)
+        {
+            return await Project(_db.RepairOrders.AsNoTracking()
+                .Where(ro => ro.MechanicId == mechanicId))
+                .ToListAsync();
+        }
     }
 }

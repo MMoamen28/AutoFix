@@ -12,5 +12,8 @@ namespace AutoFix.Services.Interfaces
         Task<RepairOrderResponseDto> CreateAsync(CreateRepairOrderDto dto, int customerId);
         Task<RepairOrderResponseDto?> UpdateAsync(int id, UpdateRepairOrderDto dto);
         Task<bool> DeleteAsync(int id);
+        Task<RepairOrderResponseDto?> ClaimOrderAsync(int id, int mechanicId);
+        Task<List<RepairOrderResponseDto>> GetAvailableAsync();
+        Task<List<RepairOrderResponseDto>> GetByMechanicIdAsync(int mechanicId);
     }
 }

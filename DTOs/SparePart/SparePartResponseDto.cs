@@ -15,6 +15,8 @@ namespace AutoFix.DTOs.SparePart
         public bool IsLowStock { get; set; }
         // Computed as StockQuantity <= MinimumStockLevel
         public bool IsActive { get; set; }
+        public int CategoryId { get; set; }
+        public string CategoryName { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

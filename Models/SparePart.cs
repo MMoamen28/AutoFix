@@ -14,6 +14,8 @@ namespace AutoFix.Models
         public int StockQuantity { get; set; }
         public int MinimumStockLevel { get; set; }
         public bool IsActive { get; set; } = true;
+        public int CategoryId { get; set; }
+        public string CategoryName { get; set; } = "General";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

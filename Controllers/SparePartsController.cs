@@ -12,12 +12,10 @@ namespace AutoFix.Controllers
     public class SparePartsController : ControllerBase
     {
         private readonly ISparePartService _service;
-        private readonly IMechanicActionRequestService _actionRequestService;
-
-        public SparePartsController(ISparePartService service, IMechanicActionRequestService actionRequestService)
+        
+        public SparePartsController(ISparePartService service)
         {
             _service = service;
-            _actionRequestService = actionRequestService;
         }
 
         [HttpGet]
@@ -32,6 +30,13 @@ namespace AutoFix.Controllers
         public async Task<IActionResult> GetPublicList()
         {
             return Ok(await _service.GetMarketplaceAsync());
+        }
+
+        [HttpGet("public-list/category/{categoryId}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetPublicListByCategory(int categoryId)
+        {
+            return Ok(await _service.GetMarketplaceByCategoryAsync(categoryId));
         }
 
         [HttpGet("{id:int}")]
@@ -50,27 +55,11 @@ namespace AutoFix.Controllers
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Owner,Mechanic")]
+        [Authorize(Roles = "Admin,Owner")]
         public async Task<IActionResult> Create([FromBody] CreateSparePartDto dto)
         {
-            var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-            if (userRole == "Admin" || userRole == "Owner")
-            {
-                var result = await _service.CreateAsync(dto);
-                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
-            }
-
-            var mechanicId = GetCurrentMechanicId();
-            var mechanicName = User.FindFirst("preferred_username")?.Value ?? "Mechanic";
-            var payload = System.Text.Json.JsonSerializer.Serialize(dto);
-
-            await _actionRequestService.CreateAsync(new DTOs.MechanicActionRequest.CreateMechanicActionRequestDto
-            {
-                ActionType = "AddSparePart",
-                ActionPayload = payload
-            }, mechanicId, mechanicName);
-
-            return Accepted(new { message = "Your request has been submitted for Owner approval." });
+            var result = await _service.CreateAsync(dto);
+            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
 
         [HttpPut("{id}")]
@@ -82,28 +71,12 @@ namespace AutoFix.Controllers
         }
 
         [HttpPatch("{id}/stock")]
-        [Authorize(Roles = "Admin,Owner,Mechanic")]
+        [Authorize(Roles = "Admin,Owner")]
         public async Task<IActionResult> AdjustStock(int id, [FromBody] AdjustStockDto dto)
         {
-            var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-            if (userRole == "Admin" || userRole == "Owner")
-            {
-                var (success, error, part) = await _service.AdjustStockAsync(id, dto);
-                if (!success) return BadRequest(new { error });
-                return Ok(part);
-            }
-
-            var mechanicId = GetCurrentMechanicId();
-            var mechanicName = User.FindFirst("preferred_username")?.Value ?? "Mechanic";
-            var payload = System.Text.Json.JsonSerializer.Serialize(new { sparePartId = id, dto.Adjustment, dto.Reason });
-
-            await _actionRequestService.CreateAsync(new DTOs.MechanicActionRequest.CreateMechanicActionRequestDto
-            {
-                ActionType = "AdjustStock",
-                ActionPayload = payload
-            }, mechanicId, mechanicName);
-
-            return Accepted(new { message = "Your request has been submitted for Owner approval." });
+            var (success, error, part) = await _service.AdjustStockAsync(id, dto);
+            if (!success) return BadRequest(new { error });
+            return Ok(part);
         }
 
         [HttpDelete("{id}")]
@@ -114,10 +87,6 @@ namespace AutoFix.Controllers
             return success ? NoContent() : NotFound();
         }
 
-        private int GetCurrentMechanicId()
-        {
-            var idClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
-            return int.TryParse(idClaim, out int id) ? id : 0;
-        }
+
     }
 }
