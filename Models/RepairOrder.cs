@@ -1,8 +1,10 @@
+using AutoFix.Models.Common;
+using System;
 using System.Collections.Generic;
 
 namespace AutoFix.Models
 {
-    public class RepairOrder
+    public class RepairOrder : ISoftDeletable
     {
         public int Id { get; set; }
         public int CustomerId { get; set; }
@@ -19,5 +21,10 @@ namespace AutoFix.Models
         public Car Car { get; set; } = null!;
         public Mechanic? Mechanic { get; set; }
         public ICollection<RepairOrderServiceJoin> RepairOrderServices { get; set; } = new List<RepairOrderServiceJoin>();
+
+        // Soft delete
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
+        public string? DeletedBy { get; set; }
     }
 }

@@ -73,7 +73,7 @@ body {
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.6;
-  min-width: 1280px;
+  min-width: 100%;
   overflow-x: auto;
 }
 

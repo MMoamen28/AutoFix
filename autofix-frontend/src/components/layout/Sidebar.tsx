@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Wrench, Package, 
   ClipboardList, Car, LogOut, Shield,
   FileText, ShoppingBag, ShoppingCart,
-  Settings, Layers, Box
+  Settings, Layers, Box, Database
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { cartService } from '../../services/cartService';
@@ -71,6 +71,7 @@ const Sidebar: React.FC = () => {
         { to: '/', label: 'Admin Hub', icon: LayoutDashboard, roles: ['Owner'] },
         { to: '/customers', label: 'Customers', icon: Users, roles: ['Admin', 'Owner'] },
         { to: '/mechanics', label: 'Team Members', icon: Wrench, roles: ['Admin', 'Owner'] },
+        { to: '/backup-restore', label: 'Backup & Safety', icon: Database, roles: ['Admin', 'Owner'] },
       ]
     },
     {

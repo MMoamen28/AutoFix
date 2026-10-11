@@ -40,7 +40,18 @@ const LoginPage: React.FC = () => {
       showToast('Logged in successfully', 'success');
       navigate('/');
     } catch (err: any) {
-      showToast(err.response?.data?.detail || 'Invalid credentials', 'error');
+      console.error('Login error:', err.response?.data);
+      
+      const detail = err.response?.data?.detail 
+        || err.response?.data?.error_description
+        || err.response?.data?.error
+        || err.response?.data?.message
+        || 'Invalid username or password';
+
+      showToast(
+        typeof detail === 'string' ? detail : 'Login failed', 
+        'error'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +78,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '100vh', minWidth: '1280px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', minHeight: '100vh', width: '100%', minWidth: 0 }}>
       {/* Left Panel - Image */}
       <div style={{
         backgroundImage: `linear-gradient(135deg, rgba(220, 38, 38, 0.75) 0%, rgba(30, 41, 59, 0.92) 100%),

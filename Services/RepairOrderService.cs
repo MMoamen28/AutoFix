@@ -106,67 +106,82 @@ namespace AutoFix.Services
 
             if (dto.Status == "Completed")
             {
-                order.CompletedAt = DateTime.UtcNow;
-
-                // Receipt Generation
-                var orderWithDetails = await _db.RepairOrders
-                    .Include(ro => ro.Customer)
-                    .Include(ro => ro.Car)
-                    .Include(ro => ro.Mechanic)
-                    .Include(ro => ro.RepairOrderServices)
-                        .ThenInclude(ros => ros.Service)
-                    .FirstOrDefaultAsync(ro => ro.Id == id);
-
-                if (orderWithDetails != null)
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
                 {
-                    var services = orderWithDetails.RepairOrderServices
-                        .Select(ros => ros.Service.Name)
-                        .ToList();
+                    order.CompletedAt = DateTime.UtcNow;
 
-                    var carInfo = $"{orderWithDetails.Car.Year} {orderWithDetails.Car.Make} {orderWithDetails.Car.Model} — {orderWithDetails.Car.LicensePlate}";
-                    var mechanicName = orderWithDetails.Mechanic != null
-                        ? $"{orderWithDetails.Mechanic.FirstName} {orderWithDetails.Mechanic.LastName}"
-                        : "Unassigned";
+                    // Receipt Generation
+                    var orderWithDetails = await _db.RepairOrders
+                        .Include(ro => ro.Customer)
+                        .Include(ro => ro.Car)
+                        .Include(ro => ro.Mechanic)
+                        .Include(ro => ro.RepairOrderServices)
+                            .ThenInclude(ros => ros.Service)
+                        .FirstOrDefaultAsync(ro => ro.Id == id);
 
-                    // Customer copy
-                    _db.Receipts.Add(new Receipt
+                    if (orderWithDetails != null)
                     {
-                        RepairOrderId      = orderWithDetails.Id,
-                        CustomerId         = orderWithDetails.CustomerId,
-                        CustomerName       = orderWithDetails.Customer.FullName,
-                        CustomerEmail      = orderWithDetails.Customer.Email,
-                        CustomerPhone      = orderWithDetails.Customer.Phone,
-                        CarInfo            = carInfo,
-                        MechanicName       = mechanicName,
-                        ServicesPerformed  = services,
-                        TotalCost          = orderWithDetails.TotalCost,
-                        Notes              = orderWithDetails.Notes,
-                        IssuedAt           = DateTime.UtcNow,
-                        IsOwnerCopy        = false,
-                        Status             = "Issued"
-                    });
+                        var services = orderWithDetails.RepairOrderServices
+                            .Select(ros => ros.Service.Name)
+                            .ToList();
 
-                    // Owner copy
-                    _db.Receipts.Add(new Receipt
-                    {
-                        RepairOrderId      = orderWithDetails.Id,
-                        CustomerId         = orderWithDetails.CustomerId,
-                        CustomerName       = orderWithDetails.Customer.FullName,
-                        CustomerEmail      = orderWithDetails.Customer.Email,
-                        CustomerPhone      = orderWithDetails.Customer.Phone,
-                        CarInfo            = carInfo,
-                        MechanicName       = mechanicName,
-                        ServicesPerformed  = services,
-                        TotalCost          = orderWithDetails.TotalCost,
-                        Notes              = orderWithDetails.Notes,
-                        IssuedAt           = DateTime.UtcNow,
-                        IsOwnerCopy        = true,
-                        Status             = "Issued"
-                    });
+                        var carInfo = $"{orderWithDetails.Car.Year} {orderWithDetails.Car.Make} {orderWithDetails.Car.Model} — {orderWithDetails.Car.LicensePlate}";
+                        var mechanicName = orderWithDetails.Mechanic != null
+                            ? $"{orderWithDetails.Mechanic.FirstName} {orderWithDetails.Mechanic.LastName}"
+                            : "Unassigned";
+
+                        // Customer copy
+                        _db.Receipts.Add(new Receipt
+                        {
+                            RepairOrderId      = orderWithDetails.Id,
+                            CustomerId         = orderWithDetails.CustomerId,
+                            CustomerName       = orderWithDetails.Customer.FullName,
+                            CustomerEmail      = orderWithDetails.Customer.Email,
+                            CustomerPhone      = orderWithDetails.Customer.Phone,
+                            CarInfo            = carInfo,
+                            MechanicName       = mechanicName,
+                            ServicesPerformed  = services,
+                            TotalCost          = orderWithDetails.TotalCost,
+                            Notes              = orderWithDetails.Notes,
+                            IssuedAt           = DateTime.UtcNow,
+                            IsOwnerCopy        = false,
+                            Status             = "Issued"
+                        });
+
+                        // Owner copy
+                        _db.Receipts.Add(new Receipt
+                        {
+                            RepairOrderId      = orderWithDetails.Id,
+                            CustomerId         = orderWithDetails.CustomerId,
+                            CustomerName       = orderWithDetails.Customer.FullName,
+                            CustomerEmail      = orderWithDetails.Customer.Email,
+                            CustomerPhone      = orderWithDetails.Customer.Phone,
+                            CarInfo            = carInfo,
+                            MechanicName       = mechanicName,
+                            ServicesPerformed  = services,
+                            TotalCost          = orderWithDetails.TotalCost,
+                            Notes              = orderWithDetails.Notes,
+                            IssuedAt           = DateTime.UtcNow,
+                            IsOwnerCopy        = true,
+                            Status             = "Issued"
+                        });
+                    }
+
+                    await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
                 }
             }
+            else
+            {
+                await _db.SaveChangesAsync();
+            }
 
-            await _db.SaveChangesAsync();
             await _realtime.NotifyAsync("repair-updated", new { OrderId = order.Id });
 
             return await GetByIdAsync(order.Id);

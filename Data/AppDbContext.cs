@@ -1,5 +1,13 @@
 using AutoFix.Models;
+using AutoFix.Models.Common;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace AutoFix.Data
 {
@@ -7,6 +15,7 @@ namespace AutoFix.Data
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+        // Core original entities
         public DbSet<Customer> Customers => Set<Customer>();
         public DbSet<Mechanic> Mechanics => Set<Mechanic>();
         public DbSet<MechanicProfile> MechanicProfiles => Set<MechanicProfile>();
@@ -19,50 +28,71 @@ namespace AutoFix.Data
         public DbSet<Receipt> Receipts => Set<Receipt>();
         public DbSet<CartItem> CartItems => Set<CartItem>();
 
+        // Stage A additions: Auth & Audit
+        public DbSet<AppUser> AppUsers => Set<AppUser>();
+        public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+        // Stage B-E forward-compatible entities
+        public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
+        public DbSet<WorkOrderLine> WorkOrderLines => Set<WorkOrderLine>();
+        public DbSet<WorkOrderPhoto> WorkOrderPhotos => Set<WorkOrderPhoto>();
+        public DbSet<Invoice> Invoices => Set<Invoice>();
+        public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
+        public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+        public DbSet<PartMovement> PartMovements => Set<PartMovement>();
+        public DbSet<Supplier> Suppliers => Set<Supplier>();
+        public DbSet<TreasuryTransaction> TreasuryTransactions => Set<TreasuryTransaction>();
+        public DbSet<InsuranceCompany> InsuranceCompanies => Set<InsuranceCompany>();
+        public DbSet<MaintenanceReminder> MaintenanceReminders => Set<MaintenanceReminder>();
+        public DbSet<EmployeeAdvance> EmployeeAdvances => Set<EmployeeAdvance>();
+        public DbSet<EmployeeCustody> EmployeeCustodies => Set<EmployeeCustody>();
+        public DbSet<CarInspection> CarInspections => Set<CarInspection>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
 
-
-            // Unique index on PartNumber
+            // 1. Unique index on PartNumber
             modelBuilder.Entity<SparePart>()
                 .HasIndex(sp => sp.PartNumber)
                 .IsUnique();
-            // One-to-one: Mechanic → MechanicProfile
+
+            // 2. One-to-one: Mechanic → MechanicProfile
             modelBuilder.Entity<Mechanic>()
                 .HasOne(m => m.Profile)
                 .WithOne(p => p.Mechanic)
                 .HasForeignKey<MechanicProfile>(p => p.MechanicId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // One-to-many: Customer → Cars
+            // 3. One-to-many: Customer → Cars
             modelBuilder.Entity<Car>()
                 .HasOne(c => c.Customer)
                 .WithMany(cu => cu.Cars)
                 .HasForeignKey(c => c.CustomerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // One-to-many: Customer → RepairOrders
+            // 4. One-to-many: Customer → RepairOrders
             modelBuilder.Entity<RepairOrder>()
                 .HasOne(ro => ro.Customer)
                 .WithMany(c => c.RepairOrders)
                 .HasForeignKey(ro => ro.CustomerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // One-to-many: Car → RepairOrders
+            // 5. One-to-many: Car → RepairOrders
             modelBuilder.Entity<RepairOrder>()
                 .HasOne(ro => ro.Car)
                 .WithMany(c => c.RepairOrders)
                 .HasForeignKey(ro => ro.CarId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // One-to-many: Mechanic → RepairOrders (nullable FK)
+            // 6. One-to-many: Mechanic → RepairOrders (nullable FK)
             modelBuilder.Entity<RepairOrder>()
                 .HasOne(ro => ro.Mechanic)
                 .WithMany(m => m.RepairOrders)
                 .HasForeignKey(ro => ro.MechanicId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            // Many-to-many: RepairOrder ↔ Service (composite PK on join table)
+            // 7. Many-to-many: RepairOrder ↔ Service
             modelBuilder.Entity<RepairOrderServiceJoin>()
                 .HasKey(ros => new { ros.RepairOrderId, ros.ServiceId });
 
@@ -76,7 +106,7 @@ namespace AutoFix.Data
                 .WithMany(s => s.RepairOrderServices)
                 .HasForeignKey(ros => ros.ServiceId);
 
-            // Many-to-many: Service ↔ SparePart (composite PK on join table)
+            // 8. Many-to-many: Service ↔ SparePart
             modelBuilder.Entity<ServiceSparePartJoin>()
                 .HasKey(ssp => new { ssp.ServiceId, ssp.SparePartId });
 
@@ -90,51 +120,111 @@ namespace AutoFix.Data
                 .WithMany(sp => sp.ServiceSpareParts)
                 .HasForeignKey(ssp => ssp.SparePartId);
 
-            // Decimal precision
-            modelBuilder.Entity<RepairOrder>()
-                .Property(ro => ro.TotalCost).HasPrecision(10, 2);
-            modelBuilder.Entity<Service>()
-                .Property(s => s.BasePrice).HasPrecision(10, 2);
-            modelBuilder.Entity<SparePart>()
-                .Property(sp => sp.UnitPrice).HasPrecision(10, 2);
-            modelBuilder.Entity<RepairOrderServiceJoin>()
-                .Property(ros => ros.PriceAtTime).HasPrecision(10, 2);
-
-            // Receipt → RepairOrder
+            // 9. Receipt configurations
             modelBuilder.Entity<Receipt>()
                 .HasOne(r => r.RepairOrder)
                 .WithMany()
                 .HasForeignKey(r => r.RepairOrderId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Receipt → Customer
             modelBuilder.Entity<Receipt>()
                 .HasOne(r => r.Customer)
                 .WithMany()
                 .HasForeignKey(r => r.CustomerId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Serialize ServicesPerformed as JSON
             modelBuilder.Entity<Receipt>()
                 .Property(r => r.ServicesPerformed)
                 .HasConversion(
-                    v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                    v => System.Text.Json.JsonSerializer.Deserialize<List<string>>(v, (System.Text.Json.JsonSerializerOptions?)null) ?? new()
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new()
                 );
 
-            // Receipt decimal precision
-            modelBuilder.Entity<Receipt>()
-                .Property(r => r.TotalCost).HasPrecision(10, 2);
-
-            // CartItem → Customer
+            // 10. CartItem → Customer
             modelBuilder.Entity<CartItem>()
                 .HasOne(c => c.Customer)
                 .WithMany()
                 .HasForeignKey(c => c.CustomerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<CartItem>()
-                .Property(c => c.UnitPrice).HasPrecision(10, 2);
+            // 11. AppUser unique username
+            modelBuilder.Entity<AppUser>()
+                .HasIndex(u => u.Username)
+                .IsUnique();
+
+            // 12. Global Query Filter for Universal Soft Delete
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                if (typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
+                {
+                    var parameter = Expression.Parameter(entityType.ClrType, "e");
+                    var property = Expression.Property(parameter, nameof(ISoftDeletable.IsDeleted));
+                    var compare = Expression.Equal(property, Expression.Constant(false));
+                    var lambda = Expression.Lambda(compare, parameter);
+                    modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
+                }
+            }
+
+            // 13. Decimal precisions (cross-database safe)
+            modelBuilder.Entity<RepairOrder>().Property(ro => ro.TotalCost).HasPrecision(18, 2);
+            modelBuilder.Entity<Service>().Property(s => s.BasePrice).HasPrecision(18, 2);
+            modelBuilder.Entity<SparePart>().Property(sp => sp.UnitPrice).HasPrecision(18, 2);
+            modelBuilder.Entity<SparePart>().Property(sp => sp.PurchasePrice).HasPrecision(18, 2);
+            modelBuilder.Entity<RepairOrderServiceJoin>().Property(ros => ros.PriceAtTime).HasPrecision(18, 2);
+            modelBuilder.Entity<Receipt>().Property(r => r.TotalCost).HasPrecision(18, 2);
+            modelBuilder.Entity<CartItem>().Property(c => c.UnitPrice).HasPrecision(18, 2);
+
+            modelBuilder.Entity<WorkOrder>().Property(w => w.TotalLabor).HasPrecision(18, 2);
+            modelBuilder.Entity<WorkOrder>().Property(w => w.TotalParts).HasPrecision(18, 2);
+            modelBuilder.Entity<WorkOrder>().Property(w => w.TotalAmount).HasPrecision(18, 2);
+            modelBuilder.Entity<WorkOrderLine>().Property(wl => wl.Quantity).HasPrecision(18, 2);
+            modelBuilder.Entity<WorkOrderLine>().Property(wl => wl.UnitCost).HasPrecision(18, 2);
+            modelBuilder.Entity<WorkOrderLine>().Property(wl => wl.UnitPrice).HasPrecision(18, 2);
+
+            modelBuilder.Entity<Invoice>().Property(i => i.Subtotal).HasPrecision(18, 2);
+            modelBuilder.Entity<Invoice>().Property(i => i.DiscountAmount).HasPrecision(18, 2);
+            modelBuilder.Entity<Invoice>().Property(i => i.VatPercentage).HasPrecision(18, 2);
+            modelBuilder.Entity<Invoice>().Property(i => i.VatAmount).HasPrecision(18, 2);
+            modelBuilder.Entity<Invoice>().Property(i => i.TotalAmount).HasPrecision(18, 2);
+            modelBuilder.Entity<Invoice>().Property(i => i.PaidAmount).HasPrecision(18, 2);
+            modelBuilder.Entity<InvoicePayment>().Property(ip => ip.Amount).HasPrecision(18, 2);
+
+            modelBuilder.Entity<PartMovement>().Property(pm => pm.QuantityChanged).HasPrecision(18, 2);
+            modelBuilder.Entity<PartMovement>().Property(pm => pm.BalanceAfter).HasPrecision(18, 2);
+            modelBuilder.Entity<PartMovement>().Property(pm => pm.UnitCost).HasPrecision(18, 2);
+
+            modelBuilder.Entity<Supplier>().Property(s => s.BalanceDue).HasPrecision(18, 2);
+            modelBuilder.Entity<TreasuryTransaction>().Property(t => t.Amount).HasPrecision(18, 2);
+            modelBuilder.Entity<TreasuryTransaction>().Property(t => t.BalanceAfter).HasPrecision(18, 2);
+            modelBuilder.Entity<InsuranceCompany>().Property(ic => ic.TotalInvoiced).HasPrecision(18, 2);
+            modelBuilder.Entity<InsuranceCompany>().Property(ic => ic.TotalPaid).HasPrecision(18, 2);
+            modelBuilder.Entity<EmployeeAdvance>().Property(ea => ea.Amount).HasPrecision(18, 2);
+            modelBuilder.Entity<CarInspection>().Property(ci => ci.OverallScore).HasPrecision(18, 2);
+        }
+
+        public override int SaveChanges()
+        {
+            ApplySoftDelete();
+            return base.SaveChanges();
+        }
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            ApplySoftDelete();
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+
+        private void ApplySoftDelete()
+        {
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                if (entry.Entity is ISoftDeletable softDeletable && entry.State == EntityState.Deleted)
+                {
+                    entry.State = EntityState.Modified;
+                    softDeletable.IsDeleted = true;
+                    softDeletable.DeletedAt = DateTime.UtcNow;
+                }
+            }
         }
     }
 }

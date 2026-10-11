@@ -27,6 +27,7 @@ import CartPage from '../pages/customer/CartPage';
 import OwnerDashboard from '../pages/OwnerDashboard';
 import ReceiptsPage from '../pages/ReceiptsPage';
 import AllDataPage from '../pages/AllDataPage';
+import BackupRestorePage from '../pages/admin/BackupRestorePage';
 
 const AppRouter: React.FC = () => {
   const { role, token, isLoading } = useAuth();
@@ -69,6 +70,7 @@ const AppRouter: React.FC = () => {
         {/* Owner-Specific Routes */}
         <Route path="/owner/receipts" element={<ReceiptsPage />} />
         <Route path="/owner/all-data" element={<AllDataPage />} />
+        <Route path="/backup-restore" element={<BackupRestorePage />} />
 
         {/* Mechanic Routes */}
         <Route path="/mechanic" element={<Navigate to="/" replace />} />

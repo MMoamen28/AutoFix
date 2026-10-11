@@ -1,4 +1,4 @@
-﻿{
+{
     "id":  "b3cccf08-c3c3-416f-9f80-f8144b903a42",
     "realm":  "autofix",
     "notBefore":  0,
@@ -107,7 +107,7 @@
                                    "referrerPolicy":  "no-referrer",
                                    "xRobotsTag":  "none",
                                    "xFrameOptions":  "SAMEORIGIN",
-                                   "contentSecurityPolicy":  "frame-src \u0027self\u0027; frame-ancestors \u0027self\u0027; object-src \u0027none\u0027;",
+                                   "contentSecurityPolicy":  "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
                                    "xXSSProtection":  "1; mode=block",
                                    "strictTransportSecurity":  "max-age=31536000; includeSubDomains"
                                },
