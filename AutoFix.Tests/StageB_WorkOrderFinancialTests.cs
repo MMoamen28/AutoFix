@@ -488,7 +488,8 @@ namespace AutoFix.Tests
                 Assert.Contains("18200 كم", html);
                 Assert.Contains("Steering wheel vibration", html);
                 Assert.Contains("Wheel balancing & alignment", html);
-                Assert.Contains("300.00 EGP", html);
+                Assert.Contains("300.00", html);
+                Assert.Contains("ج.م", html);
             }
         }
 
@@ -855,6 +856,495 @@ namespace AutoFix.Tests
                 Assert.NotNull(claimEntry);
                 Assert.Equal("Main", claimEntry!.Role);
                 Assert.Equal("Self-claimed by mechanic", claimEntry.Reason);
+            }
+        }
+
+        [Fact]
+        public async Task Workmanship_HandCalculatedScenario_MatchesExactNumbers()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var custService = new CustomerService(db);
+                var woService = new WorkOrderService(db, dataFolder);
+                var sService = new ServiceService(db);
+
+                // Quick add customer and car
+                var quick = await custService.QuickAddAsync(new QuickAddCustomerCarDto
+                {
+                    FullName = "Mostafa Radi",
+                    Phone = "01099887766",
+                    Make = "Hyundai",
+                    Model = "Elantra",
+                    Year = 2023,
+                    LicensePlate = "هـ ن د 123",
+                    VIN = "KMH12345678901234"
+                });
+
+                // Create services in price list
+                var s1 = await sService.CreateAsync(new AutoFix.DTOs.Service.CreateServiceDto
+                {
+                    Name = "Brake pads replacement",
+                    NameArabic = "تغيير تيل فرامل",
+                    BasePrice = 250.00m,
+                    DefaultCost = 100.00m,
+                    Category = "Brakes"
+                });
+
+                var s2 = await sService.CreateAsync(new AutoFix.DTOs.Service.CreateServiceDto
+                {
+                    Name = "Oil change",
+                    NameArabic = "تغيير زيت وفلتر",
+                    BasePrice = 100.00m,
+                    DefaultCost = 40.00m,
+                    Category = "Maintenance"
+                });
+
+                var s3 = await sService.CreateAsync(new AutoFix.DTOs.Service.CreateServiceDto
+                {
+                    Name = "AC service",
+                    NameArabic = "صيانة وشحن تكييف",
+                    BasePrice = 400.00m,
+                    DefaultCost = 150.00m,
+                    Category = "AC"
+                });
+
+                // Create work order
+                var wo = await woService.CreateAsync(new CreateWorkOrderDto
+                {
+                    CustomerId = quick.Customer.Id,
+                    CarId = quick.Car.Id,
+                    CustomerComplaint = "Periodic maintenance",
+                    Lines = new System.Collections.Generic.List<CreateWorkOrderLineDto>
+                    {
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            ServiceId = s1.Id,
+                            Description = "تغيير تيل فرامل (Brake pads)",
+                            Quantity = 1,
+                            UnitPrice = 250.00m,
+                            UnitCost = 100.00m
+                        },
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            ServiceId = s2.Id,
+                            Description = "تغيير زيت وفلتر (Oil change)",
+                            Quantity = 1,
+                            UnitPrice = 100.00m,
+                            UnitCost = 40.00m
+                        },
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            ServiceId = s3.Id,
+                            Description = "صيانة وشحن تكييف (AC service)",
+                            Quantity = 1,
+                            UnitPrice = 400.00m,
+                            UnitCost = 150.00m
+                        },
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "SparePart",
+                            Description = "Air & Cabin Filters",
+                            Quantity = 1,
+                            UnitPrice = 350.00m,
+                            UnitCost = 200.00m
+                        }
+                    }
+                });
+
+                // Workmanship subtotal: 250 + 100 + 400 = 750.00
+                Assert.Equal(750.00m, wo.TotalWorkmanship);
+                Assert.Equal(750.00m, wo.TotalLabor);
+                // Parts subtotal: 350.00
+                Assert.Equal(350.00m, wo.TotalParts);
+                // Subtotal: 750 + 350 = 1,100.00
+                Assert.Equal(1100.00m, wo.TotalAmount);
+
+                // Lifecycle to Completed & Delivered
+                await woService.TransitionStatusAsync(wo.Id, "InProgress");
+                await woService.TransitionStatusAsync(wo.Id, "Completed");
+                await woService.TransitionStatusAsync(wo.Id, "Delivered");
+
+                // Convert to Invoice: Discount 100.00 -> 1,000.00, VAT 14% -> 140.00, Total 1,140.00
+                var invoice = await woService.ConvertToInvoiceAsync(wo.Id, new AutoFix.DTOs.WorkOrder.ConvertWorkOrderToInvoiceDto
+                {
+                    DiscountAmount = 100.00m,
+                    VatPercentage = 14.0m
+                });
+
+                Assert.NotNull(invoice);
+                Assert.Equal(1100.00m, invoice.Subtotal);
+                Assert.Equal(100.00m, invoice.DiscountAmount);
+                Assert.Equal(14.0m, invoice.VatPercentage);
+                Assert.Equal(140.00m, invoice.VatAmount); // (1100 - 100) * 0.14 = 140.00
+                Assert.Equal(1140.00m, invoice.TotalAmount); // 1000 + 140 = 1140.00
+                Assert.Equal(750.00m, invoice.TotalWorkmanship);
+                Assert.Equal(350.00m, invoice.TotalParts);
+            }
+        }
+
+        [Fact]
+        public async Task Workmanship_PriceEditOnLine_UpdatesLineAndSubtotal()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var custService = new CustomerService(db);
+                var woService = new WorkOrderService(db, dataFolder);
+
+                var quick = await custService.QuickAddAsync(new QuickAddCustomerCarDto
+                {
+                    FullName = "Amr Khaled",
+                    Phone = "01011223344",
+                    Make = "Kia",
+                    Model = "Cerato",
+                    Year = 2021,
+                    LicensePlate = "ك ي ا 999",
+                    VIN = "KNA12345678901234"
+                });
+
+                var wo = await woService.CreateAsync(new CreateWorkOrderDto
+                {
+                    CustomerId = quick.Customer.Id,
+                    CarId = quick.Car.Id,
+                    CustomerComplaint = "Brake check",
+                    Lines = new System.Collections.Generic.List<CreateWorkOrderLineDto>
+                    {
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            Description = "تغيير تيل فرامل",
+                            Quantity = 1,
+                            UnitPrice = 250.00m,
+                            UnitCost = 100.00m
+                        }
+                    }
+                });
+
+                Assert.Equal(250.00m, wo.TotalWorkmanship);
+                var lineId = wo.Lines.First().Id;
+
+                // Edit the line price to 320.00
+                var updated = await woService.UpdateLineAsync(wo.Id, lineId, new UpdateWorkOrderLineDto
+                {
+                    LineType = "LaborManufacturer",
+                    Description = "تغيير تيل فرامل مع خرط طنابير",
+                    Quantity = 1,
+                    UnitPrice = 320.00m,
+                    UnitCost = 120.00m
+                }, "AdminUser");
+
+                Assert.Equal(320.00m, updated.TotalWorkmanship);
+                Assert.Equal(320.00m, updated.TotalAmount);
+                var line = updated.Lines.First(l => l.Id == lineId);
+                Assert.Equal(320.00m, line.UnitPrice);
+                Assert.Equal(120.00m, line.UnitCost);
+                Assert.Equal(320.00m, line.Subtotal);
+            }
+        }
+
+        [Fact]
+        public async Task Workmanship_PriceListChange_DoesNotAlterOldInvoices()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var custService = new CustomerService(db);
+                var woService = new WorkOrderService(db, dataFolder);
+                var sService = new ServiceService(db);
+                var invService = new InvoiceService(db);
+
+                var quick = await custService.QuickAddAsync(new QuickAddCustomerCarDto
+                {
+                    FullName = "Adel Emam",
+                    Phone = "01077778888",
+                    Make = "BMW",
+                    Model = "320i",
+                    Year = 2020,
+                    LicensePlate = "ب م و 320",
+                    VIN = "WBA12345678901234"
+                });
+
+                var s = await sService.CreateAsync(new AutoFix.DTOs.Service.CreateServiceDto
+                {
+                    Name = "Brake Service",
+                    NameArabic = "صيانة الفرامل",
+                    BasePrice = 250.00m,
+                    DefaultCost = 100.00m
+                });
+
+                var wo = await woService.CreateAsync(new CreateWorkOrderDto
+                {
+                    CustomerId = quick.Customer.Id,
+                    CarId = quick.Car.Id,
+                    CustomerComplaint = "Brake maintenance",
+                    Lines = new System.Collections.Generic.List<CreateWorkOrderLineDto>
+                    {
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            ServiceId = s.Id,
+                            Description = s.NameArabic,
+                            Quantity = 1,
+                            UnitPrice = s.BasePrice,
+                            UnitCost = s.DefaultCost
+                        }
+                    }
+                });
+
+                await woService.TransitionStatusAsync(wo.Id, "InProgress");
+                await woService.TransitionStatusAsync(wo.Id, "Completed");
+                await woService.TransitionStatusAsync(wo.Id, "Delivered");
+
+                var inv = await woService.ConvertToInvoiceAsync(wo.Id, new AutoFix.DTOs.WorkOrder.ConvertWorkOrderToInvoiceDto
+                {
+                    VatPercentage = 14m
+                });
+
+                Assert.Equal(250.00m, inv.Subtotal);
+
+                // Now modify the price list service to 600.00 EGP
+                await sService.UpdateAsync(s.Id, new AutoFix.DTOs.Service.UpdateServiceDto
+                {
+                    Name = "Brake Service",
+                    NameArabic = "صيانة الفرامل",
+                    BasePrice = 600.00m,
+                    DefaultCost = 250.00m,
+                    IsActive = true
+                });
+
+                // Retrieve the old invoice: price remains 250.00 EGP snapshot
+                var retrievedInv = await invService.GetByIdAsync(inv.Id);
+                Assert.NotNull(retrievedInv);
+                Assert.Equal(250.00m, retrievedInv!.Subtotal);
+                Assert.Equal(285.00m, retrievedInv.TotalAmount); // 250 + 14% (35) = 285.00
+
+                // Also retrieve the work order: price remains 250.00 EGP
+                var retrievedWo = await woService.GetByIdAsync(wo.Id);
+                Assert.Equal(250.00m, retrievedWo!.TotalWorkmanship);
+                Assert.Equal(250.00m, retrievedWo.Lines.First().UnitPrice);
+            }
+        }
+
+        [Fact]
+        public async Task Workmanship_LockedInvoice_RejectsEditsWithoutRevisionReason()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var custService = new CustomerService(db);
+                var woService = new WorkOrderService(db, dataFolder);
+
+                var quick = await custService.QuickAddAsync(new QuickAddCustomerCarDto
+                {
+                    FullName = "Hassan Hosny",
+                    Phone = "01055556666",
+                    Make = "Toyota",
+                    Model = "Corolla",
+                    Year = 2021,
+                    LicensePlate = "ط ي ت 111",
+                    VIN = "JTDCOROLLA001122"
+                });
+
+                var wo = await woService.CreateAsync(new CreateWorkOrderDto
+                {
+                    CustomerId = quick.Customer.Id,
+                    CarId = quick.Car.Id,
+                    CustomerComplaint = "Checkup",
+                    Lines = new System.Collections.Generic.List<CreateWorkOrderLineDto>
+                    {
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            Description = "Initial Labor",
+                            Quantity = 1,
+                            UnitPrice = 200.00m,
+                            UnitCost = 80.00m
+                        }
+                    }
+                });
+
+                await woService.TransitionStatusAsync(wo.Id, "InProgress");
+                await woService.TransitionStatusAsync(wo.Id, "Completed");
+                await woService.TransitionStatusAsync(wo.Id, "Delivered");
+
+                await woService.ConvertToInvoiceAsync(wo.Id);
+
+                var lineId = wo.Lines.First().Id;
+
+                // Attempting to edit line without revision reason must throw
+                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    woService.UpdateLineAsync(wo.Id, lineId, new UpdateWorkOrderLineDto
+                    {
+                        LineType = "LaborManufacturer",
+                        Description = "Tampered labor",
+                        Quantity = 1,
+                        UnitPrice = 500m
+                    }, "Hacker")
+                );
+
+                // Attempting to delete line without revision reason must throw
+                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    woService.DeleteLineAsync(wo.Id, lineId, "Hacker", null)
+                );
+
+                // Providing a revision reason succeeds
+                var updated = await woService.UpdateLineAsync(wo.Id, lineId, new UpdateWorkOrderLineDto
+                {
+                    LineType = "LaborManufacturer",
+                    Description = "Authorized revised labor",
+                    Quantity = 1,
+                    UnitPrice = 250m,
+                    RevisionReason = "Customer requested additional test"
+                }, "Receptionist");
+
+                Assert.Equal(250m, updated.TotalWorkmanship);
+
+                // Verify audit log entry exists
+                var auditLog = await db.AuditLogs
+                    .Where(a => a.Action == "WorkmanshipLineUpdated")
+                    .FirstOrDefaultAsync();
+                Assert.NotNull(auditLog);
+                Assert.Contains("Customer requested additional test", auditLog!.Details);
+            }
+        }
+
+        [Fact]
+        public async Task Workmanship_CustomerNeverGetsCost_MaskedToZero()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var custService = new CustomerService(db);
+                var woService = new WorkOrderService(db, dataFolder);
+                var invService = new InvoiceService(db);
+
+                var quick = await custService.QuickAddAsync(new QuickAddCustomerCarDto
+                {
+                    FullName = "Mahmoud Yassin",
+                    Phone = "01044445555",
+                    Make = "Mercedes",
+                    Model = "C180",
+                    Year = 2022,
+                    LicensePlate = "م ر س 180",
+                    VIN = "WDD2050011223344"
+                });
+
+                var wo = await woService.CreateAsync(new CreateWorkOrderDto
+                {
+                    CustomerId = quick.Customer.Id,
+                    CarId = quick.Car.Id,
+                    CustomerComplaint = "Transmission service",
+                    Lines = new System.Collections.Generic.List<CreateWorkOrderLineDto>
+                    {
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            Description = "Transmission overhaul",
+                            Quantity = 1,
+                            UnitPrice = 2500m,
+                            UnitCost = 800m
+                        }
+                    }
+                });
+
+                await woService.TransitionStatusAsync(wo.Id, "InProgress");
+                await woService.TransitionStatusAsync(wo.Id, "Completed");
+                await woService.TransitionStatusAsync(wo.Id, "Delivered");
+
+                var inv = await woService.ConvertToInvoiceAsync(wo.Id);
+
+                // Request by staff: Cost is preserved
+                var staffWo = await woService.GetByIdAsync(wo.Id, isCustomer: false);
+                Assert.Equal(800m, staffWo!.Lines.First().UnitCost);
+
+                // Request by customer: Cost is stripped (0)
+                var customerWo = await woService.GetByIdAsync(wo.Id, isCustomer: true);
+                Assert.Equal(0m, customerWo!.Lines.First().UnitCost);
+
+                // Invoice requested by customer: Snapshot JSON does not contain UnitCost
+                var customerInv = await invService.GetByIdAsync(inv.Id, isCustomer: true);
+                Assert.NotNull(customerInv);
+                Assert.DoesNotContain("UnitCost", customerInv!.SnapshotDetailsJson ?? "");
+            }
+        }
+
+        [Fact]
+        public async Task Workmanship_ArchivedListItem_StillShowsOnOldOrders()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var custService = new CustomerService(db);
+                var woService = new WorkOrderService(db, dataFolder);
+                var sService = new ServiceService(db);
+
+                var quick = await custService.QuickAddAsync(new QuickAddCustomerCarDto
+                {
+                    FullName = "Ahmed Zaki",
+                    Phone = "01022223333",
+                    Make = "Peugeot",
+                    Model = "3008",
+                    Year = 2021,
+                    LicensePlate = "ب ج و 300",
+                    VIN = "VF312345678901234"
+                });
+
+                var s = await sService.CreateAsync(new AutoFix.DTOs.Service.CreateServiceDto
+                {
+                    Name = "Spark plug change",
+                    NameArabic = "تغيير بوجيهات",
+                    BasePrice = 180m,
+                    DefaultCost = 70m
+                });
+
+                var wo = await woService.CreateAsync(new CreateWorkOrderDto
+                {
+                    CustomerId = quick.Customer.Id,
+                    CarId = quick.Car.Id,
+                    CustomerComplaint = "Spark plug service",
+                    Lines = new System.Collections.Generic.List<CreateWorkOrderLineDto>
+                    {
+                        new CreateWorkOrderLineDto
+                        {
+                            LineType = "LaborManufacturer",
+                            ServiceId = s.Id,
+                            Description = s.NameArabic,
+                            Quantity = 1,
+                            UnitPrice = s.BasePrice,
+                            UnitCost = s.DefaultCost
+                        }
+                    }
+                });
+
+                // Archive the service in the price list (soft delete)
+                var archived = await sService.DeleteAsync(s.Id);
+                Assert.True(archived);
+
+                // Verify service is archived
+                var activeServices = await sService.GetAllAsync(includeArchived: false);
+                Assert.DoesNotContain(activeServices, x => x.Id == s.Id);
+
+                var allServices = await sService.GetAllAsync(includeArchived: true);
+                Assert.Contains(allServices, x => x.Id == s.Id && x.IsDeleted);
+
+                // Historical work order still displays the item with full details
+                var retrievedWo = await woService.GetByIdAsync(wo.Id);
+                Assert.NotNull(retrievedWo);
+                var line = retrievedWo!.Lines.First();
+                Assert.Equal("تغيير بوجيهات", line.Description);
+                Assert.Equal(180m, line.UnitPrice);
+                Assert.Equal(180m, line.Subtotal);
+                Assert.Equal(180m, retrievedWo.TotalWorkmanship);
             }
         }
     }

@@ -6,6 +6,7 @@ import {
 import { repairOrderService } from '../../services/repairOrderService';
 import { useToast } from '../../hooks/useToast';
 import Skeleton from '../../components/shared/Skeleton';
+import Money from '../../components/shared/Money';
 
 const MyRepairOrdersPage: React.FC = () => {
   const { showToast } = useToast();
@@ -255,7 +256,7 @@ const MyRepairOrdersPage: React.FC = () => {
                   <p style={{ 
                     fontSize: '22px', fontWeight: 800, color: 'var(--success)' 
                   }}>
-                    ${order.totalCost?.toFixed(2)}
+                    <Money value={order.totalCost} />
                   </p>
                 </div>
                 {order.notes && (

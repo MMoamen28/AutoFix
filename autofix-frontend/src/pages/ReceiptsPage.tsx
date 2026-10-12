@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import receiptService, { Receipt } from '../services/receiptService';
 import { toast } from 'react-hot-toast';
+import Money from '../components/shared/Money';
 
 const ReceiptsPage: React.FC = () => {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -74,7 +75,7 @@ const ReceiptsPage: React.FC = () => {
                   <p className="text-xs text-gray-500">{r.customerEmail}</p>
                 </td>
                 <td className="px-6 py-4 text-gray-300 text-sm">{r.carInfo}</td>
-                <td className="px-6 py-4 font-bold text-green-400">${r.totalCost.toFixed(2)}</td>
+                <td className="px-6 py-4 font-bold text-green-400"><Money value={r.totalCost} /></td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
                     r.status === 'Issued' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'

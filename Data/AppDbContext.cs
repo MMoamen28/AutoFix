@@ -180,17 +180,24 @@ namespace AutoFix.Data
                 .HasForeignKey(c => c.CustomerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // 11. AppUser unique username
+            // 11. WorkOrderLine → Service
+            modelBuilder.Entity<WorkOrderLine>()
+                .HasOne(wl => wl.Service)
+                .WithMany()
+                .HasForeignKey(wl => wl.ServiceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // 12. AppUser unique username
             modelBuilder.Entity<AppUser>()
                 .HasIndex(u => u.Username)
                 .IsUnique();
 
-            // 12. FormDraft unique per user and form
+            // 13. FormDraft unique per user and form
             modelBuilder.Entity<FormDraft>()
                 .HasIndex(d => new { d.UserId, d.FormKey })
                 .IsUnique();
 
-            // 12. Global Query Filter for Universal Soft Delete
+            // Universal Soft Delete
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
                 if (typeof(ISoftDeletable).IsAssignableFrom(entityType.ClrType))
@@ -203,9 +210,10 @@ namespace AutoFix.Data
                 }
             }
 
-            // 13. Decimal precisions (cross-database safe)
+            // Decimal precisions (cross-database safe)
             modelBuilder.Entity<RepairOrder>().Property(ro => ro.TotalCost).HasPrecision(18, 2);
             modelBuilder.Entity<Service>().Property(s => s.BasePrice).HasPrecision(18, 2);
+            modelBuilder.Entity<Service>().Property(s => s.DefaultCost).HasPrecision(18, 2);
             modelBuilder.Entity<SparePart>().Property(sp => sp.UnitPrice).HasPrecision(18, 2);
             modelBuilder.Entity<SparePart>().Property(sp => sp.PurchasePrice).HasPrecision(18, 2);
             modelBuilder.Entity<RepairOrderServiceJoin>().Property(ros => ros.PriceAtTime).HasPrecision(18, 2);
@@ -214,6 +222,7 @@ namespace AutoFix.Data
 
             modelBuilder.Entity<WorkOrder>().Property(w => w.TotalLabor).HasPrecision(18, 2);
             modelBuilder.Entity<WorkOrder>().Property(w => w.TotalParts).HasPrecision(18, 2);
+            modelBuilder.Entity<WorkOrder>().Property(w => w.TotalWorkmanship).HasPrecision(18, 2);
             modelBuilder.Entity<WorkOrder>().Property(w => w.TotalAmount).HasPrecision(18, 2);
             modelBuilder.Entity<WorkOrderLine>().Property(wl => wl.Quantity).HasPrecision(18, 2);
             modelBuilder.Entity<WorkOrderLine>().Property(wl => wl.UnitCost).HasPrecision(18, 2);

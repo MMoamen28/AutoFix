@@ -19,27 +19,38 @@ namespace AutoFix.Data
                 });
             }
 
-            // 2. Services
+            // 2. Services / Workmanship Price List
             var services = new[]
             {
-                new { Name = "Change Oil & Filter (تغيير زيت وفلتر)", Category = "Oils", Price = 150.00m, Minutes = 30 },
-                new { Name = "Change Brake Pads (تغيير تيل فرامل)", Category = "Mechanical", Price = 250.00m, Minutes = 45 },
-                new { Name = "Computer Diagnostics (فحص كمبيوتر وأعطال)", Category = "Electrical", Price = 300.00m, Minutes = 20 },
-                new { Name = "Periodic Maintenance (صيانة دورية شاملة)", Category = "Mechanical", Price = 500.00m, Minutes = 90 }
+                new { Name = "Brake pads replacement", NameAr = "تغيير تيل فرامل", Category = "Mechanical", Price = 250.00m, Cost = 100.00m, Minutes = 45 },
+                new { Name = "Oil change", NameAr = "تغيير زيت وفلتر", Category = "Oils", Price = 100.00m, Cost = 40.00m, Minutes = 30 },
+                new { Name = "AC service", NameAr = "صيانة وشحن تكييف", Category = "Mechanical", Price = 400.00m, Cost = 150.00m, Minutes = 60 },
+                new { Name = "Computer Diagnostics", NameAr = "فحص كمبيوتر وأعطال", Category = "Electrical", Price = 300.00m, Cost = 100.00m, Minutes = 20 }
             };
 
             foreach (var s in services)
             {
-                if (!context.Services.Any(x => x.Name == s.Name))
+                var existing = context.Services.FirstOrDefault(x => x.Name == s.Name || x.NameArabic == s.NameAr);
+                if (existing == null)
                 {
                     context.Services.Add(new Service
                     {
                         Name = s.Name,
+                        NameArabic = s.NameAr,
                         Category = s.Category,
-                        Description = "Professional service: " + s.Name,
+                        Description = s.Name,
                         BasePrice = s.Price,
-                        EstimatedMinutes = s.Minutes
+                        DefaultCost = s.Cost,
+                        EstimatedMinutes = s.Minutes,
+                        IsActive = true
                     });
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(existing.NameArabic))
+                    {
+                        existing.NameArabic = s.NameAr;
+                    }
                 }
             }
 

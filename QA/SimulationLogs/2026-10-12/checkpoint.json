@@ -1,0 +1,19 @@
+﻿{
+    "status":  "RUNNING",
+    "cycleHistory":  [
+                         {
+                             "Cycle":  1,
+                             "Timestamp":  "2026-10-12 07:41:34",
+                             "IntegrityOk":  true,
+                             "BackupOk":  true,
+                             "RowCountsNonDecreasing":  true,
+                             "ReconciliationOk":  true,
+                             "CustomersCount":  12,
+                             "InvoicesCount":  6,
+                             "WorkOrdersCount":  8
+                         }
+                     ],
+    "completedCycles":  1,
+    "totalCycles":  1,
+    "lastUpdated":  "2026-10-12 07:41:34"
+}

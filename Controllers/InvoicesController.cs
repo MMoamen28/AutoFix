@@ -24,7 +24,8 @@ namespace AutoFix.Controllers
         [HttpGet]
         public async Task<ActionResult<List<InvoiceResponseDto>>> GetAll([FromQuery] int? customerId)
         {
-            if (User.IsInRole("Customer"))
+            var isCustomer = User.IsInRole("Customer");
+            if (isCustomer)
             {
                 // Strict isolation: if customer calls, only their own invoices
                 var userCustId = User.FindFirst("customer_id")?.Value;
@@ -34,17 +35,18 @@ namespace AutoFix.Controllers
                 }
             }
 
-            var invoices = await _service.GetAllAsync(customerId);
+            var invoices = await _service.GetAllAsync(customerId, isCustomer);
             return Ok(invoices);
         }
 
         [HttpGet("{id:int}")]
         public async Task<ActionResult<InvoiceResponseDto>> GetById(int id)
         {
-            var invoice = await _service.GetByIdAsync(id);
+            var isCustomer = User.IsInRole("Customer");
+            var invoice = await _service.GetByIdAsync(id, isCustomer);
             if (invoice == null) return NotFound();
 
-            if (User.IsInRole("Customer"))
+            if (isCustomer)
             {
                 var userCustId = User.FindFirst("customer_id")?.Value;
                 if (int.TryParse(userCustId, out var cid) && invoice.CustomerId != cid)
@@ -54,6 +56,20 @@ namespace AutoFix.Controllers
             }
 
             return Ok(invoice);
+        }
+
+        [HttpGet("{id:int}/print")]
+        public async Task<IActionResult> Print(int id)
+        {
+            try
+            {
+                var html = await _service.GeneratePrintedInvoiceHtmlAsync(id);
+                return Content(html, "text/html; charset=utf-8");
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
         }
 
         [HttpPost]

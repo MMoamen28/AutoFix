@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { dashboardService, CustomerDashboardData } from '../../services/dashboardService';
 import { Car, ClipboardList, FileText, CheckCircle, Clock, Printer, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Money from '../../components/shared/Money';
 
 const CustomerDashboardPage: React.FC = () => {
   const [data, setData] = useState<CustomerDashboardData | null>(null);
@@ -122,7 +123,7 @@ const CustomerDashboardPage: React.FC = () => {
                       {wo.status}
                     </span>
                     <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '6px' }}>
-                      {wo.totalAmount.toLocaleString()} EGP
+                      <Money value={wo.totalAmount} />
                     </div>
                   </div>
                 </div>

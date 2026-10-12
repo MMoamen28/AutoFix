@@ -5,6 +5,8 @@ import { useAuth } from '../../context/AuthContext';
 import { cartService } from '../../services/cartService';
 import { useTranslation } from 'react-i18next';
 import LanguageToggle from '../shared/LanguageToggle';
+import SettingsModal from '../shared/SettingsModal';
+import { Settings } from 'lucide-react';
 
 const Topbar: React.FC = () => {
   const { user, role } = useAuth();
@@ -12,6 +14,7 @@ const Topbar: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [cartCount, setCartCount] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     fetchCartCount();
@@ -56,8 +59,19 @@ const Topbar: React.FC = () => {
         <h2 style={pageTitleStyle}>{getPageTitle()}</h2>
       </div>
 
-      {/* Right: Actions, Language Toggle & User */}
+      {/* Right: Actions, Language Toggle, Settings & User */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Settings Button */}
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          style={iconButtonStyle}
+          title="Workshop Settings / إعدادات الورشة"
+          id="topbar-settings-btn"
+        >
+          <Settings size={18} />
+        </button>
+
         {/* Language Toggle EN | عربي */}
         <LanguageToggle />
 
@@ -82,6 +96,9 @@ const Topbar: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Workshop Settings Modal */}
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 };

@@ -129,7 +129,7 @@ namespace AutoFix.Controllers
 
         [HttpGet("{id:int}/print")]
         [HttpGet("{id:int}/html")]
-        public async Task<IActionResult> GetHtmlPrintReport(int id)
+        public async Task<IActionResult> GetHtmlPrintReport(int id, [FromQuery] bool showInvoiceTotal = false)
         {
             try
             {
@@ -145,7 +145,7 @@ namespace AutoFix.Controllers
                     }
                 }
 
-                var html = await _service.GenerateHtmlPrintReportAsync(id);
+                var html = await _service.GenerateHtmlPrintReportAsync(id, showInvoiceTotal);
                 return Content(html, "text/html; charset=utf-8");
             }
             catch (KeyNotFoundException)
@@ -156,9 +156,9 @@ namespace AutoFix.Controllers
 
         [HttpGet("blank-form")]
         [HttpGet("blank-form-html")]
-        public async Task<IActionResult> GetBlankFormHtml()
+        public async Task<IActionResult> GetBlankFormHtml([FromQuery] bool showInvoiceTotal = false)
         {
-            var html = await _service.GenerateBlankFormHtmlAsync();
+            var html = await _service.GenerateBlankFormHtmlAsync(showInvoiceTotal);
             return Content(html, "text/html; charset=utf-8");
         }
 

@@ -35,19 +35,41 @@ namespace AutoFix.Controllers
             [FromQuery] int? customerId,
             [FromQuery] int? mechanicId)
         {
-            var results = await _service.GetAllAsync(status, customerId, mechanicId);
+            var isCustomer = User.IsInRole("Customer");
+            if (isCustomer)
+            {
+                var userCustId = User.FindFirst("customer_id")?.Value;
+                if (int.TryParse(userCustId, out var cid))
+                {
+                    customerId = cid;
+                }
+            }
+
+            var results = await _service.GetAllAsync(status, customerId, mechanicId, isCustomer);
             return Ok(results);
         }
 
         [HttpGet("{id:int}")]
         public async Task<ActionResult<WorkOrderResponseDto>> GetById(int id)
         {
-            var result = await _service.GetByIdAsync(id);
-            return result == null ? NotFound() : Ok(result);
+            var isCustomer = User.IsInRole("Customer");
+            var result = await _service.GetByIdAsync(id, isCustomer);
+            if (result == null) return NotFound();
+
+            if (isCustomer)
+            {
+                var userCustId = User.FindFirst("customer_id")?.Value;
+                if (int.TryParse(userCustId, out var cid) && result.CustomerId != cid)
+                {
+                    return Forbid();
+                }
+            }
+
+            return Ok(result);
         }
 
         [HttpPost]
-        [Authorize(Roles = "Admin,Owner,Mechanic")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception,Mechanic")]
         public async Task<ActionResult<WorkOrderResponseDto>> Create([FromBody] CreateWorkOrderDto dto)
         {
             try
@@ -62,13 +84,73 @@ namespace AutoFix.Controllers
         }
 
         [HttpPut("{id:int}")]
-        [Authorize(Roles = "Admin,Owner,Mechanic")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception,Mechanic")]
         public async Task<ActionResult<WorkOrderResponseDto>> Update(int id, [FromBody] UpdateWorkOrderDto dto)
         {
             try
             {
                 var updated = await _service.UpdateAsync(id, dto);
                 return updated == null ? NotFound() : Ok(updated);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{id:int}/lines")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception")]
+        public async Task<ActionResult<WorkOrderResponseDto>> AddLine(int id, [FromBody] CreateWorkOrderLineDto lineDto)
+        {
+            try
+            {
+                var userName = User.Identity?.Name ?? "Staff";
+                var updated = await _service.AddLineAsync(id, lineDto, userName);
+                return Ok(updated);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("{id:int}/lines/{lineId:int}")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception")]
+        public async Task<ActionResult<WorkOrderResponseDto>> UpdateLine(int id, int lineId, [FromBody] UpdateWorkOrderLineDto lineDto)
+        {
+            try
+            {
+                var userName = User.Identity?.Name ?? "Staff";
+                var updated = await _service.UpdateLineAsync(id, lineId, lineDto, userName);
+                return Ok(updated);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpDelete("{id:int}/lines/{lineId:int}")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception")]
+        public async Task<ActionResult<WorkOrderResponseDto>> DeleteLine(int id, int lineId, [FromQuery] string? revisionReason)
+        {
+            try
+            {
+                var userName = User.Identity?.Name ?? "Staff";
+                var updated = await _service.DeleteLineAsync(id, lineId, userName, revisionReason);
+                return Ok(updated);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
             }
             catch (InvalidOperationException ex)
             {

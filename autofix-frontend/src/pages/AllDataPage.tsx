@@ -10,6 +10,7 @@ import mechanicService from '../services/mechanicService';
 import sparePartService from '../services/sparePartService';
 import receiptService from '../services/receiptService';
 import { toast } from 'react-hot-toast';
+import Money from '../components/shared/Money';
 
 const AllDataPage: React.FC = () => {
   const navigate = useNavigate();
@@ -166,7 +167,7 @@ const AllDataPage: React.FC = () => {
                   {activeTab === 'parts' && (
                     <>
                       <td className="px-6 py-5 font-bold text-white">{item.name}</td>
-                      <td className="px-6 py-5 font-bold text-blue-400">${item.unitPrice}</td>
+                      <td className="px-6 py-5 font-bold text-blue-400"><Money value={item.unitPrice} /></td>
                       <td className="px-6 py-5">
                         <span className={`badge ${item.stockQuantity < 10 ? 'badge-danger' : 'badge-success'}`}>
                           {item.stockQuantity} in stock
@@ -177,7 +178,7 @@ const AllDataPage: React.FC = () => {
                   {activeTab === 'receipts' && (
                     <>
                       <td className="px-6 py-5 font-bold text-white">{item.customerName}</td>
-                      <td className="px-6 py-5 font-bold text-emerald-400">${item.totalAmount}</td>
+                      <td className="px-6 py-5 font-bold text-emerald-400"><Money value={item.totalAmount} /></td>
                       <td className="px-6 py-5 text-sm text-gray-500">{new Date(item.generatedAt).toLocaleDateString()}</td>
                     </>
                   )}

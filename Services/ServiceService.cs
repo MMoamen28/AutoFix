@@ -14,17 +14,27 @@ namespace AutoFix.Services
         private readonly AppDbContext _db;
         public ServiceService(AppDbContext db) => _db = db;
 
-        public async Task<List<ServiceResponseDto>> GetAllAsync()
+        public async Task<List<ServiceResponseDto>> GetAllAsync(bool includeArchived = false)
         {
-            return await _db.Services
-                .AsNoTracking()
+            var query = _db.Services.AsNoTracking();
+            if (includeArchived)
+            {
+                query = query.IgnoreQueryFilters();
+            }
+
+            return await query
                 .Select(s => new ServiceResponseDto
                 {
                     Id = s.Id,
                     Name = s.Name,
+                    NameArabic = s.NameArabic,
                     Description = s.Description,
+                    Category = s.Category,
                     BasePrice = s.BasePrice,
-                    EstimatedMinutes = s.EstimatedMinutes
+                    DefaultCost = s.DefaultCost,
+                    EstimatedMinutes = s.EstimatedMinutes,
+                    IsActive = s.IsActive && !s.IsDeleted,
+                    IsDeleted = s.IsDeleted
                 })
                 .ToListAsync();
         }
@@ -38,9 +48,14 @@ namespace AutoFix.Services
                 {
                     Id = s.Id,
                     Name = s.Name,
+                    NameArabic = s.NameArabic,
                     Description = s.Description,
+                    Category = s.Category,
                     BasePrice = s.BasePrice,
-                    EstimatedMinutes = s.EstimatedMinutes
+                    DefaultCost = s.DefaultCost,
+                    EstimatedMinutes = s.EstimatedMinutes,
+                    IsActive = s.IsActive && !s.IsDeleted,
+                    IsDeleted = s.IsDeleted
                 })
                 .FirstOrDefaultAsync();
         }
@@ -49,10 +64,14 @@ namespace AutoFix.Services
         {
             var service = new Service
             {
-                Name = dto.Name,
-                Description = dto.Description,
+                Name = dto.Name.Trim(),
+                NameArabic = dto.NameArabic?.Trim() ?? string.Empty,
+                Description = dto.Description?.Trim() ?? string.Empty,
+                Category = string.IsNullOrWhiteSpace(dto.Category) ? "Mechanical" : dto.Category.Trim(),
                 BasePrice = dto.BasePrice,
-                EstimatedMinutes = dto.EstimatedMinutes
+                DefaultCost = dto.DefaultCost,
+                EstimatedMinutes = dto.EstimatedMinutes,
+                IsActive = dto.IsActive
             };
 
             _db.Services.Add(service);
@@ -66,10 +85,17 @@ namespace AutoFix.Services
             var service = await _db.Services.FindAsync(id);
             if (service == null) return null;
 
-            service.Name = dto.Name;
-            service.Description = dto.Description;
+            service.Name = dto.Name.Trim();
+            service.NameArabic = dto.NameArabic?.Trim() ?? string.Empty;
+            service.Description = dto.Description?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(dto.Category))
+            {
+                service.Category = dto.Category.Trim();
+            }
             service.BasePrice = dto.BasePrice;
+            service.DefaultCost = dto.DefaultCost;
             service.EstimatedMinutes = dto.EstimatedMinutes;
+            service.IsActive = dto.IsActive;
 
             await _db.SaveChangesAsync();
 
@@ -81,7 +107,25 @@ namespace AutoFix.Services
             var service = await _db.Services.FindAsync(id);
             if (service == null) return false;
 
-            _db.Services.Remove(service);
+            // Soft-delete archiving: mark deleted and inactive
+            service.IsDeleted = true;
+            service.DeletedAt = System.DateTime.UtcNow;
+            service.IsActive = false;
+
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> RestoreAsync(int id)
+        {
+            var service = await _db.Services.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.Id == id);
+            if (service == null) return false;
+
+            service.IsDeleted = false;
+            service.DeletedAt = null;
+            service.DeletedBy = null;
+            service.IsActive = true;
+
             await _db.SaveChangesAsync();
             return true;
         }

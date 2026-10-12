@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { sparePartService } from '../../services/sparePartService';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import Money from '../../components/shared/Money';
 
 const SparePartsViewPage: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
@@ -45,7 +46,7 @@ const SparePartsViewPage: React.FC = () => {
                   }}>
                     {part.stockQuantity} in stock
                   </span>
-                  <span style={{ fontWeight: '700' }}>${part.price}</span>
+                  <span style={{ fontWeight: '700' }}><Money value={part.price} /></span>
                 </div>
               </div>
             ))

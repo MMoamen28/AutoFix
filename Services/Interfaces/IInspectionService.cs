@@ -13,8 +13,8 @@ namespace AutoFix.Services.Interfaces
         Task<InspectionResponseDto> ReviseAsync(int id, UpdateInspectionDto dto);
         Task<InspectionResponseDto> FinalizeAsync(int id);
         Task<bool> DeleteAsync(int id);
-        Task<string> GenerateHtmlPrintReportAsync(int id);
-        Task<string> GenerateBlankFormHtmlAsync();
+        Task<string> GenerateHtmlPrintReportAsync(int id, bool showInvoiceTotal = false);
+        Task<string> GenerateBlankFormHtmlAsync(bool showInvoiceTotal = false);
         Task<byte[]> GenerateOrGetPdfAsync(int id);
         Task<string> GetWhatsAppShareUrlAsync(int id, string? customNotes = null);
     }

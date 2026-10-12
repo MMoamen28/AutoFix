@@ -69,6 +69,7 @@ const router = createBrowserRouter(
       <Route path="/mechanics" element={<MechanicsPage />} />
       <Route path="/repair-orders" element={<RepairOrdersPage />} />
       <Route path="/services" element={<ServicesPage />} />
+      <Route path="/workmanship-prices" element={<ServicesPage />} />
       <Route path="/spare-parts" element={<SparePartsPage />} />
 
       {/* Owner-Specific Routes */}

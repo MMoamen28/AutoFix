@@ -9,6 +9,8 @@ import { useToast } from '../../hooks/useToast';
 import Badge from '../../components/shared/Badge';
 import Button from '../../components/shared/Button';
 import Skeleton from '../../components/shared/Skeleton';
+import Money from '../../components/shared/Money';
+import { formatCurrency } from '../../i18n/formatters';
 
 const AvailableRepairOrdersPage: React.FC = () => {
   const { showToast } = useToast();
@@ -473,7 +475,7 @@ const AvailableRepairOrdersPage: React.FC = () => {
                     fontWeight: 800, 
                     color: 'var(--success)' 
                   }}>
-                    ${order.totalCost?.toFixed(2)}
+                    <Money value={order.totalCost} />
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -654,7 +656,7 @@ const AvailableRepairOrdersPage: React.FC = () => {
                 { 
                   icon: <DollarSign size={16} />, 
                   label: 'Total Cost', 
-                  value: `$${selectedOrder.totalCost?.toFixed(2)}`,
+                  value: formatCurrency(selectedOrder.totalCost),
                   highlight: true 
                 },
                 { 

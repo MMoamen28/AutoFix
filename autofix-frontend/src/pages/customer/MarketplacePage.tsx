@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast';
 import Button from '../../components/shared/Button';
 import Skeleton from '../../components/shared/Skeleton';
 import Badge from '../../components/shared/Badge';
+import Money from '../../components/shared/Money';
 
 const MarketplacePage: React.FC = () => {
   const [services, setServices] = useState<any[]>([]);
@@ -142,7 +143,7 @@ const MarketplaceCard = ({ item, type, onAdd, isAdding }: any) => (
       <div style={cardFooterStyle}>
         <div>
           <span style={priceLabelStyle}>Price</span>
-          <p style={priceValueStyle}>${(type === 'Service' ? item.basePrice : item.unitPrice).toFixed(2)}</p>
+          <p style={priceValueStyle}><Money value={type === 'Service' ? item.basePrice : item.unitPrice} /></p>
         </div>
         <button 
           onClick={onAdd} 

@@ -7,6 +7,12 @@ import {
 import api from '../../services/axiosClient';
 import useDraftAutoSave from '../../hooks/useDraftAutoSave';
 import DraftIndicator from '../../components/shared/DraftIndicator';
+import Money from '../../components/shared/Money';
+import PriceInput from '../../components/shared/PriceInput';
+import { getCurrencyLabel } from '../../i18n/formatters';
+import { useTranslation } from 'react-i18next';
+import WorkOrderLinesModal from '../../components/workorders/WorkOrderLinesModal';
+import serviceService from '../../services/serviceService';
 
 const WorkOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -32,6 +38,11 @@ const WorkOrdersPage: React.FC = () => {
   const [selectedWoForInvoice, setSelectedWoForInvoice] = useState<WorkOrder | null>(null);
   const [vatPercentage, setVatPercentage] = useState<number>(14);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+
+  // Workmanship & Services state
+  const { t } = useTranslation();
+  const [services, setServices] = useState<any[]>([]);
+  const [selectedWoForLines, setSelectedWoForLines] = useState<WorkOrder | null>(null);
 
   const initialNewOrderState = {
     customerId: 0,
@@ -110,11 +121,24 @@ const WorkOrdersPage: React.FC = () => {
     } catch (err) { }
   };
 
+  const loadServices = async () => {
+    try {
+      const res = await serviceService.getAll();
+      setServices(res);
+    } catch (err) { }
+  };
+
   useEffect(() => {
     loadOrders();
     loadCustomers();
     loadMechanics();
+    loadServices();
   }, [filterStatus, filterMechanicId]);
+
+  const handleOrderUpdated = (updatedWo: WorkOrder) => {
+    setOrders(prev => prev.map(o => o.id === updatedWo.id ? updatedWo : o));
+    setSelectedWoForLines(updatedWo);
+  };
 
   const handleCustomerChange = (custId: number) => {
     setSelectedCustomerId(custId);
@@ -139,7 +163,7 @@ const WorkOrdersPage: React.FC = () => {
       const lines: any[] = [];
       if (newOrder.laborPrice > 0) {
         lines.push({
-          lineType: 'LaborMechanical',
+          lineType: 'LaborManufacturer',
           description: newOrder.laborDescription || 'Labor',
           quantity: 1,
           unitPrice: Number(newOrder.laborPrice)
@@ -359,14 +383,22 @@ const WorkOrdersPage: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '13px', fontWeight: 700 }}>
-                  <span>Labor: {wo.totalLabor} EGP</span>
-                  <span>Parts: {wo.totalParts} EGP</span>
-                  <span style={{ color: '#10b981' }}>Total: {wo.totalAmount} EGP</span>
+                  <span>{t('workOrders.workmanshipSection')}: <Money value={wo.totalWorkmanship ?? wo.totalLabor} /></span>
+                  <span>{t('workOrders.partsSubtotal')}: <Money value={wo.totalParts} /></span>
+                  <span style={{ color: '#10b981' }}>{t('workOrders.grandTotal')}: <Money value={wo.totalAmount} style={{ color: '#10b981' }} /></span>
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
+                <button 
+                  onClick={() => setSelectedWoForLines(wo)}
+                  style={actionBtnStyle('#10b981')}
+                  title="Manage Workmanship & Lines"
+                >
+                  <Wrench size={13} style={{ marginRight: '4px' }} /> {t('workOrders.workmanshipSection')}
+                </button>
+
                 <button 
                   onClick={() => handlePrint(wo.id)}
                   style={actionBtnStyle('#64748b')}
@@ -596,16 +628,18 @@ const WorkOrdersPage: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', fontSize: '13px' }}>
-                <div><strong>Subtotal:</strong> {selectedWoForInvoice.totalAmount.toLocaleString()} EGP</div>
+              <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div><strong>{t('workOrders.workmanshipSection')}:</strong> <Money value={selectedWoForInvoice.totalWorkmanship ?? selectedWoForInvoice.totalLabor} /></div>
+                <div><strong>{t('workOrders.partsSubtotal')}:</strong> <Money value={selectedWoForInvoice.totalParts} /></div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '4px', marginTop: '4px' }}><strong>Subtotal:</strong> <Money value={selectedWoForInvoice.totalAmount} /></div>
               </div>
 
               <div>
-                <label style={labelStyle}>Discount Amount (EGP):</label>
-                <input 
-                  type="number" style={inputStyle} 
+                <PriceInput 
+                  label={`Discount Amount (${getCurrencyLabel()}):`}
                   value={discountAmount} 
-                  onChange={e => setDiscountAmount(Number(e.target.value))} 
+                  onChange={val => setDiscountAmount(val)} 
+                  allowNegative={false}
                 />
               </div>
 
@@ -619,10 +653,10 @@ const WorkOrdersPage: React.FC = () => {
               </div>
 
               <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '10px', borderRadius: '8px', fontSize: '13px' }}>
-                <div><strong>Estimated Taxable:</strong> {(Math.max(0, selectedWoForInvoice.totalAmount - discountAmount)).toLocaleString()} EGP</div>
-                <div><strong>Estimated VAT:</strong> {(Math.round(Math.max(0, selectedWoForInvoice.totalAmount - discountAmount) * (vatPercentage / 100))).toLocaleString()} EGP</div>
+                <div><strong>Estimated Taxable:</strong> <Money value={Math.max(0, selectedWoForInvoice.totalAmount - discountAmount)} /></div>
+                <div><strong>Estimated VAT ({vatPercentage}%):</strong> <Money value={Number((Math.max(0, selectedWoForInvoice.totalAmount - discountAmount) * (vatPercentage / 100)).toFixed(2))} /></div>
                 <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
-                  Total Invoice: {(Math.max(0, selectedWoForInvoice.totalAmount - discountAmount) + Math.round(Math.max(0, selectedWoForInvoice.totalAmount - discountAmount) * (vatPercentage / 100))).toLocaleString()} EGP
+                  Total Invoice: <Money value={Number((Math.max(0, selectedWoForInvoice.totalAmount - discountAmount) + Number((Math.max(0, selectedWoForInvoice.totalAmount - discountAmount) * (vatPercentage / 100)).toFixed(2))).toFixed(2))} style={{ color: 'var(--primary)' }} />
                 </div>
               </div>
 
@@ -762,28 +796,30 @@ const WorkOrdersPage: React.FC = () => {
 
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
                 <span style={{ fontWeight: 700, fontSize: '13px' }}>Estimated Labor & Parts:</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
                   <input 
                     type="text" placeholder="Labor description" style={inputStyle}
                     value={newOrder.laborDescription}
                     onChange={e => setNewOrder({ ...newOrder, laborDescription: e.target.value })}
                   />
-                  <input 
-                    type="number" placeholder="Labor EGP" style={inputStyle}
+                  <PriceInput 
+                    placeholder="0.00"
                     value={newOrder.laborPrice}
-                    onChange={e => setNewOrder({ ...newOrder, laborPrice: Number(e.target.value) })}
+                    onChange={val => setNewOrder({ ...newOrder, laborPrice: val })}
+                    allowNegative={false}
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
                   <input 
                     type="text" placeholder="Part description (optional)" style={inputStyle}
                     value={newOrder.partDescription}
                     onChange={e => setNewOrder({ ...newOrder, partDescription: e.target.value })}
                   />
-                  <input 
-                    type="number" placeholder="Part EGP" style={inputStyle}
+                  <PriceInput 
+                    placeholder="0.00"
                     value={newOrder.partPrice}
-                    onChange={e => setNewOrder({ ...newOrder, partPrice: Number(e.target.value) })}
+                    onChange={val => setNewOrder({ ...newOrder, partPrice: val })}
+                    allowNegative={false}
                   />
                 </div>
               </div>
@@ -805,6 +841,16 @@ const WorkOrdersPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal: Workmanship Lines Management */}
+      {selectedWoForLines && (
+        <WorkOrderLinesModal
+          workOrder={selectedWoForLines}
+          onClose={() => setSelectedWoForLines(null)}
+          onOrderUpdated={handleOrderUpdated}
+          services={services}
+        />
       )}
     </div>
   );

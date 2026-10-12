@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { Link } from 'react-router-dom';
 import Skeleton from '../components/shared/Skeleton';
+import Money from '../components/shared/Money';
 
 interface SparePart {
   id: number;
@@ -691,7 +692,7 @@ const MarketplacePage: React.FC = () => {
                     fontWeight: 800, 
                     color: 'var(--success)' 
                   }}>
-                    ${part.unitPrice.toFixed(2)}
+                    <Money value={part.unitPrice} />
                   </span>
                 </div>
 

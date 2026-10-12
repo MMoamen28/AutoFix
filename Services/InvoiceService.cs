@@ -28,8 +28,60 @@ namespace AutoFix.Services
                 .Include(i => i.Payments);
         }
 
-        private static InvoiceResponseDto MapToDto(Invoice i)
+        private static InvoiceResponseDto MapToDto(Invoice i, bool isCustomer = false)
         {
+            decimal totalWorkmanship = 0;
+            decimal totalLabor = 0;
+            decimal totalParts = 0;
+            var snapshotJson = i.SnapshotDetailsJson;
+
+            if (!string.IsNullOrEmpty(i.SnapshotDetailsJson) && i.SnapshotDetailsJson != "[]")
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(i.SnapshotDetailsJson);
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        var lineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() ?? "" : "";
+                        var subtotal = el.TryGetProperty("Subtotal", out var sub) ? sub.GetDecimal() : 0m;
+                        if (lineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                        {
+                            totalWorkmanship += subtotal;
+                            totalLabor += subtotal;
+                        }
+                        else if (lineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                        {
+                            totalLabor += subtotal;
+                        }
+                        else
+                        {
+                            totalParts += subtotal;
+                        }
+                    }
+
+                    if (isCustomer)
+                    {
+                        var sanitized = doc.RootElement.EnumerateArray().Select(el => new
+                        {
+                            Description = el.TryGetProperty("Description", out var d) ? d.GetString() : "",
+                            LineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() : "",
+                            Quantity = el.TryGetProperty("Quantity", out var q) ? q.GetDecimal() : 1m,
+                            UnitPrice = el.TryGetProperty("UnitPrice", out var up) ? up.GetDecimal() : 0m,
+                            Subtotal = el.TryGetProperty("Subtotal", out var sub) ? sub.GetDecimal() : 0m,
+                            Technician = el.TryGetProperty("Technician", out var tech) ? tech.GetString() : null
+                        }).ToList();
+                        snapshotJson = System.Text.Json.JsonSerializer.Serialize(sanitized);
+                    }
+                }
+                catch { }
+            }
+            else if (i.WorkOrder != null)
+            {
+                totalWorkmanship = i.WorkOrder.TotalWorkmanship;
+                totalLabor = i.WorkOrder.TotalLabor;
+                totalParts = i.WorkOrder.TotalParts;
+            }
+
             return new InvoiceResponseDto
             {
                 Id = i.Id,
@@ -43,6 +95,9 @@ namespace AutoFix.Services
                 CarPlate = i.Car?.LicensePlate ?? string.Empty,
                 CarMakeModel = i.Car != null ? $"{i.Car.Make} {i.Car.Model}" : string.Empty,
                 Subtotal = i.Subtotal,
+                TotalWorkmanship = totalWorkmanship,
+                TotalLabor = totalLabor,
+                TotalParts = totalParts,
                 DiscountAmount = i.DiscountAmount,
                 VatPercentage = i.VatPercentage,
                 VatAmount = i.VatAmount,
@@ -54,7 +109,7 @@ namespace AutoFix.Services
                 IssuedAt = i.IssuedAt,
                 DueDate = i.DueDate,
                 Notes = i.Notes,
-                SnapshotDetailsJson = i.SnapshotDetailsJson,
+                SnapshotDetailsJson = snapshotJson,
                 Payments = i.Payments.Where(p => !p.IsDeleted).OrderByDescending(p => p.PaidAt).Select(p => new PaymentResponseDto
                 {
                     Id = p.Id,
@@ -68,7 +123,7 @@ namespace AutoFix.Services
             };
         }
 
-        public async Task<List<InvoiceResponseDto>> GetAllAsync(int? customerId = null)
+        public async Task<List<InvoiceResponseDto>> GetAllAsync(int? customerId = null, bool isCustomer = false)
         {
             var query = BaseQuery().AsNoTracking();
 
@@ -78,13 +133,13 @@ namespace AutoFix.Services
             }
 
             var list = await query.OrderByDescending(i => i.IssuedAt).ToListAsync();
-            return list.Select(MapToDto).ToList();
+            return list.Select(i => MapToDto(i, isCustomer)).ToList();
         }
 
-        public async Task<InvoiceResponseDto?> GetByIdAsync(int id)
+        public async Task<InvoiceResponseDto?> GetByIdAsync(int id, bool isCustomer = false)
         {
             var invoice = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(i => i.Id == id);
-            return invoice == null ? null : MapToDto(invoice);
+            return invoice == null ? null : MapToDto(invoice, isCustomer);
         }
 
         public async Task<InvoiceResponseDto> CreateAsync(CreateInvoiceDto dto)
@@ -133,7 +188,7 @@ namespace AutoFix.Services
                 Action = "CreateInvoice",
                 EntityName = "Invoice",
                 EntityId = nextNum,
-                Details = $"Manual invoice {nextNum} created for Customer {customer.FullName}. Total: {totalAmount:F2} EGP.",
+                Details = $"Manual invoice {nextNum} created for Customer {customer.FullName}. Total: {totalAmount:F2} L.E.",
                 Timestamp = DateTime.UtcNow
             });
 
@@ -180,7 +235,7 @@ namespace AutoFix.Services
                 Action = "RecordInvoicePayment",
                 EntityName = "InvoicePayment",
                 EntityId = invoice.InvoiceNumber,
-                Details = $"Recorded payment of {dto.Amount:F2} EGP ({dto.PaymentMethod}) on Invoice {invoice.InvoiceNumber}.",
+                Details = $"Recorded payment of {dto.Amount:F2} L.E ({dto.PaymentMethod}) on Invoice {invoice.InvoiceNumber}.",
                 Timestamp = DateTime.UtcNow
             });
 
@@ -203,7 +258,7 @@ namespace AutoFix.Services
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var invoice = await _db.Invoices.Include(i => i.Payments).FirstOrDefaultAsync(i => i.Id == id);
+            var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return false;
 
             if (invoice.PaidAmount > 0)
@@ -214,6 +269,221 @@ namespace AutoFix.Services
             _db.Invoices.Remove(invoice);
             await _db.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<string> GeneratePrintedInvoiceHtmlAsync(int id)
+        {
+            var invoice = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(i => i.Id == id);
+            if (invoice == null) throw new KeyNotFoundException($"Invoice {id} not found.");
+
+            var workmanshipLines = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
+            var partsLines = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
+            var otherLaborLines = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
+
+            if (!string.IsNullOrEmpty(invoice.SnapshotDetailsJson) && invoice.SnapshotDetailsJson != "[]")
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(invoice.SnapshotDetailsJson);
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        var desc = el.TryGetProperty("Description", out var d) ? d.GetString() ?? "" : "";
+                        var lineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() ?? "" : "";
+                        var qty = el.TryGetProperty("Quantity", out var q) ? q.GetDecimal() : 1m;
+                        var price = el.TryGetProperty("UnitPrice", out var p) ? p.GetDecimal() : 0m;
+                        var sub = el.TryGetProperty("Subtotal", out var s) ? s.GetDecimal() : qty * price;
+
+                        if (lineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                        {
+                            workmanshipLines.Add((desc, qty, price, sub));
+                        }
+                        else if (lineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                        {
+                            otherLaborLines.Add((desc, qty, price, sub));
+                        }
+                        else
+                        {
+                            partsLines.Add((desc, qty, price, sub));
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            var workmanshipSubtotal = workmanshipLines.Sum(x => x.Subtotal);
+            var partsSubtotal = partsLines.Sum(x => x.Subtotal);
+            var otherLaborSubtotal = otherLaborLines.Sum(x => x.Subtotal);
+
+            var workmanshipRows = workmanshipLines.Count == 0
+                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد بنود مصنعية</td></tr>"
+                : string.Join("", workmanshipLines.Select((l, idx) => $@"
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
+                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Desc}</strong></td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Qty:F1}</span></td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Price:N2}</span> ج.م</td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Subtotal:N2}</span> ج.م</td>
+                    </tr>"));
+
+            var partsRows = partsLines.Count == 0
+                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد قطع غيار</td></tr>"
+                : string.Join("", partsLines.Select((l, idx) => $@"
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
+                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Desc}</strong></td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Qty:F1}</span></td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Price:N2}</span> ج.م</td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Subtotal:N2}</span> ج.م</td>
+                    </tr>"));
+
+            var otherLaborSection = otherLaborLines.Count > 0 ? $@"
+                <div class='card' style='margin-bottom: 15px;'>
+                    <h4>خدمات وعمالة أخرى (Other Labor / Services)</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style='width: 30px; text-align: center;'>#</th>
+                                <th>البيان / الخدمة</th>
+                                <th style='width: 70px; text-align: center;'>الكمية</th>
+                                <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
+                                <th style='width: 110px; text-align: right;'>الإجمالي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {string.Join("", otherLaborLines.Select((l, idx) => $@"
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
+                                    <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'>{l.Desc}</td>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Qty:F1}</span></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Price:N2}</span> ج.م</td>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Subtotal:N2}</span> ج.م</td>
+                                </tr>"))}
+                        </tbody>
+                    </table>
+                    <div style='text-align: left; margin-top: 6px; font-weight: bold;'>
+                        إجمالي الخدمات الأخرى: <span dir='ltr'>{otherLaborSubtotal:N2}</span> ج.م
+                    </div>
+                </div>" : "";
+
+            return $@"
+<!DOCTYPE html>
+<html lang='ar' dir='rtl'>
+<head>
+    <meta charset='UTF-8'>
+    <title>فاتورة ضريبية / Tax Invoice - {invoice.InvoiceNumber}</title>
+    <style>
+        @page {{ size: A4 portrait; margin: 15mm; }}
+        body {{ font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; color: #222; font-size: 13px; line-height: 1.5; }}
+        .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 15px; }}
+        .badge {{ display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; background: #e0f2fe; color: #0369a1; }}
+        .section-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }}
+        .card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 15px; }}
+        .card h4 {{ margin: 0 0 8px 0; color: #1e293b; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 14px; display: flex; justify-content: space-between; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+        th {{ background: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; text-align: right; }}
+        .totals {{ margin-top: 15px; text-align: left; }}
+        .totals-box {{ display: inline-block; min-width: 300px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; }}
+        .totals-row {{ display: flex; justify-content: space-between; padding: 4px 0; }}
+        .grand-total {{ font-size: 16px; font-weight: bold; color: #2563eb; border-top: 2px solid #2563eb; margin-top: 6px; padding-top: 6px; }}
+        .signatures {{ display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }}
+        .sig-block {{ width: 30%; text-align: center; border-top: 1px solid #94a3b8; padding-top: 5px; }}
+    </style>
+</head>
+<body>
+    <div class='header'>
+        <div>
+            <h1 style='margin: 0; color: #1e3a8a; font-size: 22px;'>أوتوفكس لإدارة مراكز الصيانة | AutoFix Workshop</h1>
+            <div style='color: #64748b; font-size: 12px;'>فاتورة ضريبية رسمية | Official Tax Invoice</div>
+        </div>
+        <div style='text-align: left;'>
+            <div style='font-size: 18px; font-weight: bold; color: #2563eb;'>{invoice.InvoiceNumber}</div>
+            <div class='badge'>الحالة: {invoice.Status}</div>
+            <div style='color: #64748b; font-size: 11px; margin-top: 4px;'>التاريخ: {invoice.IssuedAt:yyyy-MM-dd HH:mm}</div>
+        </div>
+    </div>
+
+    <div class='section-grid'>
+        <div class='card' style='margin-bottom: 0;'>
+            <h4>بيانات العميل (Customer Details)</h4>
+            <div><strong>الاسم:</strong> <span dir='auto'>{invoice.Customer?.FullName}</span></div>
+            <div><strong>الهاتف:</strong> <span dir='ltr'>{invoice.Customer?.Phone}</span></div>
+            <div><strong>أمر الشغل المرجعي:</strong> {invoice.WorkOrder?.OrderNumber ?? "N/A"}</div>
+        </div>
+        <div class='card' style='margin-bottom: 0;'>
+            <h4>بيانات السيارة (Vehicle Details)</h4>
+            <div><strong>السيارة:</strong> <span dir='auto'>{invoice.Car?.Make} {invoice.Car?.Model} ({invoice.Car?.Year})</span></div>
+            <div><strong>رقم اللوحة:</strong> <span dir='auto'>{invoice.Car?.LicensePlate}</span></div>
+            <div><strong>رقم الشاسية / VIN:</strong> <span dir='ltr'>{invoice.Car?.VIN}</span></div>
+        </div>
+    </div>
+
+    <!-- 1. Dedicated Workmanship Section (مصنعية) -->
+    <div class='card' style='margin-top: 15px;'>
+        <h4>
+            <span>مصنعية (Workmanship)</span>
+            <span style='color: #2563eb;'>إجمالي المصنعية: <span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span>
+        </h4>
+        <table>
+            <thead>
+                <tr>
+                    <th style='width: 30px; text-align: center;'>#</th>
+                    <th>بند المصنعية / الخدمة (Workmanship Service)</th>
+                    <th style='width: 70px; text-align: center;'>الكمية</th>
+                    <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
+                    <th style='width: 110px; text-align: right;'>الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody>
+                {workmanshipRows}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 2. Dedicated Parts Section (قطع الغيار) -->
+    <div class='card'>
+        <h4>
+            <span>قطع الغيار (Spare Parts)</span>
+            <span style='color: #0284c7;'>إجمالي قطع الغيار: <span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span>
+        </h4>
+        <table>
+            <thead>
+                <tr>
+                    <th style='width: 30px; text-align: center;'>#</th>
+                    <th>قطع الغيار والمستهلكات (Part Description)</th>
+                    <th style='width: 70px; text-align: center;'>الكمية</th>
+                    <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
+                    <th style='width: 110px; text-align: right;'>الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody>
+                {partsRows}
+            </tbody>
+        </table>
+    </div>
+
+    {otherLaborSection}
+
+    <div class='totals'>
+        <div class='totals-box'>
+            <div class='totals-row'><span>المجموع الفرعي (Subtotal):</span><span><span dir='ltr'>{invoice.Subtotal:N2}</span> ج.م</span></div>
+            <div class='totals-row' style='font-size: 12px; color: #64748b;'><span>منها مصنعية (Workmanship):</span><span><span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span></div>
+            <div class='totals-row' style='font-size: 12px; color: #64748b;'><span>منها قطع غيار (Parts):</span><span><span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span></div>
+            {(invoice.DiscountAmount > 0 ? $"<div class='totals-row' style='color: #ef4444;'><span>الخصم (Discount):</span><span>-<span dir='ltr'>{invoice.DiscountAmount:N2}</span> ج.م</span></div>" : "")}
+            <div class='totals-row'><span>الوعاء الخاضع للضريبة:</span><span><span dir='ltr'>{Math.Max(0, invoice.Subtotal - invoice.DiscountAmount):N2}</span> ج.م</span></div>
+            <div class='totals-row'><span>ضريبة القيمة المضافة ({invoice.VatPercentage}%):</span><span><span dir='ltr'>{invoice.VatAmount:N2}</span> ج.م</span></div>
+            <div class='totals-row grand-total'><span>إجمالي الفاتورة (Total):</span><span><span dir='ltr'>{invoice.TotalAmount:N2}</span> ج.م</span></div>
+            <div class='totals-row' style='color: #10b981; margin-top: 4px;'><span>المدفوع (Paid):</span><span><span dir='ltr'>{invoice.PaidAmount:N2}</span> ج.م</span></div>
+            <div class='totals-row' style='font-weight: bold; color: {(invoice.RemainingAmount > 0 ? "#ef4444" : "#10b981")};'><span>المتبقي (Remaining):</span><span><span dir='ltr'>{invoice.RemainingAmount:N2}</span> ج.م</span></div>
+        </div>
+    </div>
+
+    <div class='signatures'>
+        <div class='sig-block'>المحاسب المسؤول</div>
+        <div class='sig-block'>إدارة المركز / الختم</div>
+        <div class='sig-block'>توقيع واستلام العميل</div>
+    </div>
+</body>
+</html>";
         }
     }
 }

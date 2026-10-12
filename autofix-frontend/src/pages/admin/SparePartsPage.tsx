@@ -10,6 +10,8 @@ import { sparePartCategoryService } from
   '../../services/sparePartCategoryService';
 import { useToast } from '../../hooks/useToast';
 import Skeleton from '../../components/shared/Skeleton';
+import Money from '../../components/shared/Money';
+import { formatCurrency, getCurrencyLabel } from '../../i18n/formatters';
 
 const SparePartsPage: React.FC = () => {
   const { showToast } = useToast();
@@ -283,10 +285,7 @@ const SparePartsPage: React.FC = () => {
           },
           {
             label: 'Total Value',
-            value: `$${totalValue.toLocaleString('en-US', {
-              minimumFractionDigits: 0,
-              maximumFractionDigits: 0,
-            })}`,
+            value: formatCurrency(totalValue),
             icon: <TrendingUp size={22} />,
             color: 'var(--success)',
             bg: 'var(--success-dim)',
@@ -503,15 +502,15 @@ const SparePartsPage: React.FC = () => {
             }}>
               <div>
                 <label style={labelStyle}>
-                  Unit Price ($) <span style={{ color: 'var(--accent)' }}>*</span>
+                  Unit Price ({getCurrencyLabel()}) <span style={{ color: 'var(--accent)' }}>*</span>
                 </label>
                 <div style={{ position: 'relative' }}>
                   <span style={{
-                    position: 'absolute', left: '13px',
+                    position: 'absolute', left: '10px',
                     top: '50%', transform: 'translateY(-50%)',
                     color: 'var(--success)', fontWeight: 700,
-                    fontSize: '14px',
-                  }}>$</span>
+                    fontSize: '12px',
+                  }}>{getCurrencyLabel()}</span>
                   <input
                     name="unitPrice"
                     type="number"
@@ -521,7 +520,7 @@ const SparePartsPage: React.FC = () => {
                     onChange={handleFormChange}
                     placeholder="0.00"
                     required
-                    style={{ ...inputStyle, paddingLeft: '28px' }}
+                    style={{ ...inputStyle, paddingLeft: '42px' }}
                     onFocus={e => 
                       (e.target.style.borderColor = 'var(--accent)')
                     }
@@ -875,7 +874,7 @@ const SparePartsPage: React.FC = () => {
                             fontWeight: 800,
                             color: 'var(--success)',
                           }}>
-                            ${(part.unitPrice ?? 0).toFixed(2)}
+                            <Money value={part.unitPrice ?? 0} />
                           </span>
                         </td>
 

@@ -412,5 +412,168 @@ namespace AutoFix.Tests
                 Assert.DoesNotContain(d1.ActiveOrders, o => o.CustomerId == cust2.Id);
             }
         }
+
+        [Fact]
+        public async Task ComprehensiveCarInspection_Exact3PageReport_RuntimeAssetsAndFields()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var inspService = new InspectionService(db, dataFolder);
+
+                var checklistJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
+                {
+                    ["Check_Battery"] = "12.6V Good",
+                    ["Check_Alternator"] = "14.2V Charging",
+                    ["Check_Starter"] = "Normal Sound",
+                    ["Check_CoolingLevel"] = "Max / Excellent",
+                    ["Check_AirDist"] = "Normal",
+                    ["Check_Heating"] = "Operating",
+                    ["Check_Dashboard"] = "Clean / No Lights",
+                    ["Drive_Engine"] = "Smooth / High Response",
+                    ["Svc_EngineOil"] = "Synthetic 5W30 OK",
+                    ["Rim_RF"] = "Original / Clean",
+                    ["Tire_RF"] = "Bridgestone 7mm",
+                    ["Leak_Coolant"] = "No Leaks",
+                    ["Under_Boots"] = "Intact",
+                    ["Susp_FrontTie"] = "Tight / Good",
+                    ["Body_FrontBumper"] = "Minor Scratches",
+                    ["Diagnostic_Scan_Result"] = "No DTC Faults Stored",
+                    ["Additional_Comments"] = "Car in prime condition"
+                });
+
+                var insp = await inspService.CreateAsync(new CreateInspectionDto
+                {
+                    CarMake = "Audi",
+                    CarModel = "A4 Quattro",
+                    CarPlate = "أ ب ج 7 8 9",
+                    CarChassis = "WAUZZZF45HA998877",
+                    CustomerName = "Tarek Nour",
+                    CustomerPhone = "01099887766",
+                    OdometerKm = 64000,
+                    InvoiceNumber = "INV-2026-9999",
+                    InvoiceAmount = 8500.50m,
+                    Status = "Draft",
+                    OverallScore = 94,
+                    GeneralVerdict = "Excellent",
+                    ChecklistDataJson = checklistJson
+                });
+
+                var html = await inspService.GenerateHtmlPrintReportAsync(insp.Id, showInvoiceTotal: false);
+
+                // 1. Exact 3-page A4 structure
+                Assert.Contains("page-1", html);
+                Assert.Contains("page-2", html);
+                Assert.Contains("page-3", html);
+                Assert.Contains("Page 1 of 3", html);
+                Assert.Contains("Page 2 of 3", html);
+                Assert.Contains("Page 3 of 3", html);
+                Assert.Contains("A4 portrait", html);
+                Assert.Contains("page-break-after: always", html);
+
+                // 2. Draft watermark & badge
+                Assert.Contains("DRAFT - مسودة", html);
+                Assert.Contains("watermark", html);
+
+                // 3. Runtime assets presence (base64 data URI when assets exist in D:\AutoFix\Assets\InspectionReport\)
+                if (System.IO.File.Exists(@"D:\AutoFix\Assets\InspectionReport\logo.png"))
+                {
+                    Assert.Contains("workshop-logo-large", html);
+                    Assert.Contains("data:image/png;base64,", html);
+                }
+                if (System.IO.File.Exists(@"D:\AutoFix\Assets\InspectionReport\icons.png"))
+                {
+                    Assert.Contains("icons-strip-img", html);
+                }
+                if (System.IO.File.Exists(@"D:\AutoFix\Assets\InspectionReport\car-diagram.png"))
+                {
+                    Assert.Contains("diagram-img", html);
+                }
+
+                // 4. Default header shows Invoice NO
+                Assert.Contains("Invoice NO: INV-2026-9999", html);
+
+                // 5. Field list values rendered correctly
+                Assert.Contains("12.6V Good", html);
+                Assert.Contains("14.2V Charging", html);
+                Assert.Contains("Max / Excellent", html);
+                Assert.Contains("Smooth / High Response", html);
+                Assert.Contains("Synthetic 5W30 OK", html);
+                Assert.Contains("Bridgestone 7mm", html);
+                Assert.Contains("Minor Scratches", html);
+                Assert.Contains("No DTC Faults Stored", html);
+                Assert.Contains("Car in prime condition", html);
+            }
+        }
+
+        [Fact]
+        public async Task ComprehensiveCarInspection_InvoiceTotalSetting_SwitchesDisplay()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var inspService = new InspectionService(db, dataFolder);
+
+                var insp = await inspService.CreateAsync(new CreateInspectionDto
+                {
+                    CarMake = "BMW",
+                    CarModel = "320i",
+                    CarPlate = "س ص ع 5 5 5",
+                    CustomerName = "Nader Samy",
+                    CustomerPhone = "01122334455",
+                    InvoiceNumber = "INV-777",
+                    InvoiceAmount = 4500.00m,
+                    Status = "Final"
+                });
+
+                // Default: showInvoiceTotal = false -> shows "Invoice NO: INV-777"
+                var htmlDefault = await inspService.GenerateHtmlPrintReportAsync(insp.Id, showInvoiceTotal: false);
+                Assert.Contains("Invoice NO: INV-777", htmlDefault);
+
+                // Configured: showInvoiceTotal = true -> shows "Invoice Total: 4,500.00 L.E"
+                var htmlTotal = await inspService.GenerateHtmlPrintReportAsync(insp.Id, showInvoiceTotal: true);
+                Assert.Contains("Invoice Total: 4,500.00 L.E", htmlTotal);
+            }
+        }
+
+        [Fact]
+        public async Task ComprehensiveCarInspection_BlankPrintMode_And_FinalWatermark()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var inspService = new InspectionService(db, dataFolder);
+
+                // Blank form test
+                var blankHtml = await inspService.GenerateBlankFormHtmlAsync(showInvoiceTotal: false);
+                Assert.Contains("page-1", blankHtml);
+                Assert.Contains("page-2", blankHtml);
+                Assert.Contains("page-3", blankHtml);
+                Assert.Contains("Page 1 of 3", blankHtml);
+                Assert.Contains("Page 2 of 3", blankHtml);
+                Assert.Contains("Page 3 of 3", blankHtml);
+                Assert.Contains("BLANK FORM - نموذج فارغ", blankHtml);
+                Assert.DoesNotContain("class=\"watermark\"", blankHtml);
+
+                // Finalized report test: Watermark should NOT be displayed
+                var insp = await inspService.CreateAsync(new CreateInspectionDto
+                {
+                    CarMake = "Toyota",
+                    CarModel = "Corolla",
+                    CarPlate = "ق ك ل 1 2 3",
+                    CustomerName = "Sherif Adel",
+                    CustomerPhone = "01234567890",
+                    Status = "Final"
+                });
+
+                var finalHtml = await inspService.GenerateHtmlPrintReportAsync(insp.Id);
+                Assert.Contains("FINAL - معتمد", finalHtml);
+                Assert.DoesNotContain("class=\"watermark\"", finalHtml);
+            }
+        }
     }
 }
+

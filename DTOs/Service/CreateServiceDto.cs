@@ -8,16 +8,24 @@ namespace AutoFix.DTOs.Service
         [MaxLength(100)]
         public string Name { get; set; } = string.Empty;
 
-        [Required]
+        [MaxLength(100)]
+        public string NameArabic { get; set; } = string.Empty;
+
         [MaxLength(500)]
         public string Description { get; set; } = string.Empty;
 
-        [Required]
-        [Range(0, 10000)]
-        public decimal BasePrice { get; set; }
+        public string Category { get; set; } = "Mechanical";
 
         [Required]
+        [Range(0, 100000)]
+        public decimal BasePrice { get; set; }
+
+        [Range(0, 100000)]
+        public decimal DefaultCost { get; set; } = 0;
+
         [Range(1, 1440)]
-        public int EstimatedMinutes { get; set; }
+        public int EstimatedMinutes { get; set; } = 30;
+
+        public bool IsActive { get; set; } = true;
     }
 }

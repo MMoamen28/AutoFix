@@ -12,6 +12,7 @@ import Table from '../../components/shared/Table';
 import Button from '../../components/shared/Button';
 import Badge from '../../components/shared/Badge';
 import Skeleton from '../../components/shared/Skeleton';
+import { formatCurrency } from '../../i18n/formatters';
 
 const CustomerDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -105,7 +106,7 @@ const CustomerDashboard: React.FC = () => {
         />
         <StatCard 
           label="Repair Spend" 
-          value={`$${totalInvestment.toFixed(0)}`} 
+          value={formatCurrency(totalInvestment)} 
           icon={<Star size={24} />} 
           color="var(--purple)"
         />

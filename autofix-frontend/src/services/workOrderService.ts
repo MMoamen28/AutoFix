@@ -4,6 +4,8 @@ export interface WorkOrderLine {
   id?: number;
   lineType: string;
   description: string;
+  serviceId?: number;
+  serviceName?: string;
   sparePartId?: number;
   sparePartName?: string;
   isExternalPart?: boolean;
@@ -60,6 +62,7 @@ export interface WorkOrder {
   status: string;
   totalLabor: number;
   totalParts: number;
+  totalWorkmanship?: number;
   totalAmount: number;
   receivedAt: string;
   expectedDeliveryAt?: string;
@@ -132,5 +135,21 @@ export const workOrderService = {
 
   delete: async (id: number) => {
     await api.delete(`/WorkOrders/${id}`);
+  },
+
+  addLine: async (id: number, line: any) => {
+    const res = await api.post<WorkOrder>(`/WorkOrders/${id}/lines`, line);
+    return res.data;
+  },
+
+  updateLine: async (id: number, lineId: number, line: any) => {
+    const res = await api.put<WorkOrder>(`/WorkOrders/${id}/lines/${lineId}`, line);
+    return res.data;
+  },
+
+  deleteLine: async (id: number, lineId: number, revisionReason?: string) => {
+    const params = revisionReason ? `?revisionReason=${encodeURIComponent(revisionReason)}` : '';
+    const res = await api.delete<WorkOrder>(`/WorkOrders/${id}/lines/${lineId}${params}`);
+    return res.data;
   }
 };

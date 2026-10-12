@@ -7,8 +7,8 @@ namespace AutoFix.Services.Interfaces
 {
     public interface IWorkOrderService
     {
-        Task<List<WorkOrderResponseDto>> GetAllAsync(string? status = null, int? customerId = null, int? mechanicId = null);
-        Task<WorkOrderResponseDto?> GetByIdAsync(int id);
+        Task<List<WorkOrderResponseDto>> GetAllAsync(string? status = null, int? customerId = null, int? mechanicId = null, bool isCustomer = false);
+        Task<WorkOrderResponseDto?> GetByIdAsync(int id, bool isCustomer = false);
         Task<WorkOrderResponseDto> CreateAsync(CreateWorkOrderDto dto);
         Task<WorkOrderResponseDto?> UpdateAsync(int id, UpdateWorkOrderDto dto);
         Task<WorkOrderResponseDto> AssignMechanicsAsync(int id, AssignMechanicRequestDto dto);
@@ -16,7 +16,9 @@ namespace AutoFix.Services.Interfaces
         Task<WorkOrderResponseDto> TransitionStatusAsync(int id, string newStatus, string? notes = null);
         Task<WorkOrderPhotoResponseDto> AddPhotoAsync(int id, string fileName, byte[] photoBytes, string photoType, string? caption = null);
         Task<bool> DeleteAsync(int id);
-        Task<WorkOrderResponseDto> AddLineAsync(int id, CreateWorkOrderLineDto lineDto);
+        Task<WorkOrderResponseDto> AddLineAsync(int id, CreateWorkOrderLineDto lineDto, string? user = null);
+        Task<WorkOrderResponseDto> UpdateLineAsync(int id, int lineId, UpdateWorkOrderLineDto lineDto, string? user = null);
+        Task<WorkOrderResponseDto> DeleteLineAsync(int id, int lineId, string? user = null, string? revisionReason = null);
         Task<InvoiceResponseDto> ConvertToInvoiceAsync(int id, ConvertWorkOrderToInvoiceDto? options = null);
         Task<WorkOrderResponseDto> ClaimOrderAsync(int id, int mechanicId);
         Task<InvoiceResponseDto> CreditWorkOrderInvoiceAsync(int id, string? reason = null);

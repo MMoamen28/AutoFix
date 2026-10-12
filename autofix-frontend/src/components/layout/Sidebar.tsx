@@ -69,12 +69,13 @@ const Sidebar: React.FC = () => {
     },
     {
       title: t('sidebar.management'),
-      roles: ['Owner', 'Admin'],
+      roles: ['Owner', 'Admin', 'Receptionist', 'Reception'],
       items: [
         { to: '/', label: t('sidebar.workshopHub'), icon: LayoutDashboard, roles: ['Owner', 'Admin'] },
-        { to: '/work-orders', label: t('sidebar.workOrders'), icon: ClipboardList, roles: ['Admin', 'Owner'] },
-        { to: '/inspections', label: t('sidebar.carInspections'), icon: FileText, roles: ['Admin', 'Owner'] },
-        { to: '/customers', label: t('sidebar.customers'), icon: Users, roles: ['Admin', 'Owner'] },
+        { to: '/work-orders', label: t('sidebar.workOrders'), icon: ClipboardList, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
+        { to: '/services', label: t('sidebar.workmanshipPrices'), icon: Layers, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
+        { to: '/inspections', label: t('sidebar.carInspections'), icon: FileText, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
+        { to: '/customers', label: t('sidebar.customers'), icon: Users, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
         { to: '/mechanics', label: t('sidebar.mechanicsStaff'), icon: Wrench, roles: ['Admin', 'Owner'] },
         { to: '/backup-restore', label: t('sidebar.backupSafety'), icon: Database, roles: ['Admin', 'Owner'] },
       ]

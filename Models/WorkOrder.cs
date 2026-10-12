@@ -35,6 +35,7 @@ namespace AutoFix.Models
         
         public decimal TotalLabor { get; set; } = 0;
         public decimal TotalParts { get; set; } = 0;
+        public decimal TotalWorkmanship { get; set; } = 0;
         public decimal TotalAmount { get; set; } = 0;
 
         public DateTime ReceivedAt { get; set; } = DateTime.UtcNow;
@@ -58,9 +59,12 @@ namespace AutoFix.Models
         public int WorkOrderId { get; set; }
         public WorkOrder WorkOrder { get; set; } = null!;
 
-        // LineType: LaborMechanical, LaborBodywork, LaborPaint, LaborOils, LaborElectrical, LaborOutsourced, SparePart
+        // LineType: LaborMechanical, LaborBodywork, LaborPaint, LaborOils, LaborElectrical, LaborOutsourced, LaborManufacturer, SparePart
         public string LineType { get; set; } = "LaborMechanical";
         public string Description { get; set; } = string.Empty;
+
+        public int? ServiceId { get; set; }
+        public Service? Service { get; set; }
 
         public int? SparePartId { get; set; }
         public SparePart? SparePart { get; set; }

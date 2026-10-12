@@ -35,6 +35,7 @@ namespace AutoFix.DTOs.WorkOrder
         [Required]
         public string Description { get; set; } = string.Empty;
 
+        public int? ServiceId { get; set; }
         public int? SparePartId { get; set; }
         public bool IsExternalPart { get; set; } = false;
         public string? ExternalVendorName { get; set; }
@@ -43,6 +44,19 @@ namespace AutoFix.DTOs.WorkOrder
         public decimal UnitCost { get; set; } = 0;
         public decimal UnitPrice { get; set; } = 0;
         public int? TechnicianId { get; set; }
+        public string? RevisionReason { get; set; }
+    }
+
+    public class UpdateWorkOrderLineDto
+    {
+        public string? LineType { get; set; }
+        public string? Description { get; set; }
+        public int? ServiceId { get; set; }
+        public decimal? Quantity { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public decimal? UnitCost { get; set; }
+        public int? TechnicianId { get; set; }
+        public string? RevisionReason { get; set; }
     }
 
     public class UpdateWorkOrderDto
@@ -125,6 +139,7 @@ namespace AutoFix.DTOs.WorkOrder
 
         public decimal TotalLabor { get; set; }
         public decimal TotalParts { get; set; }
+        public decimal TotalWorkmanship { get; set; }
         public decimal TotalAmount { get; set; }
 
         public DateTime ReceivedAt { get; set; }
@@ -142,6 +157,8 @@ namespace AutoFix.DTOs.WorkOrder
         public int Id { get; set; }
         public string LineType { get; set; } = "LaborMechanical";
         public string Description { get; set; } = string.Empty;
+        public int? ServiceId { get; set; }
+        public string? ServiceName { get; set; }
         public int? SparePartId { get; set; }
         public string? SparePartName { get; set; }
         public bool IsExternalPart { get; set; }

@@ -48,13 +48,19 @@ namespace AutoFix.Services
                 .Include(w => w.HelperTechnician)
                 .Include(w => w.Lines).ThenInclude(l => l.SparePart)
                 .Include(w => w.Lines).ThenInclude(l => l.Technician)
+                .Include(w => w.Lines).ThenInclude(l => l.Service)
                 .Include(w => w.Photos)
                 .Include(w => w.MechanicHistories).ThenInclude(h => h.PreviousMechanic)
                 .Include(w => w.MechanicHistories).ThenInclude(h => h.NewMechanic);
         }
 
-        private WorkOrderResponseDto MapToDto(WorkOrder w)
+        private WorkOrderResponseDto MapToDto(WorkOrder w, bool isCustomer = false)
         {
+            var activeLines = w.Lines.Where(l => !l.IsDeleted).ToList();
+            var workmanshipTotal = w.TotalWorkmanship != 0 
+                ? w.TotalWorkmanship 
+                : activeLines.Where(l => l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase)).Sum(l => l.Quantity * l.UnitPrice);
+
             return new WorkOrderResponseDto
             {
                 Id = w.Id,
@@ -82,22 +88,25 @@ namespace AutoFix.Services
                 Status = w.Status,
                 TotalLabor = w.TotalLabor,
                 TotalParts = w.TotalParts,
+                TotalWorkmanship = workmanshipTotal,
                 TotalAmount = w.TotalAmount,
                 ReceivedAt = w.ReceivedAt,
                 ExpectedDeliveryAt = w.ExpectedDeliveryAt,
                 CompletedAt = w.CompletedAt,
                 DeliveredAt = w.DeliveredAt,
-                Lines = w.Lines.Where(l => !l.IsDeleted).Select(l => new WorkOrderLineResponseDto
+                Lines = activeLines.Select(l => new WorkOrderLineResponseDto
                 {
                     Id = l.Id,
                     LineType = l.LineType,
                     Description = l.Description,
+                    ServiceId = l.ServiceId,
+                    ServiceName = l.Service != null ? (string.IsNullOrEmpty(l.Service.NameArabic) ? l.Service.Name : $"{l.Service.Name} ({l.Service.NameArabic})") : null,
                     SparePartId = l.SparePartId,
                     SparePartName = l.SparePart?.Name,
                     IsExternalPart = l.IsExternalPart,
                     ExternalVendorName = l.ExternalVendorName,
                     Quantity = l.Quantity,
-                    UnitCost = l.UnitCost,
+                    UnitCost = isCustomer ? 0 : l.UnitCost,
                     UnitPrice = l.UnitPrice,
                     TechnicianId = l.TechnicianId,
                     TechnicianName = l.Technician != null ? $"{l.Technician.FirstName} {l.Technician.LastName}" : null
@@ -129,7 +138,7 @@ namespace AutoFix.Services
             };
         }
 
-        public async Task<List<WorkOrderResponseDto>> GetAllAsync(string? status = null, int? customerId = null, int? mechanicId = null)
+        public async Task<List<WorkOrderResponseDto>> GetAllAsync(string? status = null, int? customerId = null, int? mechanicId = null, bool isCustomer = false)
         {
             var query = BaseQuery().AsNoTracking();
 
@@ -152,13 +161,13 @@ namespace AutoFix.Services
             }
 
             var results = await query.OrderByDescending(w => w.ReceivedAt).ToListAsync();
-            return results.Select(MapToDto).ToList();
+            return results.Select(w => MapToDto(w, isCustomer)).ToList();
         }
 
-        public async Task<WorkOrderResponseDto?> GetByIdAsync(int id)
+        public async Task<WorkOrderResponseDto?> GetByIdAsync(int id, bool isCustomer = false)
         {
             var workOrder = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
-            return workOrder == null ? null : MapToDto(workOrder);
+            return workOrder == null ? null : MapToDto(workOrder, isCustomer);
         }
 
         public async Task<WorkOrderResponseDto> CreateAsync(CreateWorkOrderDto dto)
@@ -193,11 +202,17 @@ namespace AutoFix.Services
             // Calculate totals and add lines
             decimal totalLabor = 0;
             decimal totalParts = 0;
+            decimal totalWorkmanship = 0;
 
             foreach (var lineDto in dto.Lines)
             {
                 var subtotal = lineDto.Quantity * lineDto.UnitPrice;
-                if (lineDto.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                if (lineDto.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                {
+                    totalWorkmanship += subtotal;
+                    totalLabor += subtotal;
+                }
+                else if (lineDto.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
                 {
                     totalLabor += subtotal;
                 }
@@ -210,6 +225,7 @@ namespace AutoFix.Services
                 {
                     LineType = lineDto.LineType,
                     Description = lineDto.Description.Trim(),
+                    ServiceId = lineDto.ServiceId,
                     SparePartId = lineDto.SparePartId,
                     IsExternalPart = lineDto.IsExternalPart,
                     ExternalVendorName = lineDto.ExternalVendorName?.Trim(),
@@ -220,6 +236,7 @@ namespace AutoFix.Services
                 });
             }
 
+            workOrder.TotalWorkmanship = totalWorkmanship;
             workOrder.TotalLabor = totalLabor;
             workOrder.TotalParts = totalParts;
             workOrder.TotalAmount = totalLabor + totalParts;
@@ -336,11 +353,17 @@ namespace AutoFix.Services
 
                 decimal totalLabor = 0;
                 decimal totalParts = 0;
+                decimal totalWorkmanship = 0;
 
                 foreach (var lineDto in dto.Lines)
                 {
                     var subtotal = lineDto.Quantity * lineDto.UnitPrice;
-                    if (lineDto.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                    if (lineDto.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        totalWorkmanship += subtotal;
+                        totalLabor += subtotal;
+                    }
+                    else if (lineDto.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
                     {
                         totalLabor += subtotal;
                     }
@@ -353,6 +376,7 @@ namespace AutoFix.Services
                     {
                         LineType = lineDto.LineType,
                         Description = lineDto.Description.Trim(),
+                        ServiceId = lineDto.ServiceId,
                         SparePartId = lineDto.SparePartId,
                         IsExternalPart = lineDto.IsExternalPart,
                         ExternalVendorName = lineDto.ExternalVendorName?.Trim(),
@@ -363,6 +387,7 @@ namespace AutoFix.Services
                     });
                 }
 
+                workOrder.TotalWorkmanship = totalWorkmanship;
                 workOrder.TotalLabor = totalLabor;
                 workOrder.TotalParts = totalParts;
                 workOrder.TotalAmount = totalLabor + totalParts;
@@ -450,7 +475,7 @@ namespace AutoFix.Services
             }).ToList();
         }
 
-        public async Task<WorkOrderResponseDto> AddLineAsync(int id, CreateWorkOrderLineDto lineDto)
+        public async Task<WorkOrderResponseDto> AddLineAsync(int id, CreateWorkOrderLineDto lineDto, string? user = null)
         {
             var workOrder = await _db.WorkOrders
                 .Include(w => w.Lines)
@@ -458,16 +483,26 @@ namespace AutoFix.Services
 
             if (workOrder == null) throw new KeyNotFoundException($"WorkOrder {id} not found.");
 
-            if (workOrder.Status == "Invoiced" || workOrder.Status == "Delivered")
+            if (workOrder.Status == "Invoiced")
+            {
+                if (string.IsNullOrWhiteSpace(lineDto.RevisionReason))
+                {
+                    throw new InvalidOperationException($"Cannot add items to WorkOrder {workOrder.OrderNumber} after invoice issuance without an authorized revision reason or credit note.");
+                }
+            }
+            else if (workOrder.Status == "Delivered")
             {
                 throw new InvalidOperationException($"Cannot add items to WorkOrder {workOrder.OrderNumber} in status '{workOrder.Status}'.");
             }
 
+            var lineType = string.IsNullOrWhiteSpace(lineDto.LineType) ? "LaborManufacturer" : lineDto.LineType;
+
             var line = new WorkOrderLine
             {
                 WorkOrderId = workOrder.Id,
-                LineType = lineDto.LineType,
+                LineType = lineType,
                 Description = lineDto.Description.Trim(),
+                ServiceId = lineDto.ServiceId,
                 SparePartId = lineDto.SparePartId,
                 IsExternalPart = lineDto.IsExternalPart,
                 ExternalVendorName = lineDto.ExternalVendorName?.Trim(),
@@ -481,6 +516,9 @@ namespace AutoFix.Services
 
             // Recompute totals
             var activeLines = workOrder.Lines.Where(l => !l.IsDeleted).ToList();
+            workOrder.TotalWorkmanship = activeLines
+                .Where(l => l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                .Sum(l => l.Quantity * l.UnitPrice);
             workOrder.TotalLabor = activeLines
                 .Where(l => l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
                 .Sum(l => l.Quantity * l.UnitPrice);
@@ -488,6 +526,141 @@ namespace AutoFix.Services
                 .Where(l => !l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
                 .Sum(l => l.Quantity * l.UnitPrice);
             workOrder.TotalAmount = workOrder.TotalLabor + workOrder.TotalParts;
+
+            // Audit log
+            _db.AuditLogs.Add(new AuditLog
+            {
+                Action = lineType == "LaborManufacturer" ? "WorkmanshipLineAdded" : "WorkOrderLineAdded",
+                EntityName = "WorkOrderLine",
+                EntityId = workOrder.OrderNumber,
+                UserName = user ?? "Staff",
+                OldValues = null,
+                NewValues = $"LineType: {line.LineType}, Desc: {line.Description}, Qty: {line.Quantity}, Price: {line.UnitPrice:N2}, Cost: {line.UnitCost:N2}",
+                Details = $"User '{user ?? "Staff"}' added {line.LineType} line '{line.Description}' (Qty: {line.Quantity}, Price: {line.UnitPrice:N2} L.E, Cost: {line.UnitCost:N2} L.E) to WO {workOrder.OrderNumber}. Revision Reason: {lineDto.RevisionReason ?? "Standard add"}",
+                Timestamp = DateTime.UtcNow
+            });
+
+            await _db.SaveChangesAsync();
+            return (await GetByIdAsync(workOrder.Id))!;
+        }
+
+        public async Task<WorkOrderResponseDto> UpdateLineAsync(int id, int lineId, UpdateWorkOrderLineDto lineDto, string? user = null)
+        {
+            var workOrder = await _db.WorkOrders
+                .Include(w => w.Lines)
+                .FirstOrDefaultAsync(w => w.Id == id);
+
+            if (workOrder == null) throw new KeyNotFoundException($"WorkOrder {id} not found.");
+
+            var line = workOrder.Lines.FirstOrDefault(l => l.Id == lineId && !l.IsDeleted);
+            if (line == null) throw new KeyNotFoundException($"Line {lineId} not found on WorkOrder {id}.");
+
+            if (workOrder.Status == "Invoiced")
+            {
+                if (string.IsNullOrWhiteSpace(lineDto.RevisionReason))
+                {
+                    throw new InvalidOperationException($"Cannot modify items on WorkOrder {workOrder.OrderNumber} after invoice issuance without an authorized revision reason or credit note.");
+                }
+            }
+            else if (workOrder.Status == "Delivered")
+            {
+                throw new InvalidOperationException($"Cannot modify items on WorkOrder {workOrder.OrderNumber} in status '{workOrder.Status}'.");
+            }
+
+            var oldValues = $"Desc: {line.Description}, LineType: {line.LineType}, Qty: {line.Quantity}, Price: {line.UnitPrice:N2}, Cost: {line.UnitCost:N2}";
+
+            if (!string.IsNullOrWhiteSpace(lineDto.LineType)) line.LineType = lineDto.LineType;
+            if (!string.IsNullOrWhiteSpace(lineDto.Description)) line.Description = lineDto.Description.Trim();
+            if (lineDto.ServiceId.HasValue) line.ServiceId = lineDto.ServiceId.Value;
+            if (lineDto.Quantity.HasValue && lineDto.Quantity.Value > 0) line.Quantity = lineDto.Quantity.Value;
+            if (lineDto.UnitPrice.HasValue) line.UnitPrice = lineDto.UnitPrice.Value;
+            if (lineDto.UnitCost.HasValue) line.UnitCost = lineDto.UnitCost.Value;
+            if (lineDto.TechnicianId.HasValue) line.TechnicianId = lineDto.TechnicianId.Value;
+
+            var newValues = $"Desc: {line.Description}, LineType: {line.LineType}, Qty: {line.Quantity}, Price: {line.UnitPrice:N2}, Cost: {line.UnitCost:N2}";
+
+            // Recompute totals
+            var activeLines = workOrder.Lines.Where(l => !l.IsDeleted).ToList();
+            workOrder.TotalWorkmanship = activeLines
+                .Where(l => l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                .Sum(l => l.Quantity * l.UnitPrice);
+            workOrder.TotalLabor = activeLines
+                .Where(l => l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                .Sum(l => l.Quantity * l.UnitPrice);
+            workOrder.TotalParts = activeLines
+                .Where(l => !l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                .Sum(l => l.Quantity * l.UnitPrice);
+            workOrder.TotalAmount = workOrder.TotalLabor + workOrder.TotalParts;
+
+            // Audit log
+            _db.AuditLogs.Add(new AuditLog
+            {
+                Action = line.LineType == "LaborManufacturer" ? "WorkmanshipLineUpdated" : "WorkOrderLineUpdated",
+                EntityName = "WorkOrderLine",
+                EntityId = line.Id.ToString(),
+                UserName = user ?? "Staff",
+                OldValues = oldValues,
+                NewValues = newValues,
+                Details = $"User '{user ?? "Staff"}' updated line #{line.Id} on WO {workOrder.OrderNumber}. Old: [{oldValues}] -> New: [{newValues}]. Revision Reason: {lineDto.RevisionReason ?? "Standard edit"}",
+                Timestamp = DateTime.UtcNow
+            });
+
+            await _db.SaveChangesAsync();
+            return (await GetByIdAsync(workOrder.Id))!;
+        }
+
+        public async Task<WorkOrderResponseDto> DeleteLineAsync(int id, int lineId, string? user = null, string? revisionReason = null)
+        {
+            var workOrder = await _db.WorkOrders
+                .Include(w => w.Lines)
+                .FirstOrDefaultAsync(w => w.Id == id);
+
+            if (workOrder == null) throw new KeyNotFoundException($"WorkOrder {id} not found.");
+
+            var line = workOrder.Lines.FirstOrDefault(l => l.Id == lineId && !l.IsDeleted);
+            if (line == null) throw new KeyNotFoundException($"Line {lineId} not found on WorkOrder {id}.");
+
+            if (workOrder.Status == "Invoiced")
+            {
+                if (string.IsNullOrWhiteSpace(revisionReason))
+                {
+                    throw new InvalidOperationException($"Cannot remove items from WorkOrder {workOrder.OrderNumber} after invoice issuance without an authorized revision reason or credit note.");
+                }
+            }
+            else if (workOrder.Status == "Delivered")
+            {
+                throw new InvalidOperationException($"Cannot remove items from WorkOrder {workOrder.OrderNumber} in status '{workOrder.Status}'.");
+            }
+
+            line.IsDeleted = true;
+            line.DeletedAt = DateTime.UtcNow;
+            line.DeletedBy = user ?? "Staff";
+
+            // Recompute totals
+            var activeLines = workOrder.Lines.Where(l => !l.IsDeleted).ToList();
+            workOrder.TotalWorkmanship = activeLines
+                .Where(l => l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                .Sum(l => l.Quantity * l.UnitPrice);
+            workOrder.TotalLabor = activeLines
+                .Where(l => l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                .Sum(l => l.Quantity * l.UnitPrice);
+            workOrder.TotalParts = activeLines
+                .Where(l => !l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                .Sum(l => l.Quantity * l.UnitPrice);
+            workOrder.TotalAmount = workOrder.TotalLabor + workOrder.TotalParts;
+
+            // Audit log
+            _db.AuditLogs.Add(new AuditLog
+            {
+                Action = line.LineType == "LaborManufacturer" ? "WorkmanshipLineRemoved" : "WorkOrderLineRemoved",
+                EntityName = "WorkOrderLine",
+                EntityId = line.Id.ToString(),
+                UserName = user ?? "Staff",
+                OldValues = $"Desc: {line.Description}, LineType: {line.LineType}, Qty: {line.Quantity}, Price: {line.UnitPrice:N2}",
+                NewValues = "Deleted",
+                Details = $"User '{user ?? "Staff"}' removed line #{line.Id} ('{line.Description}', Price: {line.UnitPrice:N2} L.E) from WO {workOrder.OrderNumber}. Revision Reason: {revisionReason ?? "Standard remove"}",
+                Timestamp = DateTime.UtcNow
+            });
 
             await _db.SaveChangesAsync();
             return (await GetByIdAsync(workOrder.Id))!;
@@ -728,7 +901,7 @@ namespace AutoFix.Services
                 Action = "ConvertToInvoice",
                 EntityName = "Invoice",
                 EntityId = nextInvNum,
-                Details = $"WorkOrder {workOrder.OrderNumber} converted to Invoice {nextInvNum} (Subtotal: {subtotal}, Discount: {discount}, VAT: {vatAmount}, Total: {totalAmount:F2} EGP).",
+                Details = $"WorkOrder {workOrder.OrderNumber} converted to Invoice {nextInvNum} (Subtotal: {subtotal:N2}, Discount: {discount:N2}, VAT: {vatAmount:N2}, Total: {totalAmount:N2} L.E).",
                 Timestamp = DateTime.UtcNow
             });
 
@@ -764,14 +937,65 @@ namespace AutoFix.Services
                 ? $"{workOrder.HelperTechnician.FirstName} {workOrder.HelperTechnician.LastName}"
                 : "None";
 
-            var linesHtml = string.Join("", workOrder.Lines.Where(l => !l.IsDeleted).Select((l, idx) => $@"
-                <tr>
-                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
-                    <td style='padding: 8px; border: 1px solid #ddd;'><strong>{l.LineType}</strong><br/>{l.Description}</td>
-                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{l.Quantity:F1}</td>
-                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'>{l.UnitPrice:F2} EGP</td>
-                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'>{(l.Quantity * l.UnitPrice):F2} EGP</td>
-                </tr>"));
+            var activeLines = workOrder.Lines.Where(l => !l.IsDeleted).ToList();
+            var workmanshipLines = activeLines.Where(l => l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase)).ToList();
+            var partsLines = activeLines.Where(l => !l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase)).ToList();
+            var otherLaborLines = activeLines.Where(l => l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase) && !l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var workmanshipSubtotal = workmanshipLines.Sum(l => l.Quantity * l.UnitPrice);
+            var partsSubtotal = partsLines.Sum(l => l.Quantity * l.UnitPrice);
+            var otherLaborSubtotal = otherLaborLines.Sum(l => l.Quantity * l.UnitPrice);
+
+            var workmanshipRows = workmanshipLines.Count == 0
+                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد بنود مصنعية</td></tr>"
+                : string.Join("", workmanshipLines.Select((l, idx) => $@"
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
+                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Description}</strong></td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Quantity:F1}</span></td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.UnitPrice:N2}</span> ج.م</td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{(l.Quantity * l.UnitPrice):N2}</span> ج.م</td>
+                    </tr>"));
+
+            var partsRows = partsLines.Count == 0
+                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد قطع غيار</td></tr>"
+                : string.Join("", partsLines.Select((l, idx) => $@"
+                    <tr>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
+                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Description}</strong>{(l.IsExternalPart && !string.IsNullOrEmpty(l.ExternalVendorName) ? $" <small>({l.ExternalVendorName})</small>" : "")}</td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Quantity:F1}</span></td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.UnitPrice:N2}</span> ج.م</td>
+                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{(l.Quantity * l.UnitPrice):N2}</span> ج.م</td>
+                    </tr>"));
+
+            var otherLaborSection = otherLaborLines.Count > 0 ? $@"
+                <div class='card' style='margin-bottom: 15px;'>
+                    <h4>خدمات وعمالة أخرى (Other Labor / Services)</h4>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style='width: 30px; text-align: center;'>#</th>
+                                <th>البيان / الخدمة</th>
+                                <th style='width: 70px; text-align: center;'>الكمية</th>
+                                <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
+                                <th style='width: 110px; text-align: right;'>الإجمالي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {string.Join("", otherLaborLines.Select((l, idx) => $@"
+                                <tr>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
+                                    <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.LineType}</strong>: {l.Description}</td>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Quantity:F1}</span></td>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.UnitPrice:N2}</span> ج.م</td>
+                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{(l.Quantity * l.UnitPrice):N2}</span> ج.م</td>
+                                </tr>"))}
+                        </tbody>
+                    </table>
+                    <div style='text-align: left; margin-top: 6px; font-weight: bold;'>
+                        إجمالي الخدمات الأخرى: <span dir='ltr'>{otherLaborSubtotal:N2}</span> ج.م
+                    </div>
+                </div>" : "";
 
             return $@"
 <!DOCTYPE html>
@@ -785,12 +1009,12 @@ namespace AutoFix.Services
         .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 15px; }}
         .badge {{ display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; background: #e0f2fe; color: #0369a1; }}
         .section-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }}
-        .card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }}
-        .card h4 {{ margin: 0 0 8px 0; color: #1e293b; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 14px; }}
+        .card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 15px; }}
+        .card h4 {{ margin: 0 0 8px 0; color: #1e293b; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 14px; display: flex; justify-content: space-between; }}
         table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
         th {{ background: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; text-align: right; }}
         .totals {{ margin-top: 15px; text-align: left; }}
-        .totals-box {{ display: inline-block; min-width: 250px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; }}
+        .totals-box {{ display: inline-block; min-width: 280px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; }}
         .totals-row {{ display: flex; justify-content: space-between; padding: 4px 0; }}
         .grand-total {{ font-size: 16px; font-weight: bold; color: #2563eb; border-top: 2px solid #2563eb; margin-top: 6px; padding-top: 6px; }}
         .signatures {{ display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }}
@@ -811,22 +1035,22 @@ namespace AutoFix.Services
     </div>
 
     <div class='section-grid'>
-        <div class='card'>
+        <div class='card' style='margin-bottom: 0;'>
             <h4>بيانات العميل (Customer Details)</h4>
-            <div><strong>الاسم:</strong> {workOrder.Customer?.FullName}</div>
-            <div><strong>الهاتف:</strong> {workOrder.Customer?.Phone}</div>
-            <div><strong>شكوى العميل:</strong> {workOrder.CustomerComplaint}</div>
+            <div><strong>الاسم:</strong> <span dir='auto'>{workOrder.Customer?.FullName}</span></div>
+            <div><strong>الهاتف:</strong> <span dir='ltr'>{workOrder.Customer?.Phone}</span></div>
+            <div><strong>شكوى العميل:</strong> <span dir='auto'>{workOrder.CustomerComplaint}</span></div>
         </div>
-        <div class='card'>
+        <div class='card' style='margin-bottom: 0;'>
             <h4>بيانات السيارة (Vehicle Details)</h4>
-            <div><strong>السيارة:</strong> {workOrder.Car?.Make} {workOrder.Car?.Model} ({workOrder.Car?.Year})</div>
-            <div><strong>رقم اللوحة:</strong> {workOrder.Car?.LicensePlate}</div>
-            <div><strong>رقم الشاسية / VIN:</strong> {workOrder.Car?.VIN}</div>
-            <div><strong>قراءة العداد:</strong> {workOrder.OdometerInKm} كم</div>
+            <div><strong>السيارة:</strong> <span dir='auto'>{workOrder.Car?.Make} {workOrder.Car?.Model} ({workOrder.Car?.Year})</span></div>
+            <div><strong>رقم اللوحة:</strong> <span dir='auto'>{workOrder.Car?.LicensePlate}</span></div>
+            <div><strong>رقم الشاسية / VIN:</strong> <span dir='ltr'>{workOrder.Car?.VIN}</span></div>
+            <div><strong>قراءة العداد:</strong> <span dir='ltr'>{workOrder.OdometerInKm} كم</span></div>
         </div>
     </div>
 
-    <div class='card' style='margin-bottom: 15px;'>
+    <div class='card' style='margin-top: 15px;'>
         <h4>الفنيون المسؤولون عن أمر الشغل (Assigned Technicians)</h4>
         <div style='display: flex; justify-content: space-between;'>
             <div><strong>الفني الرئيسي (Main Mechanic):</strong> <span style='color: #2563eb; font-weight: bold;'>{mainTech}</span></div>
@@ -834,29 +1058,58 @@ namespace AutoFix.Services
         </div>
     </div>
 
+    <!-- 1. Dedicated Workmanship Section (مصنعية) -->
     <div class='card'>
-        <h4>بنود العمل وقطع الغيار (Services & Spare Parts)</h4>
+        <h4>
+            <span>مصنعية (Workmanship)</span>
+            <span style='color: #2563eb;'>إجمالي المصنعية: <span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span>
+        </h4>
         <table>
             <thead>
                 <tr>
                     <th style='width: 30px; text-align: center;'>#</th>
-                    <th>البيان / الوصف</th>
+                    <th>بند المصنعية / الخدمة (Workmanship Service)</th>
                     <th style='width: 70px; text-align: center;'>الكمية</th>
                     <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
                     <th style='width: 110px; text-align: right;'>الإجمالي</th>
                 </tr>
             </thead>
             <tbody>
-                {linesHtml}
+                {workmanshipRows}
             </tbody>
         </table>
+    </div>
 
-        <div class='totals'>
-            <div class='totals-box'>
-                <div class='totals-row'><span>إجمالي المصنعيات:</span><span>{workOrder.TotalLabor:F2} EGP</span></div>
-                <div class='totals-row'><span>إجمالي قطع الغيار:</span><span>{workOrder.TotalParts:F2} EGP</span></div>
-                <div class='totals-row grand-total'><span>المجموع الكلي:</span><span>{workOrder.TotalAmount:F2} EGP</span></div>
-            </div>
+    <!-- 2. Dedicated Parts Section (قطع الغيار) -->
+    <div class='card'>
+        <h4>
+            <span>قطع الغيار (Spare Parts)</span>
+            <span style='color: #0284c7;'>إجمالي قطع الغيار: <span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span>
+        </h4>
+        <table>
+            <thead>
+                <tr>
+                    <th style='width: 30px; text-align: center;'>#</th>
+                    <th>قطعة الغيار / الصنف (Part Description)</th>
+                    <th style='width: 70px; text-align: center;'>الكمية</th>
+                    <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
+                    <th style='width: 110px; text-align: right;'>الإجمالي</th>
+                </tr>
+            </thead>
+            <tbody>
+                {partsRows}
+            </tbody>
+        </table>
+    </div>
+
+    {otherLaborSection}
+
+    <div class='totals'>
+        <div class='totals-box'>
+            <div class='totals-row'><span>إجمالي المصنعية:</span><span><span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span></div>
+            <div class='totals-row'><span>إجمالي قطع الغيار:</span><span><span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span></div>
+            {(otherLaborSubtotal > 0 ? $"<div class='totals-row'><span>خدمات أخرى:</span><span><span dir='ltr'>{otherLaborSubtotal:N2}</span> ج.م</span></div>" : "")}
+            <div class='totals-row grand-total'><span>المجموع الكلي:</span><span><span dir='ltr'>{workOrder.TotalAmount:N2}</span> ج.م</span></div>
         </div>
     </div>
 
@@ -869,8 +1122,60 @@ namespace AutoFix.Services
 </html>";
         }
 
-        private static InvoiceResponseDto MapInvoiceToDto(Invoice i)
+        private static InvoiceResponseDto MapInvoiceToDto(Invoice i, bool isCustomer = false)
         {
+            decimal totalWorkmanship = 0;
+            decimal totalLabor = 0;
+            decimal totalParts = 0;
+            var snapshotJson = i.SnapshotDetailsJson;
+
+            if (!string.IsNullOrEmpty(i.SnapshotDetailsJson) && i.SnapshotDetailsJson != "[]")
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(i.SnapshotDetailsJson);
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        var lineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() ?? "" : "";
+                        var subtotal = el.TryGetProperty("Subtotal", out var sub) ? sub.GetDecimal() : 0m;
+                        if (lineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                        {
+                            totalWorkmanship += subtotal;
+                            totalLabor += subtotal;
+                        }
+                        else if (lineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                        {
+                            totalLabor += subtotal;
+                        }
+                        else
+                        {
+                            totalParts += subtotal;
+                        }
+                    }
+
+                    if (isCustomer)
+                    {
+                        var sanitized = doc.RootElement.EnumerateArray().Select(el => new
+                        {
+                            Description = el.TryGetProperty("Description", out var d) ? d.GetString() : "",
+                            LineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() : "",
+                            Quantity = el.TryGetProperty("Quantity", out var q) ? q.GetDecimal() : 1m,
+                            UnitPrice = el.TryGetProperty("UnitPrice", out var up) ? up.GetDecimal() : 0m,
+                            Subtotal = el.TryGetProperty("Subtotal", out var sub) ? sub.GetDecimal() : 0m,
+                            Technician = el.TryGetProperty("Technician", out var tech) ? tech.GetString() : null
+                        }).ToList();
+                        snapshotJson = System.Text.Json.JsonSerializer.Serialize(sanitized);
+                    }
+                }
+                catch { }
+            }
+            else if (i.WorkOrder != null)
+            {
+                totalWorkmanship = i.WorkOrder.TotalWorkmanship;
+                totalLabor = i.WorkOrder.TotalLabor;
+                totalParts = i.WorkOrder.TotalParts;
+            }
+
             return new InvoiceResponseDto
             {
                 Id = i.Id,
@@ -884,6 +1189,9 @@ namespace AutoFix.Services
                 CarPlate = i.Car?.LicensePlate ?? string.Empty,
                 CarMakeModel = i.Car != null ? $"{i.Car.Make} {i.Car.Model}" : string.Empty,
                 Subtotal = i.Subtotal,
+                TotalWorkmanship = totalWorkmanship,
+                TotalLabor = totalLabor,
+                TotalParts = totalParts,
                 DiscountAmount = i.DiscountAmount,
                 VatPercentage = i.VatPercentage,
                 VatAmount = i.VatAmount,
@@ -895,7 +1203,7 @@ namespace AutoFix.Services
                 IssuedAt = i.IssuedAt,
                 DueDate = i.DueDate,
                 Notes = i.Notes,
-                SnapshotDetailsJson = i.SnapshotDetailsJson,
+                SnapshotDetailsJson = snapshotJson,
                 Payments = i.Payments.Where(p => !p.IsDeleted).Select(p => new PaymentResponseDto
                 {
                     Id = p.Id,
@@ -1058,7 +1366,7 @@ namespace AutoFix.Services
                 Action = "IssueCreditNote",
                 EntityName = "Invoice",
                 EntityId = invoice.InvoiceNumber,
-                Details = $"Credit Note {creditNoteNumber} issued for WorkOrder {workOrder.OrderNumber} (Invoice: {invoice.InvoiceNumber}, Total: {invoice.TotalAmount:F2} EGP). Paid amount of {previousPaidAmount:F2} EGP was refunded to customer and logged in Treasury. Stock restored. Reason: {reason ?? "N/A"}",
+                Details = $"Credit Note {creditNoteNumber} issued for WorkOrder {workOrder.OrderNumber} (Invoice: {invoice.InvoiceNumber}, Total: {invoice.TotalAmount:F2} L.E). Paid amount of {previousPaidAmount:F2} L.E was refunded to customer and logged in Treasury. Stock restored. Reason: {reason ?? "N/A"}",
                 Timestamp = DateTime.UtcNow
             });
 

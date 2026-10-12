@@ -16,6 +16,8 @@ import Button from '../components/shared/Button';
 import Badge from '../components/shared/Badge';
 import Skeleton from '../components/shared/Skeleton';
 import signalRService from '../services/signalRService';
+import Money from '../components/shared/Money';
+import { formatCurrency } from '../i18n/formatters';
 
 const OwnerDashboard: React.FC = () => {
   const { showToast } = useToast();
@@ -138,7 +140,7 @@ const OwnerDashboard: React.FC = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
         <StatCard 
           label="Total Revenue" 
-          value={`$${stats.revenue.toLocaleString()}`} 
+          value={formatCurrency(stats.revenue)} 
           icon={<DollarSign size={24} />} 
           color="var(--success)"
           trend={{ value: '+12%', isPositive: true }}
@@ -290,7 +292,7 @@ const OwnerDashboard: React.FC = () => {
                           fontWeight: 800, 
                           color: 'var(--success)' 
                         }}>
-                          ${(r.totalCost ?? r.totalAmount ?? 0).toFixed(2)}
+                          <Money value={r.totalCost ?? r.totalAmount ?? 0} />
                         </span>
                       </td>
                       <td style={tdStyle}>

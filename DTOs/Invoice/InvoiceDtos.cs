@@ -48,6 +48,9 @@ namespace AutoFix.DTOs.Invoice
         public string CarMakeModel { get; set; } = string.Empty;
 
         public decimal Subtotal { get; set; }
+        public decimal TotalWorkmanship { get; set; }
+        public decimal TotalLabor { get; set; }
+        public decimal TotalParts { get; set; }
         public decimal DiscountAmount { get; set; }
         public decimal VatPercentage { get; set; }
         public decimal VatAmount { get; set; }

@@ -5,6 +5,7 @@ import {
   CheckCircle, Clock, FileText, ArrowRight, TrendingUp, RefreshCw 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import Money from '../../components/shared/Money';
 
 const AdminDashboardPage: React.FC = () => {
   const [data, setData] = useState<AdminDashboardData | null>(null);
@@ -89,10 +90,10 @@ const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
           <div style={{ fontSize: '30px', fontWeight: 800, marginTop: '8px', color: '#10b981' }}>
-            {data.todayRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: '14px' }}>EGP</span>
+            <Money value={data.todayRevenue} />
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Month: {data.monthRevenue.toLocaleString()} EGP
+            Month: <Money value={data.monthRevenue} />
           </div>
         </div>
 
@@ -105,7 +106,7 @@ const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
           <div style={{ fontSize: '30px', fontWeight: 800, marginTop: '8px', color: '#f59e0b' }}>
-            {data.outstandingReceivables.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: '14px' }}>EGP</span>
+            <Money value={data.outstandingReceivables} />
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>Pending Customer Payments</div>
         </div>
@@ -181,7 +182,7 @@ const AdminDashboardPage: React.FC = () => {
                       {wo.status}
                     </span>
                     <div style={{ fontSize: '12px', fontWeight: 700, marginTop: '4px' }}>
-                      {wo.totalAmount.toLocaleString()} EGP
+                      <Money value={wo.totalAmount} />
                     </div>
                   </div>
                 </div>

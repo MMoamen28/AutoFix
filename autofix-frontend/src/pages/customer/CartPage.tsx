@@ -8,6 +8,7 @@ import { CartItem } from '../../types';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
 import { toast } from 'react-hot-toast';
 import { Link } from 'react-router-dom';
+import Money from '../../components/shared/Money';
 
 const CartPage: React.FC = () => {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -247,7 +248,7 @@ const CartPage: React.FC = () => {
                     fontSize: '13px', 
                     color: 'var(--text-muted)' 
                   }}>
-                    ${item.unitPrice.toFixed(2)} per unit
+                    <Money value={item.unitPrice} /> per unit
                   </p>
                 </div>
 
@@ -310,7 +311,7 @@ const CartPage: React.FC = () => {
                     fontWeight: 800, 
                     color: 'var(--success)' 
                   }}>
-                    ${item.subtotal.toFixed(2)}
+                    <Money value={item.subtotal} />
                   </p>
                 </div>
 
@@ -366,7 +367,7 @@ const CartPage: React.FC = () => {
                 <span style={{ 
                   color: 'white', fontWeight: 700 
                 }}>
-                  ${total.toFixed(2)}
+                  <Money value={total} />
                 </span>
               </div>
               <div style={{ 
@@ -379,7 +380,7 @@ const CartPage: React.FC = () => {
                 <span style={{ 
                   color: 'white', fontWeight: 700 
                 }}>
-                  $0.00
+                  <Money value={0} />
                 </span>
               </div>
               <div style={{ 
@@ -401,7 +402,7 @@ const CartPage: React.FC = () => {
                   fontWeight: 800, 
                   color: 'var(--success)' 
                 }}>
-                  ${total.toFixed(2)}
+                  <Money value={total} />
                 </span>
               </div>
             </div>
