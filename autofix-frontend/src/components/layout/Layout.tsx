@@ -5,30 +5,38 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import ForceChangePasswordModal from '../auth/ForceChangePasswordModal';
 import { Database, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { UnsavedChangesProvider } from '../../context/UnsavedChangesContext';
+import { useTranslation } from 'react-i18next';
 
 const Layout: React.FC = () => {
   const location = useLocation();
   const { isAuthenticated, mustChangePassword, dataDirectory, isFallbackDirectory } = useAuth();
+  const { t } = useTranslation();
   
   // Public pages don't get the sidebar/topbar
   const isPublicPage = location.pathname === '/login' || location.pathname === '/register';
 
   if (isPublicPage) {
-    return <main style={{ minHeight: '100vh', width: '100%', minWidth: 0 }}><Outlet /></main>;
+    return (
+      <UnsavedChangesProvider>
+        <main style={{ minHeight: '100vh', width: '100%', minWidth: 0 }}><Outlet /></main>
+      </UnsavedChangesProvider>
+    );
   }
 
   return (
-    <div style={wrapperStyle}>
+    <UnsavedChangesProvider>
+      <div className="app-wrapper">
       {/* Condition 2: Block entire application if default admin password change is required */}
       {isAuthenticated && mustChangePassword && <ForceChangePasswordModal />}
 
       {/* Sidebar Area */}
-      <div style={sidebarAreaStyle}>
+      <div className="app-sidebar-area">
         <Sidebar />
       </div>
 
       {/* Main Area */}
-      <div style={mainAreaStyle}>
+      <div className="app-main-area">
         <div style={topbarAreaStyle}>
           <Topbar />
         </div>
@@ -50,7 +58,7 @@ const Layout: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Database size={14} color={isFallbackDirectory ? '#f59e0b' : '#10b981'} />
             <span>
-              Storage: <strong style={{ color: isFallbackDirectory ? '#f59e0b' : '#e2e8f0' }}>{dataDirectory}</strong>
+              {t('topbar.storage')}: <strong style={{ color: isFallbackDirectory ? '#f59e0b' : '#e2e8f0' }}>{dataDirectory}</strong>
             </span>
             {isFallbackDirectory && (
               <span style={{
@@ -63,19 +71,20 @@ const Layout: React.FC = () => {
                 alignItems: 'center',
                 gap: '4px'
               }}>
-                <AlertTriangle size={12} /> Local AppData Fallback
+                <AlertTriangle size={12} /> {t('topbar.fallbackActive')}
               </span>
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
-              <ShieldCheck size={14} /> SQLite WAL Protected
+              <ShieldCheck size={14} /> {t('topbar.systemHealthy')}
             </span>
-            <span>AutoFix Workshop v2.0 &copy; 2026</span>
+            <span>{t('common.appName')} Workshop &copy; 2026</span>
           </div>
         </footer>
       </div>
     </div>
+    </UnsavedChangesProvider>
   );
 };
 

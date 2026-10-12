@@ -47,6 +47,9 @@ namespace AutoFix.Data
         public DbSet<EmployeeAdvance> EmployeeAdvances => Set<EmployeeAdvance>();
         public DbSet<EmployeeCustody> EmployeeCustodies => Set<EmployeeCustody>();
         public DbSet<CarInspection> CarInspections => Set<CarInspection>();
+        public DbSet<CarOdometerLog> CarOdometerLogs => Set<CarOdometerLog>();
+        public DbSet<WorkOrderMechanicHistory> WorkOrderMechanicHistories => Set<WorkOrderMechanicHistory>();
+        public DbSet<FormDraft> FormDrafts => Set<FormDraft>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -71,6 +74,12 @@ namespace AutoFix.Data
                 .HasForeignKey(c => c.CustomerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<CarOdometerLog>()
+                .HasOne(ol => ol.Car)
+                .WithMany(c => c.OdometerLogs)
+                .HasForeignKey(ol => ol.CarId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // 4. One-to-many: Customer → RepairOrders
             modelBuilder.Entity<RepairOrder>()
                 .HasOne(ro => ro.Customer)
@@ -90,6 +99,30 @@ namespace AutoFix.Data
                 .HasOne(ro => ro.Mechanic)
                 .WithMany(m => m.RepairOrders)
                 .HasForeignKey(ro => ro.MechanicId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<WorkOrder>()
+                .HasOne(w => w.HelperTechnician)
+                .WithMany()
+                .HasForeignKey(w => w.HelperTechnicianId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<WorkOrderMechanicHistory>()
+                .HasOne(h => h.WorkOrder)
+                .WithMany(w => w.MechanicHistories)
+                .HasForeignKey(h => h.WorkOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<WorkOrderMechanicHistory>()
+                .HasOne(h => h.PreviousMechanic)
+                .WithMany()
+                .HasForeignKey(h => h.PreviousMechanicId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<WorkOrderMechanicHistory>()
+                .HasOne(h => h.NewMechanic)
+                .WithMany()
+                .HasForeignKey(h => h.NewMechanicId)
                 .OnDelete(DeleteBehavior.SetNull);
 
             // 7. Many-to-many: RepairOrder ↔ Service
@@ -152,6 +185,11 @@ namespace AutoFix.Data
                 .HasIndex(u => u.Username)
                 .IsUnique();
 
+            // 12. FormDraft unique per user and form
+            modelBuilder.Entity<FormDraft>()
+                .HasIndex(d => new { d.UserId, d.FormKey })
+                .IsUnique();
+
             // 12. Global Query Filter for Universal Soft Delete
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())
             {
@@ -200,6 +238,7 @@ namespace AutoFix.Data
             modelBuilder.Entity<InsuranceCompany>().Property(ic => ic.TotalPaid).HasPrecision(18, 2);
             modelBuilder.Entity<EmployeeAdvance>().Property(ea => ea.Amount).HasPrecision(18, 2);
             modelBuilder.Entity<CarInspection>().Property(ci => ci.OverallScore).HasPrecision(18, 2);
+            modelBuilder.Entity<CarInspection>().Property(ci => ci.InvoiceAmount).HasPrecision(18, 2);
         }
 
         public override int SaveChanges()

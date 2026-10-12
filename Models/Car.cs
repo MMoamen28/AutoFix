@@ -24,6 +24,7 @@ namespace AutoFix.Models
         public Customer Customer { get; set; } = null!;
         public ICollection<RepairOrder> RepairOrders { get; set; } = new List<RepairOrder>();
         public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
+        public ICollection<CarOdometerLog> OdometerLogs { get; set; } = new List<CarOdometerLog>();
 
         // Soft delete
         public bool IsDeleted { get; set; } = false;

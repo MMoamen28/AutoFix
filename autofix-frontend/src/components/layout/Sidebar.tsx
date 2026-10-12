@@ -9,6 +9,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { cartService } from '../../services/cartService';
 import { LucideIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface MenuItem {
   to: string;
@@ -52,49 +53,46 @@ const Sidebar: React.FC = () => {
     navigate('/login');
   };
 
+  const { t } = useTranslation();
+
   const menuSections: MenuSection[] = [
     {
-      title: 'Marketplace',
+      title: t('sidebar.marketplace'),
       items: [
         { 
           to: '/marketplace', 
-          label: 'Spare Parts Market', 
+          label: t('sidebar.sparePartsMarket'), 
           icon: ShoppingBag, 
-          roles: ['Owner', 'Admin', 'Mechanic', 'Customer'] 
+          roles: ['Owner', 'Admin', 'Customer'] 
         },
       ]
     },
     {
-      title: 'Management',
+      title: t('sidebar.management'),
       roles: ['Owner', 'Admin'],
       items: [
-        { to: '/', label: 'Admin Hub', icon: LayoutDashboard, roles: ['Owner'] },
-        { to: '/customers', label: 'Customers', icon: Users, roles: ['Admin', 'Owner'] },
-        { to: '/mechanics', label: 'Team Members', icon: Wrench, roles: ['Admin', 'Owner'] },
-        { to: '/backup-restore', label: 'Backup & Safety', icon: Database, roles: ['Admin', 'Owner'] },
+        { to: '/', label: t('sidebar.workshopHub'), icon: LayoutDashboard, roles: ['Owner', 'Admin'] },
+        { to: '/work-orders', label: t('sidebar.workOrders'), icon: ClipboardList, roles: ['Admin', 'Owner'] },
+        { to: '/inspections', label: t('sidebar.carInspections'), icon: FileText, roles: ['Admin', 'Owner'] },
+        { to: '/customers', label: t('sidebar.customers'), icon: Users, roles: ['Admin', 'Owner'] },
+        { to: '/mechanics', label: t('sidebar.mechanicsStaff'), icon: Wrench, roles: ['Admin', 'Owner'] },
+        { to: '/backup-restore', label: t('sidebar.backupSafety'), icon: Database, roles: ['Admin', 'Owner'] },
       ]
     },
     {
-      title: 'Inventory',
-      roles: ['Owner', 'Admin', 'Mechanic'],
+      title: t('sidebar.inventory'),
+      roles: ['Owner', 'Admin'],
       items: [
-        { to: '/spare-parts', label: 'Stock Items', icon: Package, roles: ['Admin', 'Owner'] },
+        { to: '/spare-parts', label: t('sidebar.stockItems'), icon: Package, roles: ['Admin', 'Owner'] },
       ]
     },
     {
-      title: 'Operations',
-      roles: ['Owner', 'Mechanic', 'Customer'],
+      title: t('sidebar.operations'),
+      roles: ['Customer'],
       items: [
-        { 
-          to: '/mechanic/available-orders', 
-          label: 'Customer Requests', 
-          icon: ClipboardList, 
-          roles: ['Mechanic'] 
-        },
-        { to: '/', label: 'My Repair Jobs', icon: ClipboardList, roles: ['Mechanic'] },
-        { to: '/', label: 'My Dashboard', icon: LayoutDashboard, roles: ['Customer'] },
-        { to: '/customer/cars', label: 'My Vehicles', icon: Car, roles: ['Customer'] },
-        { to: '/cart', label: 'Shopping Cart', icon: ShoppingCart, roles: ['Customer'], badge: cartCount > 0 ? cartCount : null },
+        { to: '/', label: t('sidebar.myDashboard'), icon: LayoutDashboard, roles: ['Customer'] },
+        { to: '/customer/cars', label: t('sidebar.myVehicles'), icon: Car, roles: ['Customer'] },
+        { to: '/cart', label: t('sidebar.shoppingCart'), icon: ShoppingCart, roles: ['Customer'], badge: cartCount > 0 ? cartCount : null },
       ]
     }
   ];

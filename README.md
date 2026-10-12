@@ -39,7 +39,7 @@ docker-compose up -d
 # From the root directory
 dotnet run
 ```
-*The backend runs at `http://localhost:5005`. Swagger UI is available at `/swagger`.*
+*The backend runs at `http://localhost:5000`. Swagger UI is available at `/swagger`.*
 
 ### 2. Frontend Setup
 ```bash
@@ -92,4 +92,15 @@ npm start
 - **Styling**: Modern Vanilla CSS with Glassmorphism and Responsive Tokens.
 
 ---
+
+## 🌐 Internationalization (i18n) & RTL Standard
+
+AutoFix features full bilingual support (English & Arabic) with real-time RTL mirroring:
+- **Zero Hardcoded Strings**: All UI labels, placeholders, headers, dialogs, warnings, and error messages must use translation keys from `src/i18n/locales/en.json` and `src/i18n/locales/ar.json`.
+- **Key Parity Enforcement**: Every key in `en.json` must exist in `ar.json` and vice-versa. Run `npm test` (`node scripts/check-i18n-keys.cjs`) to verify parity before committing.
+- **RTL & Logical Properties**: All new screens (e.g., Car Inspection Report, Search, Finance) must use CSS logical properties (`margin-inline`, `padding-inline`, `inset-inline`, `text-align: start`) so one layout automatically mirrors in RTL (`dir="rtl"`, `lang="ar"`).
+- **Numbers & Dates**: Display dates via `formatDate()` (`dd/MM/yyyy`) and money via `formatCurrency()` (`ج.م` / `EGP`), respecting the Western vs Arabic-Indic digits setting. User-entered data is never modified or translated.
+
+---
 *Developed for Web Engineering - AutoFix Professional Platform.*
+

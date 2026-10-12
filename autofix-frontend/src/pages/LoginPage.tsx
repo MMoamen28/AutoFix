@@ -6,11 +6,14 @@ import { useToast } from '../hooks/useToast';
 import { Wrench, User, Lock, Eye, EyeOff, Mail, Phone } from 'lucide-react';
 import Button from '../components/shared/Button';
 import Input from '../components/shared/Input';
+import { useTranslation } from 'react-i18next';
+import LanguageToggle from '../components/shared/LanguageToggle';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
   const { showToast } = useToast();
+  const { t } = useTranslation();
   
   const [isRegister, setIsRegister] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -118,29 +121,34 @@ const LoginPage: React.FC = () => {
           boxShadow: 'var(--shadow-card)',
           transition: 'max-width 0.3s ease'
         }}>
-          <div style={{ marginBottom: '32px' }}>
-            <h2 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              {isRegister ? 'Join AutoFix' : 'Welcome Back'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('common.appName')}</span>
+            <LanguageToggle />
+          </div>
+
+          <div style={{ marginBottom: '28px' }}>
+            <h2 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              {isRegister ? t('login.register') : t('login.signIn')}
             </h2>
-            <p style={{ color: 'var(--text-secondary)' }}>
-              {isRegister ? 'Create your customer account' : 'Sign in to your AutoFix account'}
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+              {isRegister ? t('login.subtitle') : t('login.subtitle')}
             </p>
           </div>
 
           {!isRegister ? (
-            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <Input
-                label="Username"
+                label={t('login.username')}
                 icon={<User size={18} />}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
+                placeholder="admin"
                 required
               />
               
               <div style={{ position: 'relative' }}>
                 <Input
-                  label="Password"
+                  label={t('login.password')}
                   type={showPassword ? 'text' : 'password'}
                   icon={<Lock size={18} />}
                   value={password}
@@ -165,8 +173,8 @@ const LoginPage: React.FC = () => {
                 </button>
               </div>
 
-              <Button type="submit" isLoading={submitting} style={{ width: '100%', marginTop: '12px', background: 'var(--gradient-accent)' }}>
-                Sign In
+              <Button type="submit" isLoading={submitting} style={{ width: '100%', marginTop: '8px', background: 'var(--gradient-accent)' }}>
+                {t('login.loginBtn')}
               </Button>
             </form>
           ) : (

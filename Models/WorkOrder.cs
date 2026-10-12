@@ -18,6 +18,9 @@ namespace AutoFix.Models
         public int? AssignedTechnicianId { get; set; }
         public Mechanic? AssignedTechnician { get; set; }
 
+        public int? HelperTechnicianId { get; set; }
+        public Mechanic? HelperTechnician { get; set; }
+
         public int? InsuranceCompanyId { get; set; }
         public InsuranceCompany? InsuranceCompany { get; set; }
         public string? InsuranceClaimNumber { get; set; }
@@ -41,6 +44,7 @@ namespace AutoFix.Models
 
         public ICollection<WorkOrderLine> Lines { get; set; } = new List<WorkOrderLine>();
         public ICollection<WorkOrderPhoto> Photos { get; set; } = new List<WorkOrderPhoto>();
+        public ICollection<WorkOrderMechanicHistory> MechanicHistories { get; set; } = new List<WorkOrderMechanicHistory>();
 
         // Soft delete
         public bool IsDeleted { get; set; } = false;

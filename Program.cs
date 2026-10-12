@@ -14,6 +14,15 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Network binding: localhost:5000 by default (external network access OFF)
+// Network access from other devices enabled ONLY if Network:AllowExternalAccess is true
+var allowExternal = builder.Configuration.GetValue<bool>("Network:AllowExternalAccess", false);
+if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    var host = allowExternal ? "0.0.0.0" : "localhost";
+    builder.WebHost.UseUrls($"http://{host}:5000");
+}
+
 // 1. Data Folder & Configuration Service
 using var loggerFactory = LoggerFactory.Create(b => b.AddConsole());
 var dataFolderLogger = loggerFactory.CreateLogger<DataFolderService>();
@@ -57,6 +66,13 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IBackupService, BackupService>();
 builder.Services.AddScoped<ISqliteMigrationService, SqliteMigrationService>();
 builder.Services.AddHostedService<AutoFixBackgroundWorker>();
+
+// Stage B Services
+builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
+builder.Services.AddScoped<IInvoiceService, InvoiceService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IInspectionService, InspectionService>();
+builder.Services.AddScoped<IDraftService, DraftService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
@@ -188,6 +204,20 @@ using (var scope = app.Services.CreateScope())
 
     // Seed initial workshop services & spare parts
     DbInitializer.Initialize(db);
+
+    // Emergency CLI tool: AutoFix.exe --reset-admin [optionalPassword]
+    if (args.Any(a => a.Equals("--reset-admin", StringComparison.OrdinalIgnoreCase)))
+    {
+        var argList = args.ToList();
+        var idx = argList.FindIndex(a => a.Equals("--reset-admin", StringComparison.OrdinalIgnoreCase));
+        string? customPass = (idx >= 0 && idx + 1 < argList.Count && !argList[idx + 1].StartsWith("--"))
+            ? argList[idx + 1]
+            : null;
+
+        await authService.EmergencyResetAdminAsync(customPass);
+        Console.WriteLine("[EMERGENCY RESET SUCCESS] Admin account has been unlocked and password reset. Password change is required on next login.");
+        return;
+    }
 }
 
 // 7. HTTP Request Pipeline

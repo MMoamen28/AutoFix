@@ -4,17 +4,20 @@ namespace AutoFix.DTOs.Mechanic
 {
     public class UpdateMechanicDto
     {
-        [Required]
-        [MaxLength(50)]
+        [MaxLength(100)]
+        public string? FullName { get; set; }
+
         public string FirstName { get; set; } = string.Empty;
 
-        [Required]
-        [MaxLength(50)]
         public string LastName { get; set; } = string.Empty;
 
-        [Required]
-        [EmailAddress]
-        [MaxLength(150)]
-        public string Email { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+
+        public string? Notes { get; set; }
+
+        public bool IsActive { get; set; } = true;
+
+        // Kept optional for backward compatibility
+        public string? Email { get; set; }
     }
 }

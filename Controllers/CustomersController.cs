@@ -16,9 +16,20 @@ namespace AutoFix.Controllers
         public CustomersController(ICustomerService service) => _service = service;
 
         [HttpGet]
-        public async Task<ActionResult<List<CustomerResponseDto>>> GetAll()
+        public async Task<ActionResult<List<CustomerResponseDto>>> GetAll([FromQuery] string? search, [FromQuery] bool includeArchived = false)
         {
-            return Ok(await _service.GetAllAsync());
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                return Ok(await _service.SearchAsync(search, includeArchived));
+            }
+            return Ok(await _service.GetAllAsync(includeArchived));
+        }
+
+        [HttpGet("check-duplicate")]
+        public async Task<ActionResult<CustomerResponseDto?>> CheckDuplicate([FromQuery] string phone, [FromQuery] int? excludeId)
+        {
+            var duplicate = await _service.CheckDuplicatePhoneAsync(phone, excludeId);
+            return Ok(duplicate);
         }
 
         [HttpGet("{id}")]
@@ -31,8 +42,33 @@ namespace AutoFix.Controllers
         [HttpPost]
         public async Task<ActionResult<CustomerResponseDto>> Create([FromBody] CreateCustomerDto dto)
         {
-            var result = await _service.CreateAsync(dto);
-            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            try
+            {
+                var result = await _service.CreateAsync(dto);
+                return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+            }
+            catch (System.InvalidOperationException ex) when (ex.Message.StartsWith("DuplicatePhoneWarning"))
+            {
+                return Conflict(new { message = ex.Message, isDuplicateWarning = true });
+            }
+        }
+
+        [HttpPost("quick-add")]
+        public async Task<ActionResult<QuickAddCustomerCarResponseDto>> QuickAdd([FromBody] QuickAddCustomerCarDto dto)
+        {
+            try
+            {
+                var result = await _service.QuickAddAsync(dto);
+                return Ok(result);
+            }
+            catch (System.InvalidOperationException ex) when (ex.Message.StartsWith("DuplicatePhoneWarning") || ex.Message.StartsWith("DuplicateCarWarning"))
+            {
+                return Conflict(new { message = ex.Message, isDuplicateWarning = true });
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpPut("{id}")]
@@ -45,15 +81,28 @@ namespace AutoFix.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
+            return await Archive(id);
+        }
+
+        [HttpPost("{id}/archive")]
+        public async Task<IActionResult> Archive(int id)
+        {
             try
             {
-                var result = await _service.DeleteAsync(id);
+                var result = await _service.ArchiveAsync(id);
                 return result ? NoContent() : NotFound();
             }
             catch (System.InvalidOperationException ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        [HttpPost("{id}/restore")]
+        public async Task<IActionResult> Restore(int id)
+        {
+            var result = await _service.RestoreAsync(id);
+            return result ? Ok(new { message = "Customer restored successfully." }) : NotFound();
         }
     }
 }

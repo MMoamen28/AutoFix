@@ -118,5 +118,45 @@ namespace AutoFix.Tests
                 Assert.False(regRes.MustChangePassword);
             }
         }
+
+        [Fact]
+        public async Task EmergencyResetAdmin_UnlocksAccountAndResetsPassword()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            using (db)
+            {
+                var logger = LoggerFactory.Create(b => b.AddConsole()).CreateLogger<AuthService>();
+                var authService = new AuthService(db, dataFolder, logger);
+
+                await authService.EnsureDefaultAdminCreatedAsync();
+
+                // Lock out the admin
+                for (int i = 0; i < 5; i++)
+                {
+                    await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                        authService.LoginAsync(new LoginRequestDto { Username = "admin", Password = "WrongPassword" }));
+                }
+
+                // Verify admin is locked
+                var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                    authService.LoginAsync(new LoginRequestDto { Username = "admin", Password = "AutoFixAdmin2026!" }));
+                Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+                // Run emergency reset with custom password
+                var resetSuccess = await authService.EmergencyResetAdminAsync("EmergencyPass2026!#");
+                Assert.True(resetSuccess);
+
+                // Verify admin can immediately log in with emergency password
+                var loginRes = await authService.LoginAsync(new LoginRequestDto
+                {
+                    Username = "admin",
+                    Password = "EmergencyPass2026!#"
+                });
+
+                Assert.NotNull(loginRes.AccessToken);
+                Assert.True(loginRes.MustChangePassword); // Must change on first login after reset
+            }
+        }
     }
 }

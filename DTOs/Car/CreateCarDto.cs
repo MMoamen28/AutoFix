@@ -4,6 +4,8 @@ namespace AutoFix.DTOs.Car
 {
     public class CreateCarDto
     {
+        public int? CustomerId { get; set; }
+
         [Required]
         [MaxLength(50)]
         public string Make { get; set; } = string.Empty;
@@ -21,8 +23,13 @@ namespace AutoFix.DTOs.Car
         public string LicensePlate { get; set; } = string.Empty;
 
         [Required]
-        [MaxLength(17)]
-        [MinLength(17, ErrorMessage = "VIN must be exactly 17 characters")]
+        [MaxLength(50)]
         public string VIN { get; set; } = string.Empty;
+
+        public string? Color { get; set; }
+        public int CurrentOdometerKm { get; set; } = 0;
+        public string? Notes { get; set; }
+        public bool AllowDuplicate { get; set; } = false;
+        public bool AllowLowerOdometer { get; set; } = false;
     }
 }

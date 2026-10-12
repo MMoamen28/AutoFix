@@ -1,0 +1,82 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+
+namespace AutoFix.DTOs.Invoice
+{
+    public class CreateInvoiceDto
+    {
+        public int? WorkOrderId { get; set; }
+
+        [Required]
+        public int CustomerId { get; set; }
+
+        [Required]
+        public int CarId { get; set; }
+
+        public decimal DiscountAmount { get; set; } = 0;
+        public decimal VatPercentage { get; set; } = 14.0m; // Default Egyptian VAT 14%
+        public string? Notes { get; set; }
+    }
+
+    public class RecordPaymentDto
+    {
+        [Required]
+        [Range(0.01, 10000000, ErrorMessage = "Payment amount must be greater than zero.")]
+        public decimal Amount { get; set; }
+
+        [Required]
+        public string PaymentMethod { get; set; } = "Cash"; // Cash, Card, BankTransfer, Cheque
+
+        public string? ReferenceNumber { get; set; }
+        public string? Notes { get; set; }
+    }
+
+    public class InvoiceResponseDto
+    {
+        public int Id { get; set; }
+        public string InvoiceNumber { get; set; } = string.Empty;
+        public int? WorkOrderId { get; set; }
+        public string? WorkOrderNumber { get; set; }
+
+        public int CustomerId { get; set; }
+        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerPhone { get; set; } = string.Empty;
+
+        public int CarId { get; set; }
+        public string CarPlate { get; set; } = string.Empty;
+        public string CarMakeModel { get; set; } = string.Empty;
+
+        public decimal Subtotal { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal VatPercentage { get; set; }
+        public decimal VatAmount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public decimal PaidAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+
+        public string Status { get; set; } = "Issued";
+        public string Currency { get; set; } = "EGP";
+        public DateTime IssuedAt { get; set; }
+        public DateTime? DueDate { get; set; }
+        public string Notes { get; set; } = string.Empty;
+
+        public string SnapshotDetailsJson { get; set; } = "[]";
+        public List<PaymentResponseDto> Payments { get; set; } = new();
+    }
+
+    public class PaymentResponseDto
+    {
+        public int Id { get; set; }
+        public decimal Amount { get; set; }
+        public string PaymentMethod { get; set; } = string.Empty;
+        public string? ReferenceNumber { get; set; }
+        public DateTime PaidAt { get; set; }
+        public string? ReceivedBy { get; set; }
+        public string? Notes { get; set; }
+        public decimal TotalAmount { get; set; }
+        public decimal PaidAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+        public decimal RemainingBalance => RemainingAmount;
+    }
+}

@@ -25,10 +25,18 @@ namespace AutoFix.Controllers
         }
 
         [HttpPost("create")]
+        [HttpPost("manual")]
         public async Task<IActionResult> CreateBackup([FromQuery] string? reason)
         {
             var backup = await _backupService.CreateBackupAsync(reason ?? "ManualAdminTrigger");
             return Ok(backup);
+        }
+
+        [HttpGet("integrity-check")]
+        public async Task<IActionResult> IntegrityCheck()
+        {
+            var isOk = await _backupService.VerifyDatabaseIntegrityAsync();
+            return Ok(new { integrityResult = isOk ? "ok" : "corrupted", isOk });
         }
 
         [HttpGet("list")]

@@ -4,27 +4,24 @@ namespace AutoFix.DTOs.Mechanic
 {
     public class CreateMechanicDto
     {
-        [Required]
-        [MaxLength(50)]
+        [MaxLength(100)]
+        public string? FullName { get; set; }
+
         public string FirstName { get; set; } = string.Empty;
 
-        [Required]
-        [MaxLength(50)]
         public string LastName { get; set; } = string.Empty;
 
-        [Required]
-        [EmailAddress]
-        [MaxLength(150)]
-        public string Email { get; set; } = string.Empty;
+        public string? Phone { get; set; }
 
-        [Required]
-        [MaxLength(50)]
-        [MinLength(3)]
-        public string Username { get; set; } = string.Empty;
+        public string? Notes { get; set; }
 
-        [Required]
-        [MinLength(8, ErrorMessage = "Password must be at least 8 characters")]
-        public string Password { get; set; } = string.Empty;
-        // Owner sets this when creating the mechanic account
+        public bool IsActive { get; set; } = true;
+
+        // Kept optional for backward compatibility
+        public string? Email { get; set; }
+
+        public string? Username { get; set; }
+
+        public string? Password { get; set; }
     }
 }

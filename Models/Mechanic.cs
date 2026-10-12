@@ -12,6 +12,8 @@ namespace AutoFix.Models
         public string Email { get; set; } = string.Empty;
         public string? Phone { get; set; }
         public string? Specialty { get; set; } // Mechanical, Electrical, Paint, Bodywork
+        public string? Notes { get; set; }
+        public bool IsActive { get; set; } = true;
         public string KeycloakUserId { get; set; } = string.Empty;
         public DateTime HiredAt { get; set; } = DateTime.UtcNow;
 

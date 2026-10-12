@@ -193,6 +193,9 @@ namespace AutoFix.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CarId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("CarMake")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -212,6 +215,9 @@ namespace AutoFix.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("CustomerId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("CustomerName")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -220,10 +226,20 @@ namespace AutoFix.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DamageMarkersJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DiagnosticScanResult")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("GeneralVerdict")
@@ -234,6 +250,19 @@ namespace AutoFix.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("InspectedByMechanicId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("InvoiceAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("InvoiceId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("InvoiceNumber")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsCurrentRevision")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsDeleted")
@@ -250,15 +279,83 @@ namespace AutoFix.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("PdfFilePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PreviousRevisionId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ReportNumber")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("WorkOrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CarId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("InspectedByMechanicId");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.ToTable("CarInspections");
+                });
+
+            modelBuilder.Entity("AutoFix.Models.CarOdometerLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CarId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsLowerReadingWarning")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OdometerKm")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReferenceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("InspectedByMechanicId");
+                    b.HasIndex("CarId");
 
-                    b.ToTable("CarInspections");
+                    b.ToTable("CarOdometerLogs");
                 });
 
             modelBuilder.Entity("AutoFix.Models.CartItem", b =>
@@ -442,6 +539,47 @@ namespace AutoFix.Migrations
                     b.HasIndex("MechanicId");
 
                     b.ToTable("EmployeeCustodies");
+                });
+
+            modelBuilder.Entity("AutoFix.Models.FormDraft", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FormDataJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FormKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "FormKey")
+                        .IsUnique();
+
+                    b.ToTable("FormDrafts");
                 });
 
             modelBuilder.Entity("AutoFix.Models.InsuranceCompany", b =>
@@ -709,6 +847,9 @@ namespace AutoFix.Migrations
                     b.Property<DateTime>("HiredAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("INTEGER");
 
@@ -718,6 +859,9 @@ namespace AutoFix.Migrations
 
                     b.Property<string>("LastName")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Phone")
@@ -1280,6 +1424,9 @@ namespace AutoFix.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("HelperTechnicianId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("InspectionNotes")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1326,6 +1473,8 @@ namespace AutoFix.Migrations
                     b.HasIndex("CarId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("HelperTechnicianId");
 
                     b.HasIndex("InsuranceCompanyId");
 
@@ -1393,6 +1542,55 @@ namespace AutoFix.Migrations
                     b.ToTable("WorkOrderLines");
                 });
 
+            modelBuilder.Entity("AutoFix.Models.WorkOrderMechanicHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AssignedBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("NewMechanicId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PreviousMechanicId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("WorkOrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NewMechanicId");
+
+                    b.HasIndex("PreviousMechanicId");
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.ToTable("WorkOrderMechanicHistories");
+                });
+
             modelBuilder.Entity("AutoFix.Models.WorkOrderPhoto", b =>
                 {
                     b.Property<int>("Id")
@@ -1458,11 +1656,46 @@ namespace AutoFix.Migrations
 
             modelBuilder.Entity("AutoFix.Models.CarInspection", b =>
                 {
+                    b.HasOne("AutoFix.Models.Car", "Car")
+                        .WithMany()
+                        .HasForeignKey("CarId");
+
+                    b.HasOne("AutoFix.Models.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId");
+
                     b.HasOne("AutoFix.Models.Mechanic", "InspectedByMechanic")
                         .WithMany()
                         .HasForeignKey("InspectedByMechanicId");
 
+                    b.HasOne("AutoFix.Models.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId");
+
+                    b.HasOne("AutoFix.Models.WorkOrder", "WorkOrder")
+                        .WithMany()
+                        .HasForeignKey("WorkOrderId");
+
+                    b.Navigation("Car");
+
+                    b.Navigation("Customer");
+
                     b.Navigation("InspectedByMechanic");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("WorkOrder");
+                });
+
+            modelBuilder.Entity("AutoFix.Models.CarOdometerLog", b =>
+                {
+                    b.HasOne("AutoFix.Models.Car", "Car")
+                        .WithMany("OdometerLogs")
+                        .HasForeignKey("CarId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Car");
                 });
 
             modelBuilder.Entity("AutoFix.Models.CartItem", b =>
@@ -1690,6 +1923,11 @@ namespace AutoFix.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("AutoFix.Models.Mechanic", "HelperTechnician")
+                        .WithMany()
+                        .HasForeignKey("HelperTechnicianId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("AutoFix.Models.InsuranceCompany", "InsuranceCompany")
                         .WithMany()
                         .HasForeignKey("InsuranceCompanyId");
@@ -1699,6 +1937,8 @@ namespace AutoFix.Migrations
                     b.Navigation("Car");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("HelperTechnician");
 
                     b.Navigation("InsuranceCompany");
                 });
@@ -1726,6 +1966,31 @@ namespace AutoFix.Migrations
                     b.Navigation("WorkOrder");
                 });
 
+            modelBuilder.Entity("AutoFix.Models.WorkOrderMechanicHistory", b =>
+                {
+                    b.HasOne("AutoFix.Models.Mechanic", "NewMechanic")
+                        .WithMany()
+                        .HasForeignKey("NewMechanicId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AutoFix.Models.Mechanic", "PreviousMechanic")
+                        .WithMany()
+                        .HasForeignKey("PreviousMechanicId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AutoFix.Models.WorkOrder", "WorkOrder")
+                        .WithMany("MechanicHistories")
+                        .HasForeignKey("WorkOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("NewMechanic");
+
+                    b.Navigation("PreviousMechanic");
+
+                    b.Navigation("WorkOrder");
+                });
+
             modelBuilder.Entity("AutoFix.Models.WorkOrderPhoto", b =>
                 {
                     b.HasOne("AutoFix.Models.WorkOrder", "WorkOrder")
@@ -1739,6 +2004,8 @@ namespace AutoFix.Migrations
 
             modelBuilder.Entity("AutoFix.Models.Car", b =>
                 {
+                    b.Navigation("OdometerLogs");
+
                     b.Navigation("RepairOrders");
 
                     b.Navigation("WorkOrders");
@@ -1789,6 +2056,8 @@ namespace AutoFix.Migrations
             modelBuilder.Entity("AutoFix.Models.WorkOrder", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("MechanicHistories");
 
                     b.Navigation("Photos");
                 });

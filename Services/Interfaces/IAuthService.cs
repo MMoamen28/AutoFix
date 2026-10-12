@@ -12,6 +12,7 @@ namespace AutoFix.Services.Interfaces
         Task<bool> AdminResetPasswordAsync(int userId, string newPassword, string adminUserName);
         Task<UserProfileDto?> GetUserProfileAsync(int userId);
         Task EnsureDefaultAdminCreatedAsync();
+        Task<bool> EmergencyResetAdminAsync(string? newPassword = null);
         string GenerateJwtToken(AppUser user);
     }
 }

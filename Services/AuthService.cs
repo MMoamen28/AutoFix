@@ -58,6 +58,17 @@ namespace AutoFix.Services
 
                 _logger.LogWarning("Default Admin user created: 'admin' (Must change password on first login).");
             }
+
+            // Disable login for existing mechanic accounts without deleting them
+            var mechanicUsers = await _db.AppUsers.Where(u => u.Role == "Mechanic" && u.LockoutEnd != DateTime.MaxValue).ToListAsync();
+            foreach (var mu in mechanicUsers)
+            {
+                mu.LockoutEnd = DateTime.MaxValue;
+            }
+            if (mechanicUsers.Any())
+            {
+                await _db.SaveChangesAsync();
+            }
         }
 
         public async Task<LoginResponseDto> LoginAsync(LoginRequestDto dto)
@@ -67,6 +78,13 @@ namespace AutoFix.Services
             {
                 _logger.LogWarning("Login failed: User '{Username}' not found.", dto.Username);
                 throw new UnauthorizedAccessException("Invalid username or password.");
+            }
+
+            // Reject login for mechanics (they are staff records, not user logins)
+            if (user.Role == "Mechanic")
+            {
+                _logger.LogWarning("Login rejected for mechanic user '{Username}': Mechanic logins are disabled.", dto.Username);
+                throw new UnauthorizedAccessException("Mechanic accounts do not have direct login access. Mechanics are managed as staff records.");
             }
 
             // Lockout check (5 failed attempts / 15-minute lockout)
@@ -251,6 +269,49 @@ namespace AutoFix.Services
             });
             await _db.SaveChangesAsync();
 
+            return true;
+        }
+
+        public async Task<bool> EmergencyResetAdminAsync(string? newPassword = null)
+        {
+            var admin = await _db.AppUsers.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Username == "admin");
+            var pass = !string.IsNullOrWhiteSpace(newPassword) ? newPassword : "AutoFixAdmin2026!";
+
+            if (admin == null)
+            {
+                admin = new AppUser
+                {
+                    Username = "admin",
+                    FullName = "Workshop Administrator",
+                    Role = "Owner",
+                    Email = "admin@workshop.local",
+                    MustChangePassword = true,
+                    FailedLoginAttempts = 0,
+                    LockoutEnd = null,
+                    IsDeleted = false
+                };
+                admin.PasswordHash = _passwordHasher.HashPassword(admin, pass);
+                _db.AppUsers.Add(admin);
+            }
+            else
+            {
+                admin.PasswordHash = _passwordHasher.HashPassword(admin, pass);
+                admin.MustChangePassword = true;
+                admin.FailedLoginAttempts = 0;
+                admin.LockoutEnd = null;
+                admin.IsDeleted = false;
+            }
+
+            _db.AuditLogs.Add(new AuditLog
+            {
+                UserName = "SYSTEM_CLI",
+                Action = "EmergencyAdminReset",
+                EntityName = "AppUser",
+                EntityId = admin.Id.ToString(),
+                Details = "Emergency command-line tool reset admin password and cleared lockout.",
+                Timestamp = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
             return true;
         }
 

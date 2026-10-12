@@ -8,14 +8,15 @@ namespace AutoFix.DTOs.Customer
         [MaxLength(100)]
         public string FullName { get; set; } = string.Empty;
 
-        [Required]
-        [EmailAddress]
         [MaxLength(150)]
-        public string Email { get; set; } = string.Empty;
+        public string? Email { get; set; }
 
         [Required]
-        [Phone]
         [MaxLength(20)]
         public string Phone { get; set; } = string.Empty;
+
+        public string? ExtraPhone { get; set; }
+        public string? Address { get; set; }
+        public string? Notes { get; set; }
     }
 }

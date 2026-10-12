@@ -3,11 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Search, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { cartService } from '../../services/cartService';
+import { useTranslation } from 'react-i18next';
+import LanguageToggle from '../shared/LanguageToggle';
 
 const Topbar: React.FC = () => {
   const { user, role } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
@@ -29,15 +32,16 @@ const Topbar: React.FC = () => {
 
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === '/') return 'Dashboard';
-    if (path.includes('marketplace')) return 'Spare Parts Marketplace';
-    if (path.includes('customers')) return 'Customer Management';
-    if (path.includes('mechanics')) return 'Team Management';
-    if (path.includes('spare-parts')) return 'Inventory Management';
-    if (path.includes('cart')) return 'My Shopping Cart';
-    if (path.includes('orders')) return 'Order History';
-    if (path.includes('requests')) return 'Action Requests';
-    return 'AutoFix Pro';
+    if (path === '/' || path === '/admin-dashboard') return t('topbar.dashboard');
+    if (path.includes('marketplace')) return t('topbar.marketplace');
+    if (path.includes('customers')) return t('topbar.customers');
+    if (path.includes('mechanics')) return t('topbar.mechanics');
+    if (path.includes('spare-parts')) return t('topbar.spareParts');
+    if (path.includes('cart')) return t('topbar.cart');
+    if (path.includes('work-orders')) return t('sidebar.workOrders');
+    if (path.includes('inspections')) return t('topbar.inspections');
+    if (path.includes('backup')) return t('topbar.backupRestore');
+    return t('common.appName');
   };
 
   const initials = user?.username?.substring(0, 2).toUpperCase() || 'U';
@@ -47,13 +51,16 @@ const Topbar: React.FC = () => {
       {/* Left: Breadcrumbs & Title */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={breadcrumbStyle}>
-          AutoFix <span style={{ margin: '0 8px' }}>/</span> {getPageTitle()}
+          {t('common.appName')} <span style={{ margin: '0 8px' }}>/</span> {getPageTitle()}
         </div>
         <h2 style={pageTitleStyle}>{getPageTitle()}</h2>
       </div>
 
-      {/* Right: Actions & User */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+      {/* Right: Actions, Language Toggle & User */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        {/* Language Toggle EN | عربي */}
+        <LanguageToggle />
+
         {/* Customer Cart */}
         {role === 'Customer' && (
           <button onClick={() => navigate('/cart')} style={iconButtonStyle}>

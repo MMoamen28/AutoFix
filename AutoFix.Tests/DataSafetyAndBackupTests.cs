@@ -1,3 +1,4 @@
+using AutoFix.Data;
 using AutoFix.Models;
 using AutoFix.Services;
 using Microsoft.Data.Sqlite;
@@ -181,11 +182,13 @@ namespace AutoFix.Tests
                 await db.SaveChangesAsync();
                 Assert.Equal(2, await db.Customers.CountAsync());
 
-                // Concurrent read while restoring
+                // Concurrent read while restoring using separate DbContext instance (simulating another web request thread)
                 var readTask = Task.Run(async () =>
                 {
                     await Task.Delay(10);
-                    return await db.Customers.AnyAsync();
+                    var readOptions = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(dataFolder.GetConnectionString()).Options;
+                    using var readDb = new AppDbContext(readOptions);
+                    return await readDb.Customers.AnyAsync();
                 });
 
                 var restoreSuccess = await backupService.RestoreBackupAsync(baselineBackup.FileName);

@@ -16,14 +16,14 @@ namespace AutoFix.Controllers
         public ReceiptsController(IReceiptService service) => _service = service;
 
         [HttpGet]
-        [Authorize(Roles = "Owner")]
+        [Authorize(Roles = "Owner,Admin")]
         public async Task<ActionResult<List<ReceiptResponseDto>>> GetAll()
         {
             return await _service.GetAllAsync();
         }
 
         [HttpGet("owner-copies")]
-        [Authorize(Roles = "Owner")]
+        [Authorize(Roles = "Owner,Admin")]
         public async Task<ActionResult<List<ReceiptResponseDto>>> GetOwnerCopies()
         {
             return await _service.GetOwnerCopiesAsync();

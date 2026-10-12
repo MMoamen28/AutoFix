@@ -83,8 +83,35 @@ namespace AutoFix.Models
         public string CustomerName { get; set; } = string.Empty;
         public string CustomerPhone { get; set; } = string.Empty;
 
-        // Structured JSON ratings for Engine, Gearbox, Body, Paint, Suspension, Brakes, Electrical, Tires, Interior
+        // Stage B Relations
+        public int? CustomerId { get; set; }
+        public Customer? Customer { get; set; }
+
+        public int? CarId { get; set; }
+        public Car? Car { get; set; }
+
+        public int? WorkOrderId { get; set; }
+        public WorkOrder? WorkOrder { get; set; }
+
+        public int? InvoiceId { get; set; }
+        public Invoice? Invoice { get; set; }
+
+        public string? InvoiceNumber { get; set; }
+        public decimal? InvoiceAmount { get; set; }
+
+        // Status & Revision Control (Draft / Final)
+        public string Status { get; set; } = "Draft"; // Draft, Final
+        public int RevisionNumber { get; set; } = 1;
+        public int? PreviousRevisionId { get; set; }
+        public bool IsCurrentRevision { get; set; } = true;
+        public DateTime? FinalizedAt { get; set; }
+
+        // Structured Checklist, Damage Markers & Diagnostic Results
         public string ChecklistDataJson { get; set; } = "{}";
+        public string DamageMarkersJson { get; set; } = "[]"; // [{ id, x, y, view, description }]
+        public string? DiagnosticScanResult { get; set; }
+        public string? PdfFilePath { get; set; }
+
         public decimal OverallScore { get; set; } = 100; // Out of 100
         public string GeneralVerdict { get; set; } = "Good"; // Excellent, Good, Fair, Poor, Reject
         public string Notes { get; set; } = string.Empty;
