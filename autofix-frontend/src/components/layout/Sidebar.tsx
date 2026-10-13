@@ -4,17 +4,16 @@ import {
   LayoutDashboard, Users, Wrench, Package, 
   ClipboardList, Car, LogOut, Shield,
   FileText, ShoppingBag, ShoppingCart,
-  Settings, Layers, Box, Database, RotateCcw
+  Settings, Layers, Database, RotateCcw,
+  Receipt, DollarSign, ChevronRight, ChevronLeft
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { cartService } from '../../services/cartService';
-import { LucideIcon } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import SettingsModal from '../shared/SettingsModal';
 
 interface MenuItem {
   to: string;
   label: string;
-  icon: LucideIcon;
+  icon: any;
   roles: string[];
   badge?: any;
 }
@@ -25,275 +24,266 @@ interface MenuSection {
   items: MenuItem[];
 }
 
-const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<{ isCollapsed?: boolean; onToggle?: () => void }> = ({ isCollapsed, onToggle }) => {
   const { user, logout, role } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [cartCount, setCartCount] = useState(0);
-
-  useEffect(() => {
-    fetchCartCount();
-    window.addEventListener('cart-updated', fetchCartCount);
-    return () => window.removeEventListener('cart-updated', fetchCartCount);
-  }, [role]);
-
-  const fetchCartCount = async () => {
-    if (role === 'Customer') {
-      try {
-        const cart = await cartService.getCart();
-        setCartCount(cart.length);
-      } catch (err) {
-        setCartCount(0);
-      }
-    }
-  };
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const { t } = useTranslation();
-
   const menuSections: MenuSection[] = [
     {
-      title: t('sidebar.marketplace'),
-      items: [
-        { 
-          to: '/marketplace', 
-          label: t('sidebar.sparePartsMarket'), 
-          icon: ShoppingBag, 
-          roles: ['Owner', 'Admin', 'Customer'] 
-        },
-      ]
-    },
-    {
-      title: t('sidebar.management'),
+      title: 'إدارة الورشة',
       roles: ['Owner', 'Admin', 'Receptionist', 'Reception', 'Accountant'],
       items: [
-        { to: '/', label: t('sidebar.workshopHub'), icon: LayoutDashboard, roles: ['Owner', 'Admin'] },
-        { to: '/workshop-orders', label: t('sidebar.customersAndWorkOrders', 'Customers & Work Orders (العملاء وأوامر الشغل)'), icon: ClipboardList, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
-        { to: '/invoices', label: t('sidebar.invoices', 'Invoices (الفواتير)'), icon: FileText, roles: ['Admin', 'Owner', 'Receptionist', 'Reception', 'Accountant'] },
-        { to: '/credit-notes', label: t('sidebar.creditNotes', 'Credit Notes (إشعارات دائنة)'), icon: RotateCcw, roles: ['Admin', 'Owner', 'Receptionist', 'Reception', 'Accountant'] },
-        { to: '/services', label: t('sidebar.workmanshipPrices'), icon: Layers, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
-        { to: '/inspections', label: t('sidebar.carInspections'), icon: FileText, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
-        { to: '/mechanics', label: t('sidebar.mechanicsStaff'), icon: Wrench, roles: ['Admin', 'Owner'] },
-        { to: '/backup-restore', label: t('sidebar.backupSafety'), icon: Database, roles: ['Admin', 'Owner'] },
+        { to: '/', label: 'لوحة الورشة الرئيسية', icon: LayoutDashboard, roles: ['Owner', 'Admin', 'Receptionist', 'Reception', 'Accountant'] },
+        { to: '/workshop-orders', label: 'العملاء وأوامر الشغل', icon: ClipboardList, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
+        { to: '/invoices', label: 'الفواتير', icon: FileText, roles: ['Admin', 'Owner', 'Receptionist', 'Reception', 'Accountant'] },
+        { to: '/credit-notes', label: 'الإشعارات الدائنة', icon: RotateCcw, roles: ['Admin', 'Owner', 'Receptionist', 'Reception', 'Accountant'] },
+        { to: '/expenses', label: 'المصروفات', icon: Receipt, roles: ['Admin', 'Owner', 'Accountant'] },
+        { to: '/spare-parts', label: 'قطع الغيار والمخزن', icon: Package, roles: ['Admin', 'Owner'] },
+        { to: '/services', label: 'أسعار المصنعية والخدمات', icon: Layers, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
+        { to: '/inspections', label: 'فحص وتقييم السيارات', icon: Car, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
+        { to: '/mechanics', label: 'فريق الفنيين', icon: Wrench, roles: ['Admin', 'Owner'] },
+        { to: '/backup-restore', label: 'النسخ الاحتياطي والأمان', icon: Database, roles: ['Admin', 'Owner'] },
       ]
     },
     {
-      title: t('sidebar.inventory'),
-      roles: ['Owner', 'Admin'],
-      items: [
-        { to: '/spare-parts', label: t('sidebar.stockItems'), icon: Package, roles: ['Admin', 'Owner'] },
-      ]
-    },
-    {
-      title: t('sidebar.operations'),
+      title: 'بوابة العميل',
       roles: ['Customer'],
       items: [
-        { to: '/', label: t('sidebar.myDashboard'), icon: LayoutDashboard, roles: ['Customer'] },
-        { to: '/invoices', label: t('sidebar.myInvoices', 'My Invoices (فواتيري)'), icon: FileText, roles: ['Customer'] },
-        { to: '/customer/cars', label: t('sidebar.myVehicles'), icon: Car, roles: ['Customer'] },
-        { to: '/cart', label: t('sidebar.shoppingCart'), icon: ShoppingCart, roles: ['Customer'], badge: cartCount > 0 ? cartCount : null },
+        { to: '/', label: 'لوحة حسابي', icon: LayoutDashboard, roles: ['Customer'] },
+        { to: '/invoices', label: 'فواتيري', icon: FileText, roles: ['Customer'] },
+        { to: '/customer/cars', label: 'سياراتي', icon: Car, roles: ['Customer'] },
+        { to: '/marketplace', label: 'متجر قطع الغيار', icon: ShoppingBag, roles: ['Customer'] },
+        { to: '/cart', label: 'سلة المشتريات', icon: ShoppingCart, roles: ['Customer'] },
       ]
     }
   ];
 
-  const getRoleColor = (r: string) => {
+  const getRoleArabic = (r?: string | null) => {
     switch (r) {
-      case 'Owner': return 'var(--accent)';
-      case 'Admin': return 'var(--blue)';
-      case 'Mechanic': return 'var(--purple)';
-      case 'Customer': return 'var(--success)';
-      default: return 'var(--text-muted)';
+      case 'Owner': return 'المالك';
+      case 'Admin': return 'مدير النظام';
+      case 'Receptionist':
+      case 'Reception': return 'الاستقبال';
+      case 'Mechanic': return 'فني الورشة';
+      case 'Accountant': return 'المحاسب';
+      case 'Customer': return 'العميل';
+      default: return r || 'مستخدم';
     }
   };
 
-  const initials = user?.username?.substring(0, 2).toUpperCase() || 'U';
+  const initials = user?.username ? user.username.substring(0, 2).toUpperCase() : 'AP';
 
   return (
-    <div style={sidebarStyle}>
-      {/* Logo Section */}
-      <div style={logoSectionStyle}>
+    <div style={sidebarContainerStyle} dir="rtl">
+      {/* Brand Header */}
+      <div style={brandHeaderStyle}>
         <div style={logoIconStyle}>
-          <Wrench size={20} color="white" />
+          <Car size={20} color="#ffffff" />
         </div>
-        <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'white', letterSpacing: '-0.5px' }}>AutoFix</h1>
-          <p style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Pro OS</p>
-        </div>
+        {!isCollapsed && (
+          <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: '16px', fontWeight: 900, color: '#ffffff', fontFamily: 'Cairo, sans-serif' }}>
+              AP AUTO
+            </div>
+            <div style={{ fontSize: '10px', color: '#e52535', fontWeight: 800, letterSpacing: '0.5px' }}>
+              لوحة التحكم الاحترافية
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Navigation */}
-      <nav style={navStyle}>
+      {/* Navigation List */}
+      <nav style={navScrollStyle}>
         {menuSections.map((section, idx) => {
           const visibleItems = section.items.filter(item => item.roles.includes(role || ''));
           if (visibleItems.length === 0) return null;
 
           return (
-            <div key={idx} style={{ marginBottom: '24px' }}>
-              <div style={sectionLabelStyle}>{section.title}</div>
+            <div key={idx} style={{ marginBottom: '16px' }}>
+              {!isCollapsed && (
+                <div style={sectionTitleStyle}>{section.title}</div>
+              )}
               {visibleItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  title={item.label}
                   style={({ isActive }) => ({
-                    ...navLinkStyle,
-                    backgroundColor: isActive ? 'var(--accent-dim)' : 'transparent',
-                    borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
-                    color: isActive ? 'var(--accent)' : 'var(--text-secondary)'
+                    ...navLinkItemStyle,
+                    backgroundColor: isActive ? 'rgba(229, 37, 53, 0.12)' : 'transparent',
+                    borderRight: isActive ? '3px solid #e52535' : '3px solid transparent',
+                    color: isActive ? '#e52535' : '#cbd5e1',
+                    justifyContent: isCollapsed ? 'center' : 'flex-start',
+                    padding: isCollapsed ? '12px 0' : '10px 16px',
                   })}
                   className="nav-link"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <item.icon size={20} />
-                    <span style={{ fontWeight: 600, fontSize: '14px' }}>{item.label}</span>
-                  </div>
-                  {item.badge && (
-                    <span style={badgeStyle}>{item.badge}</span>
+                  <item.icon size={19} style={{ flexShrink: 0 }} />
+                  {!isCollapsed && (
+                    <span style={{ fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {item.label}
+                    </span>
                   )}
                 </NavLink>
               ))}
             </div>
           );
         })}
+
+        {/* Settings button in menu */}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          style={{
+            ...navLinkItemStyle,
+            background: 'none',
+            border: 'none',
+            borderRight: '3px solid transparent',
+            color: '#cbd5e1',
+            justifyContent: isCollapsed ? 'center' : 'flex-start',
+            padding: isCollapsed ? '12px 0' : '10px 16px',
+            width: '100%',
+            cursor: 'pointer'
+          }}
+          title="إعدادات الورشة"
+        >
+          <Settings size={19} style={{ flexShrink: 0 }} />
+          {!isCollapsed && (
+            <span style={{ fontSize: '13px', fontWeight: 700 }}>
+              إعدادات الورشة
+            </span>
+          )}
+        </button>
       </nav>
 
-      {/* User Section */}
-      <div style={userSectionStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <div style={{
-            ...avatarStyle,
-            borderColor: getRoleColor(role || ''),
-            backgroundColor: `${getRoleColor(role || '')}20`,
-            color: getRoleColor(role || '')
-          }}>
-            {initials}
+      {/* Footer / User Profile & Logout */}
+      <div style={sidebarFooterStyle}>
+        {!isCollapsed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+            <div style={userAvatarStyle}>{initials}</div>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.username}
+              </div>
+              <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                {getRoleArabic(role)}
+              </div>
+            </div>
           </div>
-          <div style={{ overflow: 'hidden' }}>
-            <p style={{ fontSize: '14px', fontWeight: 700, color: 'white', marginBottom: '2px' }}>{user?.username}</p>
-            <span style={{ 
-              fontSize: '10px', 
-              fontWeight: 800, 
-              color: getRoleColor(role || ''),
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px'
-            }}>
-              {role}
-            </span>
-          </div>
-        </div>
+        )}
 
-        <button onClick={handleLogout} style={logoutButtonStyle} className="logout-btn">
-          <LogOut size={18} />
-          <span>Sign Out</span>
+        <button
+          onClick={handleLogout}
+          style={{
+            ...logoutBtnStyle,
+            justifyContent: isCollapsed ? 'center' : 'flex-start'
+          }}
+          title="تسجيل الخروج"
+        >
+          <LogOut size={16} />
+          {!isCollapsed && <span>تسجيل الخروج</span>}
         </button>
       </div>
 
-      <style>{`
-        .nav-link:hover {
-          background-color: var(--bg-glass-light) !important;
-          color: var(--text-primary) !important;
-        }
-        .logout-btn:hover {
-          background-color: var(--danger-dim) !important;
-          color: var(--danger) !important;
-        }
-      `}</style>
+      {/* Workshop Settings Modal */}
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 };
 
-const sidebarStyle: React.CSSProperties = {
+const sidebarContainerStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  height: '100%'
+  height: '100%',
+  backgroundColor: '#161c24',
+  borderLeft: '1px solid #212c3d',
+  fontFamily: 'Cairo, sans-serif'
 };
 
-const logoSectionStyle: React.CSSProperties = {
-  height: '70px',
-  background: 'linear-gradient(135deg, var(--accent), #dc2626)',
+const brandHeaderStyle: React.CSSProperties = {
+  height: '64px',
   display: 'flex',
   alignItems: 'center',
-  padding: '0 20px',
-  gap: '12px'
+  padding: '0 16px',
+  gap: '12px',
+  borderBottom: '1px solid #212c3d'
 };
 
 const logoIconStyle: React.CSSProperties = {
-  width: '36px',
-  height: '36px',
-  backgroundColor: 'rgba(255,255,255,0.2)',
-  borderRadius: '10px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
-};
-
-const navStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '24px 0',
-  overflowY: 'auto'
-};
-
-const sectionLabelStyle: React.CSSProperties = {
-  padding: '16px 20px 8px',
-  fontSize: '11px',
-  fontWeight: 800,
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '1px'
-};
-
-const navLinkStyle: React.CSSProperties = {
-  padding: '12px 20px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  textDecoration: 'none',
-  transition: 'all 0.2s ease'
-};
-
-const badgeStyle: React.CSSProperties = {
-  backgroundColor: 'var(--accent)',
-  color: 'white',
-  fontSize: '10px',
-  fontWeight: 800,
-  padding: '2px 6px',
-  borderRadius: '99px'
-};
-
-const userSectionStyle: React.CSSProperties = {
-  padding: '20px',
-  borderTop: '1px solid var(--border)',
-  backgroundColor: 'rgba(0,0,0,0.2)'
-};
-
-const avatarStyle: React.CSSProperties = {
-  width: '40px',
-  height: '40px',
-  borderRadius: '50%',
-  border: '2px solid transparent',
+  width: '34px',
+  height: '34px',
+  backgroundColor: '#e52535',
+  borderRadius: '8px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontWeight: 700,
-  fontSize: '14px'
+  flexShrink: 0
 };
 
-const logoutButtonStyle: React.CSSProperties = {
+const navScrollStyle: React.CSSProperties = {
+  flex: 1,
+  padding: '16px 0',
+  overflowY: 'auto'
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  padding: '8px 16px 4px',
+  fontSize: '11px',
+  fontWeight: 800,
+  color: '#64748b',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px'
+};
+
+const navLinkItemStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '12px',
+  textDecoration: 'none',
+  transition: 'all 0.15s ease'
+};
+
+const sidebarFooterStyle: React.CSSProperties = {
+  padding: '14px 16px',
+  borderTop: '1px solid #212c3d',
+  backgroundColor: '#11161d'
+};
+
+const userAvatarStyle: React.CSSProperties = {
+  width: '32px',
+  height: '32px',
+  borderRadius: '50%',
+  backgroundColor: '#2a3749',
+  border: '1px solid #3b82f6',
+  color: '#ffffff',
+  fontSize: '12px',
+  fontWeight: 800,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0
+};
+
+const logoutBtnStyle: React.CSSProperties = {
   width: '100%',
   display: 'flex',
   alignItems: 'center',
-  gap: '10px',
-  padding: '12px',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--border)',
-  background: 'transparent',
-  color: 'var(--text-secondary)',
+  gap: '8px',
+  padding: '8px 12px',
+  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  border: '1px solid rgba(239, 68, 68, 0.2)',
+  borderRadius: '8px',
+  color: '#ef4444',
+  fontSize: '12px',
+  fontWeight: 700,
   cursor: 'pointer',
-  fontWeight: 600,
-  transition: 'all 0.2s ease'
+  fontFamily: 'Cairo, sans-serif'
 };
 
 export default Sidebar;

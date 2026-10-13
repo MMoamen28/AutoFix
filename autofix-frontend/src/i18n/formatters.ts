@@ -1,14 +1,14 @@
 // Formatting utilities for currency, dates, and Arabic-Indic vs Western digits
 
-const DIGITS_KEY = 'autofix_digit_mode'; // 'western' or 'arabic-indic', default 'western'
+const DIGITS_KEY = 'autofix_digit_mode'; // 'arabic-indic' (default) or 'western'
 const CURRENCY_LABEL_EN_KEY = 'autofix_currency_label_en';
 const CURRENCY_LABEL_AR_KEY = 'autofix_currency_label_ar';
-export const DEFAULT_CURRENCY_LABEL_EN = 'L.E';
+export const DEFAULT_CURRENCY_LABEL_EN = 'ج.م';
 export const DEFAULT_CURRENCY_LABEL_AR = 'ج.م';
 
 export const getDigitMode = (): 'western' | 'arabic-indic' => {
-  if (typeof localStorage === 'undefined') return 'western';
-  return (localStorage.getItem(DIGITS_KEY) as any) || 'western';
+  if (typeof localStorage === 'undefined') return 'arabic-indic';
+  return (localStorage.getItem(DIGITS_KEY) as any) || 'arabic-indic';
 };
 
 export const setDigitMode = (mode: 'western' | 'arabic-indic') => {

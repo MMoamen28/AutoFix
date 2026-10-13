@@ -63,29 +63,28 @@ const LoginPage: React.FC = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (regData.password !== regData.confirmPassword) {
-      showToast('Passwords do not match', 'error');
+      showToast('كلمتا المرور غير متطابقتين', 'error');
       return;
     }
     setSubmitting(true);
     try {
       await axiosClient.post('/auth/register', regData);
-      showToast('Account created successfully! Please sign in.', 'success');
+      showToast('تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.', 'success');
       setIsRegister(false);
       setUsername(regData.username);
     } catch (err: any) {
-      const detail = err.response?.data?.detail || err.response?.data?.error || 'Registration failed';
-      showToast(typeof detail === 'string' ? detail : 'Registration failed', 'error');
+      const detail = err.response?.data?.detail || err.response?.data?.error || 'فشل إنشاء الحساب';
+      showToast(typeof detail === 'string' ? detail : 'فشل إنشاء الحساب', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', minHeight: '100vh', width: '100%', minWidth: 0 }}>
-      {/* Left Panel - Image */}
+    <div dir="rtl" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', minHeight: '100vh', width: '100%', minWidth: 0, backgroundColor: '#0d1117' }}>
+      {/* Left Panel - Image / Branding */}
       <div style={{
-        backgroundImage: `linear-gradient(135deg, rgba(220, 38, 38, 0.75) 0%, rgba(30, 41, 59, 0.92) 100%),
-                          url('/images/mechanic-laptop.jpg')`,
+        backgroundImage: `linear-gradient(135deg, rgba(229, 37, 53, 0.85) 0%, rgba(13, 17, 23, 0.95) 100%)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         display: 'flex',
@@ -96,49 +95,44 @@ const LoginPage: React.FC = () => {
         textAlign: 'center'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
-          <Wrench size={64} color="white" />
-          <h1 style={{ fontSize: '72px', fontWeight: 800, color: 'white', textShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>AutoFix</h1>
+          <Wrench size={56} color="white" />
+          <h1 style={{ fontSize: '64px', fontWeight: 800, color: 'white', textShadow: '0 4px 12px rgba(0,0,0,0.5)', fontFamily: 'Cairo, sans-serif' }}>AP AUTO</h1>
         </div>
-        <p style={{ fontSize: '24px', color: 'rgba(255,255,255,0.8)', maxWidth: '400px' }}>Your trusted car repair partner</p>
+        <p style={{ fontSize: '22px', color: 'rgba(255,255,255,0.9)', maxWidth: '420px', fontWeight: 600 }}>مركز خدمة وصيانة السيارات المعتمد</p>
+        <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.7)', marginTop: '8px' }}>نظام الورشة السحابي الاحترافي</p>
       </div>
 
       {/* Right Panel - Form */}
       <div style={{ 
-        backgroundColor: 'var(--bg-primary)',
+        backgroundColor: '#0d1117',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: '60px'
+        padding: '40px'
       }}>
         <div style={{
           width: '100%',
           maxWidth: isRegister ? '560px' : '440px',
-          backgroundColor: 'var(--bg-glass)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid var(--border-light)',
-          borderRadius: 'var(--radius-xl)',
+          backgroundColor: '#161c24',
+          border: '1px solid #232d3d',
+          borderRadius: '16px',
           padding: '40px',
-          boxShadow: 'var(--shadow-card)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
           transition: 'max-width 0.3s ease'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600 }}>{t('common.appName')}</span>
-            <LanguageToggle />
-          </div>
-
-          <div style={{ marginBottom: '28px' }}>
-            <h2 style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              {isRegister ? t('login.register') : t('login.signIn')}
+          <div style={{ marginBottom: '28px', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '26px', fontWeight: 800, color: '#ffffff', marginBottom: '8px' }}>
+              {isRegister ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}
             </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-              {isRegister ? t('login.subtitle') : t('login.subtitle')}
+            <p style={{ color: '#94a3b8', fontSize: '14px' }}>
+              {isRegister ? 'أدخل البيانات المطلوبة لإنشاء حساب في النظام' : 'أدخل بيانات حسابك للمتابعة إلى لوحة التحكم'}
             </p>
           </div>
 
           {!isRegister ? (
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <Input
-                label={t('login.username')}
+                label="اسم المستخدم"
                 icon={<User size={18} />}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -148,7 +142,7 @@ const LoginPage: React.FC = () => {
               
               <div style={{ position: 'relative' }}>
                 <Input
-                  label={t('login.password')}
+                  label="كلمة المرور"
                   type={showPassword ? 'text' : 'password'}
                   icon={<Lock size={18} />}
                   value={password}
@@ -161,7 +155,7 @@ const LoginPage: React.FC = () => {
                   onClick={() => setShowPassword(!showPassword)}
                   style={{
                     position: 'absolute',
-                    right: '16px',
+                    left: '16px',
                     top: '38px',
                     background: 'none',
                     border: 'none',
@@ -173,96 +167,97 @@ const LoginPage: React.FC = () => {
                 </button>
               </div>
 
-              <Button type="submit" isLoading={submitting} style={{ width: '100%', marginTop: '8px', background: 'var(--gradient-accent)' }}>
-                {t('login.loginBtn')}
+              <Button type="submit" isLoading={submitting} style={{ width: '100%', marginTop: '8px', background: '#e52535', color: '#fff', fontWeight: 700, borderRadius: '8px', padding: '12px' }}>
+                دخول إلى النظام
               </Button>
             </form>
           ) : (
-            <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <Input
-                  label="First Name"
+                  label="الاسم الأول"
                   icon={<User size={18} />}
                   value={regData.firstName}
                   onChange={(e) => setRegData({...regData, firstName: e.target.value})}
-                  placeholder="Mohamed"
+                  placeholder="محمد"
                   required
                 />
                 <Input
-                  label="Last Name"
+                  label="اسم العائلة"
                   icon={<User size={18} />}
                   value={regData.lastName}
                   onChange={(e) => setRegData({...regData, lastName: e.target.value})}
-                  placeholder="Salah"
+                  placeholder="أحمد"
                   required
                 />
               </div>
               <Input
-                label="Username"
+                label="اسم المستخدم"
                 icon={<User size={18} />}
                 value={regData.username}
                 onChange={(e) => setRegData({...regData, username: e.target.value})}
-                placeholder="johndoe123"
+                placeholder="mohamed123"
                 required
               />
               <Input
-                label="Email"
+                label="البريد الإلكتروني"
                 type="email"
                 icon={<Mail size={18} />}
                 value={regData.email}
                 onChange={(e) => setRegData({...regData, email: e.target.value})}
-                placeholder="john@example.com"
+                placeholder="user@example.com"
                 required
               />
               <Input
-                label="Phone"
+                label="رقم الهاتف"
                 icon={<Phone size={18} />}
                 value={regData.phone}
                 onChange={(e) => setRegData({...regData, phone: e.target.value})}
-                placeholder="+201234567890"
+                placeholder="01012345678"
                 required
               />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <Input
-                  label="Password"
+                  label="كلمة المرور"
                   type="password"
                   icon={<Lock size={18} />}
                   value={regData.password}
                   onChange={(e) => setRegData({...regData, password: e.target.value})}
-                  placeholder="Min 8 chars"
+                  placeholder="8 أحرف على الأقل"
                   required
                 />
                 <Input
-                  label="Confirm"
+                  label="تأكيد كلمة المرور"
                   type="password"
                   icon={<Lock size={18} />}
                   value={regData.confirmPassword}
                   onChange={(e) => setRegData({...regData, confirmPassword: e.target.value})}
-                  placeholder="Re-enter"
+                  placeholder="أعد إدخال كلمة المرور"
                   required
                 />
               </div>
-              <Button type="submit" isLoading={submitting} style={{ width: '100%', marginTop: '12px', background: 'var(--gradient-accent)' }}>
-                Complete Registration
+              <Button type="submit" isLoading={submitting} style={{ width: '100%', marginTop: '12px', background: '#e52535', color: '#fff', fontWeight: 700, borderRadius: '8px', padding: '12px' }}>
+                إتمام إنشاء الحساب
               </Button>
             </form>
           )}
 
           <div style={{ marginTop: '24px', textAlign: 'center' }}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-              {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
+            <p style={{ color: '#94a3b8', fontSize: '14px' }}>
+              {isRegister ? 'لديك حساب بالفعل؟' : 'ليس لديك حساب؟'}{' '}
               <button 
                 onClick={() => setIsRegister(!isRegister)}
                 style={{ 
-                  color: 'var(--accent)', 
-                  fontWeight: 600, 
+                  color: '#e52535', 
+                  fontWeight: 700, 
                   background: 'none', 
                   border: 'none', 
                   cursor: 'pointer',
-                  padding: 0
+                  padding: 0,
+                  marginRight: '6px'
                 }}
               >
-                {isRegister ? 'Sign In' : 'Register new account'}
+                {isRegister ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}
               </button>
             </p>
           </div>

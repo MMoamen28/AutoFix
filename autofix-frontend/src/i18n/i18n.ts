@@ -6,10 +6,9 @@ import ar from './locales/ar.json';
 const STORAGE_KEY = 'autofix_lang';
 const savedLang = localStorage.getItem(STORAGE_KEY) || 'ar'; // Default Arabic
 
-export const applyDirection = (lang: string) => {
-  const isAr = lang === 'ar';
-  document.documentElement.dir = isAr ? 'rtl' : 'ltr';
-  document.documentElement.lang = isAr ? 'ar' : 'en';
+export const applyDirection = () => {
+  document.documentElement.dir = 'rtl';
+  document.documentElement.lang = 'ar';
 };
 
 i18n
@@ -19,22 +18,18 @@ i18n
       en: { translation: en },
       ar: { translation: ar },
     },
-    lng: savedLang,
+    lng: 'ar',
     fallbackLng: 'ar',
     interpolation: {
       escapeValue: false,
     },
   });
 
-applyDirection(savedLang);
+applyDirection();
 
-i18n.on('languageChanged', (lng) => {
-  localStorage.setItem(STORAGE_KEY, lng);
-  applyDirection(lng);
-});
-
-export const setLanguage = (lang: 'en' | 'ar') => {
-  i18n.changeLanguage(lang);
+export const setLanguage = (_lang?: 'en' | 'ar') => {
+  i18n.changeLanguage('ar');
+  applyDirection();
 };
 
 export default i18n;
