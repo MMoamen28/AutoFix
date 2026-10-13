@@ -119,7 +119,8 @@ namespace AutoFix.Services
                     UnitCost = isCustomer ? 0 : l.UnitCost,
                     UnitPrice = l.UnitPrice,
                     TechnicianId = l.TechnicianId,
-                    TechnicianName = l.Technician != null ? $"{l.Technician.FirstName} {l.Technician.LastName}" : null
+                    TechnicianName = l.Technician != null ? $"{l.Technician.FirstName} {l.Technician.LastName}" : null,
+                    AddedAt = l.AddedAt
                 }).ToList(),
                 Photos = w.Photos.Where(p => !p.IsDeleted).Select(p => new WorkOrderPhotoResponseDto
                 {
@@ -269,7 +270,8 @@ namespace AutoFix.Services
                     Quantity = lineDto.Quantity,
                     UnitCost = lineDto.UnitCost,
                     UnitPrice = lineDto.UnitPrice,
-                    TechnicianId = lineDto.TechnicianId ?? dto.AssignedTechnicianId
+                    TechnicianId = lineDto.TechnicianId ?? dto.AssignedTechnicianId,
+                    AddedAt = lineDto.AddedAt ?? DateTime.UtcNow
                 });
             }
 
@@ -580,7 +582,8 @@ namespace AutoFix.Services
                 Quantity = lineDto.Quantity,
                 UnitCost = lineDto.UnitCost,
                 UnitPrice = lineDto.UnitPrice,
-                TechnicianId = lineDto.TechnicianId ?? workOrder.AssignedTechnicianId
+                TechnicianId = lineDto.TechnicianId ?? workOrder.AssignedTechnicianId,
+                AddedAt = lineDto.AddedAt ?? DateTime.UtcNow
             };
 
             workOrder.Lines.Add(line);
@@ -1200,7 +1203,8 @@ namespace AutoFix.Services
                             Quantity = lineDto.Quantity > 0 ? lineDto.Quantity : 1,
                             UnitCost = lineDto.UnitCost,
                             UnitPrice = lineDto.UnitPrice,
-                            TechnicianId = lineDto.TechnicianId ?? workOrder.AssignedTechnicianId
+                            TechnicianId = lineDto.TechnicianId ?? workOrder.AssignedTechnicianId,
+                            AddedAt = lineDto.AddedAt ?? DateTime.UtcNow
                         };
                         workOrder.Lines.Add(line);
                     }

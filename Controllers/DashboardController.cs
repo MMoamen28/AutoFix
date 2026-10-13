@@ -31,6 +31,17 @@ namespace AutoFix.Controllers
             return Ok(data);
         }
 
+        [HttpGet("financial")]
+        [Authorize(Roles = "Admin,Owner,Accountant")]
+        public async Task<ActionResult<FinancialSummaryDto>> GetFinancialSummary(
+            [FromQuery] string period = "month",
+            [FromQuery] DateTime? startDate = null,
+            [FromQuery] DateTime? endDate = null)
+        {
+            var data = await _service.GetFinancialSummaryAsync(period, startDate, endDate);
+            return Ok(data);
+        }
+
         [HttpGet("customer")]
         public async Task<ActionResult<CustomerDashboardDto>> GetCustomerDashboard([FromQuery] int? customerId)
         {

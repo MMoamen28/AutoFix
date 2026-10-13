@@ -7,28 +7,27 @@ const axiosClient = axios.create({
   },
 });
 
-// PHASE 1: HTTP Request Interceptor
+// Request Interceptor: Attach Token & Device Name
 axiosClient.interceptors.request.use(
   (config) => {
-    // Retrieve the Keycloak token (stored during login)
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const deviceName = localStorage.getItem('autofix_device_name') || 'جهاز الورشة';
+    config.headers['X-Device-Name'] = encodeURIComponent(deviceName);
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// PHASE 1: HTTP Response Interceptor for 401 Unauthorized
+// Response Interceptor: Handle 401/PIN session
 axiosClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      console.warn('Unauthorized request - Redirecting to login...');
-      // Clear token and redirect to login
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      console.warn('Unauthorized or PIN required');
+      window.dispatchEvent(new CustomEvent('autofix-pin-required'));
     }
     return Promise.reject(error);
   }

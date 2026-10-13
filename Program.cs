@@ -4,6 +4,7 @@ using AutoFix.Hubs;
 using AutoFix.Middleware;
 using AutoFix.Services;
 using AutoFix.Services.Interfaces;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -78,10 +79,18 @@ builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();
 
-// 4. Authentication Configuration (Local default vs Keycloak legacy)
-var authMode = builder.Configuration["AuthMode"] ?? "Local";
+builder.Services.AddHttpContextAccessor();
 
-if (authMode.Equals("Keycloak", StringComparison.OrdinalIgnoreCase))
+// 4. Authentication Configuration (None new default vs Local vs Keycloak legacy)
+var authMode = builder.Configuration["AuthMode"] ?? "None";
+
+if (authMode.Equals("None", StringComparison.OrdinalIgnoreCase))
+{
+    // None mode: Built-in Admin identity, no login required, full workshop privileges
+    builder.Services.AddAuthentication("None")
+        .AddScheme<AuthenticationSchemeOptions, AutoFix.Authentication.NoneAuthHandler>("None", _ => { });
+}
+else if (authMode.Equals("Keycloak", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddAuthentication(options =>
     {

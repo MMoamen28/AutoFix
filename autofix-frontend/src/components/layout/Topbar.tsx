@@ -90,29 +90,27 @@ export const Topbar: React.FC = () => {
   }, [searchQuery]);
 
   const handleNewWorkOrderClick = () => {
-    // If on workshop-orders page, trigger open-new-work-order event
-    window.dispatchEvent(new CustomEvent('open-new-work-order'));
-    navigate('/workshop-orders?action=new');
+    if (window.location.pathname !== '/') {
+      navigate('/');
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('open-new-work-order'));
+      }, 150);
+    } else {
+      window.dispatchEvent(new CustomEvent('open-new-work-order'));
+    }
+  };
+
+  const handleSelectSearchItem = (type: string, item: any) => {
+    setShowSearchResults(false);
+    if (window.location.pathname !== '/') {
+      navigate('/');
+    }
+    window.dispatchEvent(new CustomEvent('open-search-detail', { detail: { type, item } }));
   };
 
   const handleToggleSidebar = () => {
     window.dispatchEvent(new CustomEvent('toggle-sidebar'));
   };
-
-  const getRoleArabic = (r?: string | null) => {
-    switch (r) {
-      case 'Owner': return 'المالك';
-      case 'Admin': return 'مدير النظام';
-      case 'Receptionist':
-      case 'Reception': return 'الاستقبال';
-      case 'Mechanic': return 'فني الورشة';
-      case 'Accountant': return 'المحاسب';
-      case 'Customer': return 'العميل';
-      default: return r || 'مستخدم';
-    }
-  };
-
-  const initials = user?.username ? user.username.substring(0, 2).toUpperCase() : 'AP';
 
   return (
     <header style={headerStyle} dir="rtl">
@@ -154,7 +152,7 @@ export const Topbar: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => { if (searchQuery.trim().length >= 2) setShowSearchResults(true); }}
-            placeholder="ابحث عن عميل، رقم لوحة، أو هاتف..."
+            placeholder="ابحث عن عميل، رقم لوحة، هاتف، أو رقم فاتورة..."
             style={searchInputStyle}
             id="global-topbar-search"
           />
@@ -188,10 +186,7 @@ export const Topbar: React.FC = () => {
                     {searchResults.customers.map((c: any) => (
                       <div
                         key={`c-${c.id}`}
-                        onClick={() => {
-                          setShowSearchResults(false);
-                          navigate(`/workshop-orders?search=${encodeURIComponent(c.phone || c.fullName)}`);
-                        }}
+                        onClick={() => handleSelectSearchItem('customer', c)}
                         style={resultItemStyle}
                       >
                         <User size={16} color="#3b82f6" />
@@ -211,10 +206,7 @@ export const Topbar: React.FC = () => {
                     {searchResults.workOrders.map((w: any) => (
                       <div
                         key={`w-${w.id}`}
-                        onClick={() => {
-                          setShowSearchResults(false);
-                          navigate(`/workshop-orders?workOrderId=${w.id}`);
-                        }}
+                        onClick={() => handleSelectSearchItem('workOrder', w)}
                         style={resultItemStyle}
                       >
                         <Wrench size={16} color="#e52535" />
@@ -234,10 +226,7 @@ export const Topbar: React.FC = () => {
                     {searchResults.invoices.map((inv: any) => (
                       <div
                         key={`inv-${inv.id}`}
-                        onClick={() => {
-                          setShowSearchResults(false);
-                          navigate(`/invoices?search=${encodeURIComponent(inv.invoiceNumber)}`);
-                        }}
+                        onClick={() => handleSelectSearchItem('invoice', inv)}
                         style={resultItemStyle}
                       >
                         <FileText size={16} color="#10b981" />
@@ -255,7 +244,7 @@ export const Topbar: React.FC = () => {
         )}
       </div>
 
-      {/* Left side: Red CTA Button & Icons */}
+      {/* Left side: Red CTA Button & Gear Settings */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {/* Red CTA Button: + كارت عمل جديد */}
         <button
@@ -267,73 +256,15 @@ export const Topbar: React.FC = () => {
           <span>كارت عمل جديد</span>
         </button>
 
-        {/* Notifications Icon with Red Dot */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setNotificationsOpen(!notificationsOpen)}
-            style={circleIconBtnStyle}
-            title="الإشعارات"
-            id="topbar-notifications-btn"
-          >
-            <Bell size={18} color="#cbd5e1" />
-            <span style={redNotificationDotStyle} />
-          </button>
-        </div>
-
-        {/* Messages Icon with Red Dot */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setMessagesOpen(!messagesOpen)}
-            style={circleIconBtnStyle}
-            title="الرسائل والمحادثات"
-            id="topbar-messages-btn"
-          >
-            <MessageSquare size={18} color="#cbd5e1" />
-            <span style={redNotificationDotStyle} />
-          </button>
-        </div>
-
-        {/* User Profile Circle Menu */}
-        <div ref={userMenuRef} style={{ position: 'relative' }}>
-          <button
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-            style={userCircleBtnStyle}
-            id="topbar-user-menu-btn"
-            title={user?.username || 'المستخدم'}
-          >
-            {initials}
-          </button>
-
-          {/* User Dropdown */}
-          {userMenuOpen && (
-            <div style={userDropdownMenuStyle}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #232d3d' }}>
-                <div style={{ fontWeight: 800, color: '#ffffff', fontSize: '14px' }}>{user?.username}</div>
-                <div style={{ fontSize: '12px', color: '#e52535', fontWeight: 700 }}>{getRoleArabic(role)}</div>
-              </div>
-
-              <button
-                onClick={() => { setUserMenuOpen(false); setSettingsOpen(true); }}
-                style={dropdownItemStyle}
-              >
-                <Settings size={16} />
-                <span>إعدادات الورشة</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setUserMenuOpen(false);
-                  logout();
-                  navigate('/login');
-                }}
-                style={{ ...dropdownItemStyle, color: '#ef4444' }}
-              >
-                <LogOut size={16} />
-                <span>تسجيل الخروج</span>
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Gear Settings Button */}
+        <button
+          onClick={() => setSettingsOpen(true)}
+          style={circleIconBtnStyle}
+          title="إعدادات الورشة"
+          id="topbar-settings-btn"
+        >
+          <Settings size={20} color="#cbd5e1" />
+        </button>
       </div>
 
       {/* Workshop Settings Modal */}

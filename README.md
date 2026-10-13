@@ -102,5 +102,38 @@ AutoFix features full bilingual support (English & Arabic) with real-time RTL mi
 - **Numbers & Dates**: Display dates via `formatDate()` (`dd/MM/yyyy`) and money via `formatCurrency()` (`ج.م` / `EGP`), respecting the Western vs Arabic-Indic digits setting. User-entered data is never modified or translated.
 
 ---
+
+## 📱 مشاركة الشبكة وتشغيل الموبايل (Phone & Network Access)
+
+لفتح البرنامج من الهاتف المحمول على نفس شبكة Wi-Fi بالورشة:
+
+### 1. تفعيل جدار الحماية (Windows Firewall)
+قم بتشغيل ملف الـ PowerShell لفتح المنفذ 5000 على الشبكات الخاصة (Private) فقط:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Enable-NetworkAccess.ps1
+```
+ولإغلاق المنفذ لاحقاً:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Disable-NetworkAccess.ps1
+```
+
+### 2. تثبيت عنوان IP للابتوب في الراوتر (Router Fixed IP / DHCP Reservation)
+لضمان عدم تغير رابط البرنامج على الهاتف:
+1. افتح صفحة إعدادات الراوتر (عادة `192.168.1.1`).
+2. سجّل الدخول وابحث عن قسم **DHCP Server** أو **LAN Setup**.
+3. ابحث عن خيار **Static DHCP** أو **Address Reservation** (حجز IP ثابت).
+4. أضف جهاز اللابتوب باستخدام عنوان الـ MAC Address الخاص به وحدد له عنوان IP ثابت (مثل `192.168.1.150`).
+5. احفظ الإعدادات وأعد تشغيل الراوتر.
+
+### 3. فتح البرنامج من الموبايل
+1. تأكد من تفعيل "السماح للأجهزة الأخرى على شبكة الورشة" من نافذة الترس (الإعدادات).
+2. افتح متصفح الهاتف واكتب: `http://<IP_اللابتوب>:5000` (أو امسح رمز الـ QR مباشرة بكاميرا الهاتف).
+3. اختر اسم الجهاز عند الفتح لأول مرة (مثل "موبايل المحاسب").
+4. يمكن تثبيت التطبيق على الشاشة الرئيسية للهاتف (Add to Home Screen) ليعمل كتطبيق كامل (PWA).
+
+> [!CAUTION]
+> لا تقم أبداً بفتح المنفذ 5000 على الشبكات العامة (Public Wi-Fi) أو عمل Port Forwarding إلى الإنترنت العام بدون تأمين إضافي.
+
+---
 *Developed for Web Engineering - AutoFix Professional Platform.*
 

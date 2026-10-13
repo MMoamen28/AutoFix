@@ -16,12 +16,82 @@ namespace AutoFix.Controllers
         private readonly IBackupService _backupService;
         private readonly ISqliteMigrationService _migrationService;
         private readonly IDataFolderService _dataFolder;
+        private readonly AutoFix.Data.AppDbContext _db;
 
-        public BackupController(IBackupService backupService, ISqliteMigrationService migrationService, IDataFolderService dataFolder)
+        public BackupController(IBackupService backupService, ISqliteMigrationService migrationService, IDataFolderService dataFolder, AutoFix.Data.AppDbContext db)
         {
             _backupService = backupService;
             _migrationService = migrationService;
             _dataFolder = dataFolder;
+            _db = db;
+        }
+
+        [HttpGet("status")]
+        public async Task<IActionResult> GetStatus()
+        {
+            bool isOk = false;
+            try
+            {
+                isOk = await _backupService.VerifyDatabaseIntegrityAsync();
+            }
+            catch
+            {
+                isOk = false;
+            }
+
+            var backups = await _backupService.ListBackupsAsync();
+            var lastBackup = _backupService.GetLastBackupTime();
+
+            long dbSize = 0;
+            try
+            {
+                if (System.IO.File.Exists(_dataFolder.DatabasePath))
+                {
+                    dbSize = new FileInfo(_dataFolder.DatabasePath).Length;
+                }
+            }
+            catch { }
+
+            long freeSpace = 0;
+            try
+            {
+                var root = Path.GetPathRoot(_dataFolder.RootPath);
+                if (!string.IsNullOrEmpty(root))
+                {
+                    var drive = new DriveInfo(root);
+                    freeSpace = drive.AvailableFreeSpace;
+                }
+            }
+            catch { }
+
+            var auditList = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+                System.Linq.Queryable.Take(
+                    System.Linq.Queryable.OrderByDescending(
+                        System.Linq.Queryable.Where(_db.AuditLogs, a => a.Action.Contains("Backup") || a.Action.Contains("Restore")),
+                        a => a.Timestamp
+                    ),
+                    10
+                )
+            );
+
+            return Ok(new
+            {
+                isDatabaseHealthy = isOk,
+                lastBackupTime = lastBackup,
+                backupCount = backups.Count,
+                dataSizeBytes = dbSize,
+                dataFolderPath = _dataFolder.RootPath,
+                isFallback = _dataFolder.IsFallback,
+                freeDiskSpaceBytes = freeSpace,
+                auditLogs = auditList.Select(a => new
+                {
+                    a.Id,
+                    a.Action,
+                    a.UserName,
+                    a.Details,
+                    a.Timestamp
+                })
+            });
         }
 
         [HttpPost("create")]

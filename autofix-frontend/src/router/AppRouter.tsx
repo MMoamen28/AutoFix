@@ -41,64 +41,38 @@ import AllDataPage from '../pages/AllDataPage';
 import BackupRestorePage from '../pages/admin/BackupRestorePage';
 
 const HomeRoute: React.FC = () => {
-  const { role, token } = useAuth();
-  if (!token) return <Navigate to="/login" replace />;
-  switch (role) {
-    case 'Owner': return <AdminDashboardPage />;
-    case 'Admin': return <AdminDashboardPage />;
-    case 'Mechanic': return <MechanicDashboard />;
-    case 'Customer': return <CustomerDashboardPage />;
-    default: return <Navigate to="/login" replace />;
-  }
+  return <AdminDashboardPage />;
 };
 
 const router = createBrowserRouter(
   createRoutesFromElements(
     <Route element={<Layout />}>
-      {/* Public Routes */}
+      {/* The THREE Main Pages */}
       <Route path="/" element={<HomeRoute />} />
-      <Route path="/login" element={<LoginPage />} />
-
-      {/* Admin/Owner Shared Routes */}
-      <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
-      <Route path="/workshop-orders" element={<CustomersAndWorkOrdersPage />} />
-      <Route path="/customers" element={<Navigate to="/workshop-orders" replace />} />
-      <Route path="/customers/new" element={<Navigate to="/workshop-orders" replace />} />
-      <Route path="/customers/:id" element={<CustomerDetailPage />} />
-      <Route path="/work-orders" element={<Navigate to="/workshop-orders" replace />} />
-      <Route path="/invoices" element={<InvoicesPage />} />
-      <Route path="/credit-notes" element={<CreditNotesPage />} />
-      <Route path="/expenses" element={<ExpensesPage />} />
-      <Route path="/inspections" element={<InspectionsListPage />} />
-      <Route path="/inspections/new" element={<InspectionEditorPage />} />
-      <Route path="/inspections/:id/edit" element={<InspectionEditorPage />} />
-      <Route path="/inspections/:id/print" element={<InspectionPrintView />} />
-      <Route path="/inspections/blank-form" element={<InspectionBlankFormPage />} />
-      <Route path="/mechanics" element={<MechanicsPage />} />
-      <Route path="/repair-orders" element={<RepairOrdersPage />} />
-      <Route path="/services" element={<ServicesPage />} />
-      <Route path="/workmanship-prices" element={<ServicesPage />} />
       <Route path="/spare-parts" element={<SparePartsPage />} />
-
-      {/* Owner-Specific Routes */}
-      <Route path="/owner/legacy-dashboard" element={<OwnerDashboard />} />
-      <Route path="/owner/receipts" element={<ReceiptsPage />} />
-      <Route path="/owner/all-data" element={<AllDataPage />} />
       <Route path="/backup-restore" element={<BackupRestorePage />} />
 
-      {/* Mechanic Routes */}
-      <Route path="/mechanic" element={<Navigate to="/" replace />} />
-      <Route path="/mechanic/repair-orders" element={<MyRepairOrdersPageMechanic />} />
-      <Route path="/mechanic/available-orders" element={<AvailableRepairOrdersPage />} />
-      <Route path="/mechanic/spare-parts" element={<SparePartsViewPage />} />
-
-      {/* Customer Routes */}
-      <Route path="/customer" element={<Navigate to="/" replace />} />
-      <Route path="/customer/dashboard" element={<CustomerDashboardPage />} />
-      <Route path="/marketplace" element={<MarketplacePage />} />
-      <Route path="/customer/cars" element={<MyCarsPage />} />
-      <Route path="/customer/repair-orders" element={<MyRepairOrdersPageCustomer />} />
-      <Route path="/cart" element={<CartPage />} />
+      {/* Legacy / Hidden Routes: Preserved in code, redirected to Home Dashboard */}
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="/admin-dashboard" element={<Navigate to="/" replace />} />
+      <Route path="/workshop-orders" element={<Navigate to="/" replace />} />
+      <Route path="/customers" element={<Navigate to="/" replace />} />
+      <Route path="/customers/:id" element={<Navigate to="/" replace />} />
+      <Route path="/work-orders" element={<Navigate to="/" replace />} />
+      <Route path="/invoices" element={<Navigate to="/" replace />} />
+      <Route path="/credit-notes" element={<Navigate to="/" replace />} />
+      <Route path="/expenses" element={<Navigate to="/" replace />} />
+      <Route path="/inspections" element={<Navigate to="/" replace />} />
+      <Route path="/inspections/*" element={<Navigate to="/" replace />} />
+      <Route path="/mechanics" element={<Navigate to="/" replace />} />
+      <Route path="/repair-orders" element={<Navigate to="/" replace />} />
+      <Route path="/services" element={<Navigate to="/" replace />} />
+      <Route path="/workmanship-prices" element={<Navigate to="/" replace />} />
+      <Route path="/owner/*" element={<Navigate to="/" replace />} />
+      <Route path="/mechanic/*" element={<Navigate to="/" replace />} />
+      <Route path="/customer/*" element={<Navigate to="/" replace />} />
+      <Route path="/marketplace" element={<Navigate to="/" replace />} />
+      <Route path="/cart" element={<Navigate to="/" replace />} />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />

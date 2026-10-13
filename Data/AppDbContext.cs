@@ -9,11 +9,18 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Microsoft.AspNetCore.Http;
+
 namespace AutoFix.Data
 {
     public class AppDbContext : DbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        private readonly IHttpContextAccessor? _httpContextAccessor;
+
+        public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor? httpContextAccessor = null) : base(options)
+        {
+            _httpContextAccessor = httpContextAccessor;
+        }
 
         // Core original entities
         public DbSet<Customer> Customers => Set<Customer>();
@@ -274,13 +281,49 @@ namespace AutoFix.Data
         public override int SaveChanges()
         {
             ApplySoftDelete();
+            EnrichAuditLogs();
             return base.SaveChanges();
         }
 
         public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
             ApplySoftDelete();
+            EnrichAuditLogs();
             return await base.SaveChangesAsync(cancellationToken);
+        }
+
+        private void EnrichAuditLogs()
+        {
+            try
+            {
+                var deviceName = _httpContextAccessor?.HttpContext?.Request?.Headers["X-Device-Name"].FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(deviceName))
+                {
+                    deviceName = _httpContextAccessor?.HttpContext?.User?.Identity?.Name;
+                }
+
+                if (!string.IsNullOrWhiteSpace(deviceName))
+                {
+                    foreach (var entry in ChangeTracker.Entries<AuditLog>())
+                    {
+                        if (entry.State == EntityState.Added)
+                        {
+                            if (string.IsNullOrWhiteSpace(entry.Entity.UserName) || entry.Entity.UserName == "admin")
+                            {
+                                entry.Entity.UserName = deviceName;
+                            }
+                            if (string.IsNullOrWhiteSpace(entry.Entity.UserId))
+                            {
+                                entry.Entity.UserId = deviceName;
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Safety: ignore any exception in context enrichment
+            }
         }
 
         private void ApplySoftDelete()

@@ -86,6 +86,8 @@ namespace AutoFix.Models
         public int? TechnicianId { get; set; }
         public Mechanic? Technician { get; set; }
 
+        public DateTime AddedAt { get; set; } = DateTime.UtcNow;
+
         // Soft delete
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }

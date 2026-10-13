@@ -180,5 +180,138 @@ namespace AutoFix.Services
                 FinalizedInspections = inspections
             };
         }
+
+        public async Task<FinancialSummaryDto> GetFinancialSummaryAsync(string period, DateTime? startDate = null, DateTime? endDate = null)
+        {
+            var cairoNow = InvoiceService.GetCairoNow();
+            DateTime currentStart, currentEnd = cairoNow;
+            DateTime prevStart, prevEnd;
+
+            switch (period?.ToLowerInvariant())
+            {
+                case "today":
+                    currentStart = cairoNow.Date;
+                    prevStart = currentStart.AddDays(-1);
+                    prevEnd = currentStart.AddSeconds(-1);
+                    break;
+                case "week":
+                    currentStart = cairoNow.Date.AddDays(-6);
+                    prevStart = currentStart.AddDays(-7);
+                    prevEnd = currentStart.AddSeconds(-1);
+                    break;
+                case "year":
+                    currentStart = new DateTime(cairoNow.Year, 1, 1);
+                    prevStart = new DateTime(cairoNow.Year - 1, 1, 1);
+                    prevEnd = new DateTime(cairoNow.Year - 1, cairoNow.Month, cairoNow.Day);
+                    break;
+                case "custom":
+                    currentStart = startDate ?? cairoNow.Date.AddDays(-30);
+                    currentEnd = endDate ?? cairoNow;
+                    var duration = currentEnd - currentStart;
+                    prevStart = currentStart - duration;
+                    prevEnd = currentStart.AddSeconds(-1);
+                    break;
+                case "month":
+                default:
+                    currentStart = new DateTime(cairoNow.Year, cairoNow.Month, 1);
+                    var prevMonth = cairoNow.AddMonths(-1);
+                    prevStart = new DateTime(prevMonth.Year, prevMonth.Month, 1);
+                    prevEnd = new DateTime(prevMonth.Year, prevMonth.Month, Math.Min(cairoNow.Day, DateTime.DaysInMonth(prevMonth.Year, prevMonth.Month)));
+                    break;
+            }
+
+            // Convert to UTC for database comparison
+            var currentStartUtc = currentStart.AddHours(-2);
+            var currentEndUtc = currentEnd.AddHours(-2);
+            var prevStartUtc = prevStart.AddHours(-2);
+            var prevEndUtc = prevEnd.AddHours(-2);
+
+            // 1. Current period revenues (excluding Credited invoices)
+            var currentPayments = await _db.InvoicePayments
+                .Include(p => p.Invoice)
+                .AsNoTracking()
+                .Where(p => !p.IsDeleted && p.PaidAt >= currentStartUtc && p.PaidAt <= currentEndUtc && (p.Invoice == null || p.Invoice.Status != "Credited"))
+                .ToListAsync();
+
+            decimal currentRevenue = currentPayments.Sum(p => p.Amount);
+
+            // Previous period revenues
+            var prevPayments = await _db.InvoicePayments
+                .Include(p => p.Invoice)
+                .AsNoTracking()
+                .Where(p => !p.IsDeleted && p.PaidAt >= prevStartUtc && p.PaidAt <= prevEndUtc && (p.Invoice == null || p.Invoice.Status != "Credited"))
+                .ToListAsync();
+
+            decimal prevRevenue = prevPayments.Sum(p => p.Amount);
+
+            // 2. Current expenses
+            var currentExpenses = await _db.TreasuryTransactions
+                .AsNoTracking()
+                .Where(t => !t.IsDeleted && t.TransactionType == "Expense" && t.TransactionDate >= currentStartUtc && t.TransactionDate <= currentEndUtc)
+                .ToListAsync();
+
+            decimal currentExpenseTotal = currentExpenses.Sum(t => t.Amount);
+
+            var prevExpenses = await _db.TreasuryTransactions
+                .AsNoTracking()
+                .Where(t => !t.IsDeleted && t.TransactionType == "Expense" && t.TransactionDate >= prevStartUtc && t.TransactionDate <= prevEndUtc)
+                .ToListAsync();
+
+            decimal prevExpenseTotal = prevExpenses.Sum(t => t.Amount);
+
+            // 3. Cost of sold parts (from WorkOrderLines on invoiced orders in current period)
+            var currentPartLines = await _db.WorkOrderLines
+                .Include(l => l.WorkOrder)
+                .AsNoTracking()
+                .Where(l => !l.IsDeleted && (l.LineType == "Part" || l.LineType == "SparePart") && l.WorkOrder != null && !l.WorkOrder.IsDeleted && l.WorkOrder.CompletedAt >= currentStartUtc && l.WorkOrder.CompletedAt <= currentEndUtc)
+                .ToListAsync();
+
+            decimal currentPartCost = currentPartLines.Sum(l => l.Quantity * l.UnitCost);
+
+            var prevPartLines = await _db.WorkOrderLines
+                .Include(l => l.WorkOrder)
+                .AsNoTracking()
+                .Where(l => !l.IsDeleted && (l.LineType == "Part" || l.LineType == "SparePart") && l.WorkOrder != null && !l.WorkOrder.IsDeleted && l.WorkOrder.CompletedAt >= prevStartUtc && l.WorkOrder.CompletedAt <= prevEndUtc)
+                .ToListAsync();
+
+            decimal prevPartCost = prevPartLines.Sum(l => l.Quantity * l.UnitCost);
+
+            decimal currentNetProfit = currentRevenue - currentPartCost - currentExpenseTotal;
+            decimal prevNetProfit = prevRevenue - prevPartCost - prevExpenseTotal;
+
+            // Trend points (daily breakdown for chart)
+            var trend = new System.Collections.Generic.List<decimal>();
+            int days = Math.Max(1, (int)(currentEnd.Date - currentStart.Date).TotalDays + 1);
+            int step = Math.Max(1, days / 7);
+            for (var d = currentStart.Date; d <= currentEnd.Date; d = d.AddDays(step))
+            {
+                var dUtcStart = d.AddHours(-2);
+                var dUtcEnd = d.AddDays(step).AddHours(-2);
+                var dailySum = currentPayments
+                    .Where(p => p.PaidAt >= dUtcStart && p.PaidAt < dUtcEnd)
+                    .Sum(p => p.Amount);
+                trend.Add(dailySum);
+            }
+            if (trend.Count < 2)
+            {
+                trend.Add(currentRevenue);
+            }
+
+            decimal revChange = prevRevenue > 0 ? Math.Round(((currentRevenue - prevRevenue) / prevRevenue) * 100m, 1) : 0m;
+            decimal expChange = prevExpenseTotal > 0 ? Math.Round(((currentExpenseTotal - prevExpenseTotal) / prevExpenseTotal) * 100m, 1) : 0m;
+            decimal profChange = Math.Abs(prevNetProfit) > 0 ? Math.Round(((currentNetProfit - prevNetProfit) / Math.Abs(prevNetProfit)) * 100m, 1) : 0m;
+
+            return new FinancialSummaryDto
+            {
+                Period = period ?? "month",
+                TotalRevenue = currentRevenue,
+                TotalExpenses = currentExpenseTotal,
+                NetProfit = currentNetProfit,
+                RevenueChangePercentage = revChange,
+                ExpenseChangePercentage = expChange,
+                ProfitChangePercentage = profChange,
+                RevenueTrend = trend
+            };
+        }
     }
 }

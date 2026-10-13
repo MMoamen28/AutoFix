@@ -50,6 +50,7 @@ namespace AutoFix.DTOs.WorkOrder
         public decimal UnitCost { get; set; } = 0;
         public decimal UnitPrice { get; set; } = 0;
         public int? TechnicianId { get; set; }
+        public DateTime? AddedAt { get; set; }
         public string? RevisionReason { get; set; }
     }
 
@@ -184,6 +185,7 @@ namespace AutoFix.DTOs.WorkOrder
         public decimal Subtotal => Quantity * UnitPrice;
         public int? TechnicianId { get; set; }
         public string? TechnicianName { get; set; }
+        public DateTime AddedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class WorkOrderPhotoResponseDto

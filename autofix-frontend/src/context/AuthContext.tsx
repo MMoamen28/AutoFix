@@ -74,13 +74,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           parseUserToken(savedToken);
           setToken(savedToken);
-          await refreshUserData();
-          signalRService.connect();
         } catch (e) {
           localStorage.removeItem('token');
           setToken(null);
         }
+      } else {
+        // AuthMode = "None" default: Built-in workshop Admin
+        setUser({ username: 'مدير الورشة', role: 'Admin' });
+        setRole('Admin');
+        setUserId('workshop-admin');
       }
+
+      await refreshUserData();
+      signalRService.connect();
       setIsLoading(false);
     };
 
