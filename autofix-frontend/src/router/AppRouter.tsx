@@ -19,6 +19,8 @@ import MechanicsPage from '../pages/admin/MechanicsPage';
 import RepairOrdersPage from '../pages/admin/RepairOrdersPage';
 import ServicesPage from '../pages/admin/ServicesPage';
 import SparePartsPage from '../pages/admin/SparePartsPage';
+import InvoicesPage from '../pages/admin/InvoicesPage';
+import CreditNotesPage from '../pages/admin/CreditNotesPage';
 
 import MechanicDashboard from '../pages/mechanic/MechanicDashboard';
 import MyRepairOrdersPageMechanic from '../pages/mechanic/MyRepairOrdersPage';
@@ -61,6 +63,8 @@ const router = createBrowserRouter(
       <Route path="/customers/new" element={<CustomersPage openModal={true} />} />
       <Route path="/customers/:id" element={<CustomerDetailPage />} />
       <Route path="/work-orders" element={<WorkOrdersPage />} />
+      <Route path="/invoices" element={<InvoicesPage />} />
+      <Route path="/credit-notes" element={<CreditNotesPage />} />
       <Route path="/inspections" element={<InspectionsListPage />} />
       <Route path="/inspections/new" element={<InspectionEditorPage />} />
       <Route path="/inspections/:id/edit" element={<InspectionEditorPage />} />

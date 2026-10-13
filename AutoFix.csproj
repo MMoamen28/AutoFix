@@ -29,6 +29,9 @@
     <Compile Remove="Legacy\**" />
     <EmbeddedResource Remove="Legacy\**" />
     <None Remove="Legacy\**" />
+    <Compile Remove="QA\**" />
+    <EmbeddedResource Remove="QA\**" />
+    <None Remove="QA\**" />
   </ItemGroup>
 
 </Project>

@@ -35,7 +35,7 @@ namespace SqliteQuery
             }
 
             var mode = args[1].ToLowerInvariant();
-            var connStr = $"Data Source={dbPath};Mode=ReadOnly;";
+            var connStr = mode == "exec" ? $"Data Source={dbPath};" : $"Data Source={dbPath};Mode=ReadOnly;";
 
             try
             {
@@ -103,6 +103,21 @@ namespace SqliteQuery
 
                     var json = JsonSerializer.Serialize(rows, new JsonSerializerOptions { WriteIndented = true });
                     Console.WriteLine(json);
+                    return 0;
+                }
+                else if (mode == "exec")
+                {
+                    if (args.Length < 3)
+                    {
+                        Console.Error.WriteLine("Missing SQL query string.");
+                        return 1;
+                    }
+
+                    var sql = args[2];
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = sql;
+                    var affected = cmd.ExecuteNonQuery();
+                    Console.WriteLine($"Rows affected: {affected}");
                     return 0;
                 }
                 else

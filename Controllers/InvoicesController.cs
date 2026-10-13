@@ -88,7 +88,7 @@ namespace AutoFix.Controllers
         }
 
         [HttpPost("{id:int}/payments")]
-        [Authorize(Roles = "Admin,Owner")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception,Accountant")]
         public async Task<ActionResult<PaymentResponseDto>> RecordPayment(int id, [FromBody] RecordPaymentDto dto)
         {
             try
@@ -96,6 +96,31 @@ namespace AutoFix.Controllers
                 var userName = User.Identity?.Name ?? "Admin";
                 var payment = await _service.RecordPaymentAsync(id, dto, userName);
                 return Ok(payment);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{id:int}/credit")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception,Accountant")]
+        public async Task<ActionResult<InvoiceResponseDto>> CreditInvoice(int id, [FromBody] CreditInvoiceRequestDto dto)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Reason))
+            {
+                return BadRequest(new { message = "A mandatory reason is required to issue a credit note." });
+            }
+
+            try
+            {
+                var userName = User.Identity?.Name ?? "Admin";
+                var result = await _service.CreditInvoiceAsync(id, dto.Reason, userName);
+                return Ok(result);
             }
             catch (KeyNotFoundException)
             {

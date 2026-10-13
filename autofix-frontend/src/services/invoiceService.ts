@@ -10,10 +10,21 @@ export interface InvoiceLineSnapshot {
   Subtotal: number;
 }
 
+export interface InvoicePayment {
+  id: number;
+  amount: number;
+  paymentMethod: string;
+  referenceNumber?: string;
+  paidAt: string;
+  receivedBy?: string;
+  notes?: string;
+}
+
 export interface Invoice {
   id: number;
   invoiceNumber: string;
   workOrderId?: number;
+  workOrderNumber?: string;
   customerId: number;
   customerName: string;
   customerPhone?: string;
@@ -27,7 +38,7 @@ export interface Invoice {
   totalAmount: number;
   paidAmount: number;
   remainingAmount: number;
-  status: string;
+  status: string; // Issued, Paid, PartiallyPaid, Credited, Cancelled
   currency: string;
   issuedAt: string;
   dueDate?: string;
@@ -36,7 +47,28 @@ export interface Invoice {
   totalWorkmanship?: number;
   totalLabor?: number;
   totalParts?: number;
-  payments?: any[];
+  payments?: InvoicePayment[];
+}
+
+export interface CreditNote {
+  id: number;
+  creditNoteNumber: string;
+  invoiceId: number;
+  invoiceNumber: string;
+  workOrderId?: number;
+  workOrderNumber?: string;
+  customerId: number;
+  customerName: string;
+  customerPhone?: string;
+  carPlate?: string;
+  carMakeModel?: string;
+  invoiceTotal: number;
+  amountRefunded: number;
+  stockRestored: boolean;
+  reason: string;
+  issuedBy: string;
+  issuedAt: string;
+  notes?: string;
 }
 
 export const invoiceService = {
@@ -47,7 +79,16 @@ export const invoiceService = {
     axiosClient.get<Invoice>(`/invoices/${id}`).then(r => r.data),
   
   recordPayment: (id: number, data: { amount: number; paymentMethod: string; referenceNumber?: string; notes?: string }) => 
-    axiosClient.post(`/invoices/${id}/payments`, data).then(r => r.data),
+    axiosClient.post<InvoicePayment>(`/invoices/${id}/payments`, data).then(r => r.data),
+
+  creditInvoice: (id: number, reason: string) =>
+    axiosClient.post<Invoice>(`/invoices/${id}/credit`, { reason }).then(r => r.data),
+
+  getAllCreditNotes: (customerId?: number) =>
+    axiosClient.get<CreditNote[]>('/credit-notes', { params: { customerId } }).then(r => r.data),
+  
+  getPrintHtml: (id: number) => 
+    axiosClient.get<string>(`/invoices/${id}/print`, { responseType: 'text' as any }).then(r => r.data),
   
   getPrintUrl: (id: number) => `/api/invoices/${id}/print`,
   

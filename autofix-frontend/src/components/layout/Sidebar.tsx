@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Wrench, Package, 
   ClipboardList, Car, LogOut, Shield,
   FileText, ShoppingBag, ShoppingCart,
-  Settings, Layers, Box, Database
+  Settings, Layers, Box, Database, RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { cartService } from '../../services/cartService';
@@ -69,10 +69,12 @@ const Sidebar: React.FC = () => {
     },
     {
       title: t('sidebar.management'),
-      roles: ['Owner', 'Admin', 'Receptionist', 'Reception'],
+      roles: ['Owner', 'Admin', 'Receptionist', 'Reception', 'Accountant'],
       items: [
         { to: '/', label: t('sidebar.workshopHub'), icon: LayoutDashboard, roles: ['Owner', 'Admin'] },
         { to: '/work-orders', label: t('sidebar.workOrders'), icon: ClipboardList, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
+        { to: '/invoices', label: t('sidebar.invoices', 'Invoices (الفواتير)'), icon: FileText, roles: ['Admin', 'Owner', 'Receptionist', 'Reception', 'Accountant'] },
+        { to: '/credit-notes', label: t('sidebar.creditNotes', 'Credit Notes (إشعارات دائنة)'), icon: RotateCcw, roles: ['Admin', 'Owner', 'Receptionist', 'Reception', 'Accountant'] },
         { to: '/services', label: t('sidebar.workmanshipPrices'), icon: Layers, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
         { to: '/inspections', label: t('sidebar.carInspections'), icon: FileText, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
         { to: '/customers', label: t('sidebar.customers'), icon: Users, roles: ['Admin', 'Owner', 'Receptionist', 'Reception'] },
@@ -92,6 +94,7 @@ const Sidebar: React.FC = () => {
       roles: ['Customer'],
       items: [
         { to: '/', label: t('sidebar.myDashboard'), icon: LayoutDashboard, roles: ['Customer'] },
+        { to: '/invoices', label: t('sidebar.myInvoices', 'My Invoices (فواتيري)'), icon: FileText, roles: ['Customer'] },
         { to: '/customer/cars', label: t('sidebar.myVehicles'), icon: Car, roles: ['Customer'] },
         { to: '/cart', label: t('sidebar.shoppingCart'), icon: ShoppingCart, roles: ['Customer'], badge: cartCount > 0 ? cartCount : null },
       ]

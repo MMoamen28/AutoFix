@@ -82,4 +82,42 @@ namespace AutoFix.DTOs.Invoice
         public decimal RemainingAmount { get; set; }
         public decimal RemainingBalance => RemainingAmount;
     }
+
+    public class CreditInvoiceRequestDto
+    {
+        [Required(ErrorMessage = "Reason for credit note is required.")]
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public class CreateCreditNoteDto
+    {
+        [Required]
+        public int InvoiceId { get; set; }
+
+        [Required(ErrorMessage = "Reason for credit note is required.")]
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public class CreditNoteResponseDto
+    {
+        public int Id { get; set; }
+        public string CreditNoteNumber { get; set; } = string.Empty;
+        public int InvoiceId { get; set; }
+        public string InvoiceNumber { get; set; } = string.Empty;
+        public int? WorkOrderId { get; set; }
+        public string? WorkOrderNumber { get; set; }
+        public int CustomerId { get; set; }
+        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerPhone { get; set; } = string.Empty;
+        public string CarPlate { get; set; } = string.Empty;
+        public string CarMakeModel { get; set; } = string.Empty;
+        public decimal InvoiceTotal { get; set; }
+        public decimal AmountRefunded { get; set; }
+        public bool StockRestored { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public string IssuedBy { get; set; } = string.Empty;
+        public DateTime IssuedAt { get; set; }
+        public string Notes { get; set; } = string.Empty;
+    }
 }
+

@@ -12,5 +12,7 @@ namespace AutoFix.Services.Interfaces
         Task<PaymentResponseDto> RecordPaymentAsync(int invoiceId, RecordPaymentDto dto, string? receivedBy = null);
         Task<bool> DeleteAsync(int id);
         Task<string> GeneratePrintedInvoiceHtmlAsync(int id);
+        Task<InvoiceResponseDto> CreditInvoiceAsync(int invoiceId, string reason, string? issuedBy = null);
+        Task<List<CreditNoteResponseDto>> GetAllCreditNotesAsync(int? customerId = null);
     }
 }

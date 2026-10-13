@@ -1,7 +1,11 @@
+using AutoFix.Controllers;
 using AutoFix.DTOs.Customer;
+using AutoFix.DTOs.Invoice;
 using AutoFix.DTOs.WorkOrder;
 using AutoFix.Models;
 using AutoFix.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
@@ -1345,6 +1349,211 @@ namespace AutoFix.Tests
                 Assert.Equal(180m, line.UnitPrice);
                 Assert.Equal(180m, line.Subtotal);
                 Assert.Equal(180m, retrievedWo.TotalWorkmanship);
+            }
+        }
+
+        [Fact]
+        public async Task Batch1_Invoice_PrintView_TotalsMatch_5472_AndHidesCost()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            {
+                var cust = new Customer { FullName = "Hassan Ali", Phone = "01099998888" };
+                var car = new Car { Make = "Toyota", Model = "Corolla", LicensePlate = "ABC-1234", Year = 2022, Customer = cust };
+                db.Customers.Add(cust);
+                db.Cars.Add(car);
+
+                var inv = new Invoice
+                {
+                    InvoiceNumber = "INV-202610-0999",
+                    Customer = cust,
+                    Car = car,
+                    Subtotal = 5000.00m,
+                    DiscountAmount = 200.00m,
+                    VatPercentage = 14.0m,
+                    VatAmount = 672.00m,
+                    TotalAmount = 5472.00m,
+                    PaidAmount = 2000.00m,
+                    Status = "PartiallyPaid",
+                    IssuedAt = DateTime.UtcNow,
+                    SnapshotDetailsJson = "[{\"LineType\":\"Labor\",\"Description\":\"Engine Overhaul\",\"Quantity\":1,\"UnitPrice\":2250.00,\"UnitCost\":1500.00,\"Subtotal\":2250.00},{\"LineType\":\"Part\",\"Description\":\"OEM Parts\",\"Quantity\":1,\"UnitPrice\":2750.00,\"UnitCost\":1920.00,\"Subtotal\":2750.00}]"
+                };
+                db.Invoices.Add(inv);
+                await db.SaveChangesAsync();
+
+                var invService = new InvoiceService(db);
+                var html = await invService.GeneratePrintedInvoiceHtmlAsync(inv.Id);
+
+                // Assert exact stored financial figures are present
+                Assert.Contains("5,472.00", html);
+                Assert.Contains("2,000.00", html);
+                Assert.Contains("3,472.00", html);
+                Assert.Contains("4,800.00", html); // Taxable base after 200 discount
+                Assert.Contains("672.00", html);   // 14% VAT
+
+                // Assert internal costs are NOT shown on customer print view
+                Assert.DoesNotContain("1500.00", html);
+                Assert.DoesNotContain("1920.00", html);
+                Assert.DoesNotContain("3420.00", html);
+            }
+        }
+
+        [Fact]
+        public async Task Batch1_CreditNote_RestoresStockOnceOnly_AndRefundsPayment()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            {
+                var cust = new Customer { FullName = "Ibrahim Nabil", Phone = "01077776666" };
+                var car = new Car { Make = "Hyundai", Model = "Elantra", LicensePlate = "EGP-5555", Customer = cust };
+                var part = new SparePart
+                {
+                    Name = "Brake Pads",
+                    PartNumber = "BP-100",
+                    StockQuantity = 20,
+                    UnitPrice = 600m,
+                    PurchasePrice = 400m
+                };
+                var wh = new Warehouse { Name = "Main Warehouse", Code = "WH-01" };
+                db.Warehouses.Add(wh);
+                db.Customers.Add(cust);
+                db.Cars.Add(car);
+                db.SpareParts.Add(part);
+                await db.SaveChangesAsync();
+
+                var wo = new WorkOrder
+                {
+                    OrderNumber = "WO-TEST-CR01",
+                    Customer = cust,
+                    Car = car,
+                    Status = "Invoiced",
+                    TotalAmount = 1200m
+                };
+                db.WorkOrders.Add(wo);
+
+                // Movement issued 2 parts
+                part.StockQuantity -= 2;
+                db.PartMovements.Add(new PartMovement
+                {
+                    SparePartId = part.Id,
+                    WarehouseId = wh.Id,
+                    MovementType = "WorkOrderIssue",
+                    QuantityChanged = -2,
+                    BalanceAfter = 18,
+                    ReferenceNumber = wo.OrderNumber,
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                var inv = new Invoice
+                {
+                    InvoiceNumber = "INV-TEST-CR01",
+                    Customer = cust,
+                    Car = car,
+                    WorkOrder = wo,
+                    Subtotal = 1200m,
+                    TotalAmount = 1200m,
+                    PaidAmount = 800m,
+                    Status = "PartiallyPaid",
+                    IssuedAt = DateTime.UtcNow
+                };
+                db.Invoices.Add(inv);
+
+                db.InvoicePayments.Add(new InvoicePayment
+                {
+                    Invoice = inv,
+                    Amount = 800m,
+                    PaymentMethod = "Cash",
+                    PaidAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync();
+
+                var invService = new InvoiceService(db);
+
+                // Call CreditInvoiceAsync first time
+                var credited1 = await invService.CreditInvoiceAsync(inv.Id, "Customer warranty return", "Accountant1");
+                Assert.Equal("Credited", credited1.Status);
+                Assert.Equal(0m, credited1.PaidAmount);
+
+                // Verify stock restored from 18 back to 20
+                var partAfterFirst = await db.SpareParts.FindAsync(part.Id);
+                Assert.Equal(20, partAfterFirst!.StockQuantity);
+
+                // Verify refund payment was recorded
+                var refundPayment = await db.InvoicePayments.FirstOrDefaultAsync(p => p.InvoiceId == inv.Id && p.Amount < 0);
+                Assert.NotNull(refundPayment);
+                Assert.Equal(-800m, refundPayment!.Amount);
+                Assert.Equal("Refund", refundPayment.PaymentMethod);
+
+                // Call CreditInvoiceAsync SECOND time (must be idempotent - never restore stock twice!)
+                var credited2 = await invService.CreditInvoiceAsync(inv.Id, "Duplicate call", "Accountant1");
+                Assert.Equal("Credited", credited2.Status);
+
+                var partAfterSecond = await db.SpareParts.FindAsync(part.Id);
+                Assert.Equal(20, partAfterSecond!.StockQuantity); // MUST STILL BE 20, NOT 22!
+
+                var restoreMovementsCount = await db.PartMovements
+                    .CountAsync(pm => pm.ReferenceNumber == wo.OrderNumber && pm.MovementType == "WorkOrderRestore");
+                Assert.Equal(1, restoreMovementsCount); // RESTORED ONCE ONLY!
+
+                // Verify GetAllCreditNotes returns this record
+                var allNotes = await invService.GetAllCreditNotesAsync();
+                var note = allNotes.FirstOrDefault(n => n.InvoiceId == inv.Id);
+                Assert.NotNull(note);
+                Assert.Equal("CN-INV-TEST-CR01", note!.CreditNoteNumber);
+                Assert.Equal(800m, note.AmountRefunded);
+                Assert.True(note.StockRestored);
+                Assert.Equal("Customer warranty return", note.Reason);
+            }
+        }
+
+        [Fact]
+        public async Task Batch1_CreditNotesController_ReturnsList_AndNoRouteConflict()
+        {
+            var (db, dataFolder, conn) = TestHelper.CreateTestContext();
+            using (conn)
+            {
+                var cust = new Customer { FullName = "Kareem Taha", Phone = "01033334444" };
+                var car = new Car { Make = "Kia", Model = "Cerato", LicensePlate = "ABC-7777", Customer = cust };
+                db.Customers.Add(cust);
+                db.Cars.Add(car);
+                await db.SaveChangesAsync();
+
+                var inv = new Invoice
+                {
+                    InvoiceNumber = "INV-CR-TEST-09",
+                    Customer = cust,
+                    Car = car,
+                    Subtotal = 1000m,
+                    TotalAmount = 1000m,
+                    PaidAmount = 500m,
+                    Status = "Credited",
+                    IssuedAt = DateTime.UtcNow,
+                    Notes = "[Credit Note CN-INV-CR-TEST-09. Reason: Test reason]"
+                };
+                db.Invoices.Add(inv);
+                await db.SaveChangesAsync();
+
+                var invService = new InvoiceService(db);
+                var ctrl = new CreditNotesController(invService);
+                
+                var claims = new List<System.Security.Claims.Claim>
+                {
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "AdminUser"),
+                    new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "Admin")
+                };
+                ctrl.ControllerContext = new ControllerContext
+                {
+                    HttpContext = new DefaultHttpContext
+                    {
+                        User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(claims, "TestAuth"))
+                    }
+                };
+
+                var actionResult = await ctrl.GetAll(customerId: null);
+                var okResult = Assert.IsType<OkObjectResult>(actionResult.Result);
+                var list = Assert.IsType<List<CreditNoteResponseDto>>(okResult.Value);
+                Assert.NotEmpty(list);
+                Assert.Contains(list, x => x.InvoiceNumber == "INV-CR-TEST-09");
             }
         }
     }

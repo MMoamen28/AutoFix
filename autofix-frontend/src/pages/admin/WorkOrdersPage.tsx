@@ -13,6 +13,7 @@ import { getCurrencyLabel } from '../../i18n/formatters';
 import { useTranslation } from 'react-i18next';
 import WorkOrderLinesModal from '../../components/workorders/WorkOrderLinesModal';
 import serviceService from '../../services/serviceService';
+import { printWorkOrderInPlace, downloadWorkOrderDoc } from '../../utils/printHelper';
 
 const WorkOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -258,8 +259,12 @@ const WorkOrdersPage: React.FC = () => {
     }
   };
 
-  const handlePrint = (id: number) => {
-    window.open(`/api/work-orders/${id}/print`, '_blank');
+  const handlePrint = async (id: number) => {
+    try {
+      await printWorkOrderInPlace(id);
+    } catch (err) {
+      alert('Failed to load printable work order.');
+    }
   };
 
   const statuses = ['All', 'Pending', 'InProgress', 'WaitingForParts', 'Completed', 'Delivered', 'Invoiced'];

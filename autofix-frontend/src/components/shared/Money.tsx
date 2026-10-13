@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { formatCurrency } from '../../i18n/formatters';
 
 interface MoneyProps {
-  value: number | null | undefined;
+  value?: number | null | undefined;
+  amount?: number | null | undefined;
   lang?: string;
   className?: string;
   style?: React.CSSProperties;
 }
 
-export const Money: React.FC<MoneyProps> = ({ value, lang, className = '', style }) => {
+export const Money: React.FC<MoneyProps> = ({ value, amount, lang, className = '', style }) => {
   const { i18n } = useTranslation();
   const [, setTick] = useState(0);
 
@@ -24,7 +25,8 @@ export const Money: React.FC<MoneyProps> = ({ value, lang, className = '', style
   }, []);
 
   const currentLang = lang || i18n?.language || 'ar';
-  const text = formatCurrency(value, currentLang);
+  const rawVal = value !== undefined ? value : amount;
+  const text = formatCurrency(rawVal, currentLang);
 
   return (
     <span

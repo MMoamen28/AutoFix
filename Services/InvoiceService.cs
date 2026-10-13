@@ -372,8 +372,8 @@ namespace AutoFix.Services
     <meta charset='UTF-8'>
     <title>فاتورة ضريبية / Tax Invoice - {invoice.InvoiceNumber}</title>
     <style>
-        @page {{ size: A4 portrait; margin: 15mm; }}
-        body {{ font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; color: #222; font-size: 13px; line-height: 1.5; }}
+        @page {{ size: A4 portrait; margin: 12mm; }}
+        body {{ font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; color: #1e293b; font-size: 13px; line-height: 1.5; }}
         .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 15px; }}
         .badge {{ display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; background: #e0f2fe; color: #0369a1; }}
         .section-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }}
@@ -387,9 +387,49 @@ namespace AutoFix.Services
         .grand-total {{ font-size: 16px; font-weight: bold; color: #2563eb; border-top: 2px solid #2563eb; margin-top: 6px; padding-top: 6px; }}
         .signatures {{ display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }}
         .sig-block {{ width: 30%; text-align: center; border-top: 1px solid #94a3b8; padding-top: 5px; }}
+        @media print {{
+            .no-print {{ display: none !important; }}
+            body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+            table {{ page-break-inside: auto; }}
+            tr {{ page-break-inside: avoid; page-break-after: auto; }}
+        }}
+        .no-print-bar {{
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+        }}
+        .btn-print {{
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }}
+        .btn-download {{
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }}
     </style>
 </head>
 <body>
+    <div class='no-print-bar no-print'>
+        <button class='btn-print' onclick='window.print()'>طباعة الفاتورة / Print Invoice</button>
+        <button class='btn-download' onclick='window.print()'>تحميل PDF / Download PDF</button>
+    </div>
     <div class='header'>
         <div>
             <h1 style='margin: 0; color: #1e3a8a; font-size: 22px;'>أوتوفكس لإدارة مراكز الصيانة | AutoFix Workshop</h1>
@@ -477,6 +517,11 @@ namespace AutoFix.Services
         </div>
     </div>
 
+    {(invoice.Status == "Credited" ? $@"
+    <div style='margin-top: 20px; background: #fee2e2; border: 2px dashed #dc2626; border-radius: 6px; padding: 12px; text-align: center; color: #991b1b; font-weight: bold;'>
+        ⚠️ فاتورة ملغاة بموجب إشعار دائن رسمي رقم (CN-{invoice.InvoiceNumber}) - تم استرداد المبالغ وإعادة القطع للمخزن
+    </div>" : "")}
+
     <div class='signatures'>
         <div class='sig-block'>المحاسب المسؤول</div>
         <div class='sig-block'>إدارة المركز / الختم</div>
@@ -485,5 +530,190 @@ namespace AutoFix.Services
 </body>
 </html>";
         }
+
+        public async Task<InvoiceResponseDto> CreditInvoiceAsync(int invoiceId, string reason, string? issuedBy = null)
+        {
+            var invoice = await _db.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Customer)
+                .Include(i => i.Car)
+                .Include(i => i.WorkOrder)
+                .FirstOrDefaultAsync(i => i.Id == invoiceId);
+
+            if (invoice == null) throw new KeyNotFoundException($"Invoice {invoiceId} not found.");
+
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                throw new InvalidOperationException("A valid mandatory reason is required to issue a credit note.");
+            }
+
+            if (invoice.Status == "Credited")
+            {
+                return (await GetByIdAsync(invoice.Id))!;
+            }
+
+            var creditNoteNumber = $"CN-{invoice.InvoiceNumber}";
+            var previousPaidAmount = invoice.PaidAmount;
+
+            invoice.Status = "Credited";
+            invoice.Notes = (invoice.Notes ?? string.Empty) + $" [Credit Note: {creditNoteNumber}. Reason: {reason}]";
+
+            if (invoice.WorkOrder != null)
+            {
+                invoice.WorkOrder.Status = "Credited";
+            }
+
+            // If payments were previously made, issue an automatic customer refund and record in Treasury
+            if (previousPaidAmount > 0)
+            {
+                _db.InvoicePayments.Add(new InvoicePayment
+                {
+                    InvoiceId = invoice.Id,
+                    Amount = -previousPaidAmount,
+                    PaymentMethod = "Refund",
+                    ReferenceNumber = creditNoteNumber,
+                    Notes = $"Automatic refund for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
+                    PaidAt = DateTime.UtcNow,
+                    ReceivedByUserId = issuedBy ?? "Admin"
+                });
+                invoice.PaidAmount = 0;
+
+                _db.TreasuryTransactions.Add(new TreasuryTransaction
+                {
+                    TransactionType = "CustomerRefund",
+                    Amount = -previousPaidAmount,
+                    Category = "Refund",
+                    ReferenceNumber = creditNoteNumber,
+                    Description = $"Refund to customer {invoice.Customer?.FullName} for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
+                    TransactionDate = DateTime.UtcNow
+                });
+            }
+
+            // Restore stock if parts were issued from work order (once only)
+            if (invoice.WorkOrder != null)
+            {
+                var issuedMovements = await _db.PartMovements
+                    .Where(pm => pm.ReferenceNumber == invoice.WorkOrder.OrderNumber && pm.MovementType == "WorkOrderIssue")
+                    .ToListAsync();
+
+                var restoredCount = await _db.PartMovements
+                    .CountAsync(pm => pm.ReferenceNumber == invoice.WorkOrder.OrderNumber && pm.MovementType == "WorkOrderRestore");
+
+                if (issuedMovements.Count > 0 && restoredCount == 0)
+                {
+                    var defaultWh = await _db.Warehouses.FirstOrDefaultAsync();
+                    foreach (var movement in issuedMovements)
+                    {
+                        var part = await _db.SpareParts.FindAsync(movement.SparePartId);
+                        if (part != null)
+                        {
+                            var restoreQty = Math.Abs(movement.QuantityChanged);
+                            part.StockQuantity += (int)restoreQty;
+
+                            _db.PartMovements.Add(new PartMovement
+                            {
+                                SparePartId = part.Id,
+                                WarehouseId = movement.WarehouseId > 0 ? movement.WarehouseId : (defaultWh?.Id ?? 1),
+                                MovementType = "WorkOrderRestore",
+                                QuantityChanged = restoreQty,
+                                BalanceAfter = part.StockQuantity,
+                                UnitCost = movement.UnitCost,
+                                ReferenceNumber = invoice.WorkOrder.OrderNumber,
+                                Notes = $"Stock restored upon credit note {creditNoteNumber} for WorkOrder {invoice.WorkOrder.OrderNumber}",
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
+                }
+            }
+
+            _db.AuditLogs.Add(new AuditLog
+            {
+                Action = "IssueCreditNote",
+                EntityName = "Invoice",
+                EntityId = invoice.InvoiceNumber,
+                Details = $"Credit Note {creditNoteNumber} issued for Invoice {invoice.InvoiceNumber} (Total: {invoice.TotalAmount:F2} L.E). Refunded: {previousPaidAmount:F2} L.E. Reason: {reason}",
+                Timestamp = DateTime.UtcNow,
+                UserName = issuedBy ?? "Admin"
+            });
+
+            await _db.SaveChangesAsync();
+
+            return (await GetByIdAsync(invoice.Id))!;
+        }
+
+        public async Task<List<CreditNoteResponseDto>> GetAllCreditNotesAsync(int? customerId = null)
+        {
+            var query = _db.Invoices
+                .Include(i => i.Customer)
+                .Include(i => i.Car)
+                .Include(i => i.WorkOrder)
+                .Include(i => i.Payments)
+                .Where(i => i.Status == "Credited");
+
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                query = query.Where(i => i.CustomerId == customerId.Value);
+            }
+
+            var creditedInvoices = await query.OrderByDescending(i => i.IssuedAt).ToListAsync();
+            var result = new List<CreditNoteResponseDto>();
+
+            foreach (var inv in creditedInvoices)
+            {
+                var cnNumber = $"CN-{inv.InvoiceNumber}";
+                var reason = "Customer credit note issued";
+                if (!string.IsNullOrEmpty(inv.Notes) && inv.Notes.Contains("Reason:"))
+                {
+                    var idx = inv.Notes.IndexOf("Reason:");
+                    var endIdx = inv.Notes.IndexOf("]", idx);
+                    if (endIdx > idx)
+                    {
+                        reason = inv.Notes.Substring(idx + 7, endIdx - (idx + 7)).Trim();
+                    }
+                    else
+                    {
+                        reason = inv.Notes.Substring(idx + 7).Trim();
+                    }
+                }
+
+                var refundedAmount = Math.Abs(inv.Payments.Where(p => p.Amount < 0).Sum(p => p.Amount));
+                var stockRestored = false;
+                if (inv.WorkOrder != null)
+                {
+                    stockRestored = await _db.PartMovements.AnyAsync(pm => pm.ReferenceNumber == inv.WorkOrder.OrderNumber && pm.MovementType == "WorkOrderRestore");
+                }
+
+                var auditLog = await _db.AuditLogs
+                    .Where(a => a.Action == "IssueCreditNote" && a.EntityId == inv.InvoiceNumber)
+                    .OrderByDescending(a => a.Timestamp)
+                    .FirstOrDefaultAsync();
+
+                result.Add(new CreditNoteResponseDto
+                {
+                    Id = inv.Id,
+                    CreditNoteNumber = cnNumber,
+                    InvoiceId = inv.Id,
+                    InvoiceNumber = inv.InvoiceNumber,
+                    WorkOrderId = inv.WorkOrderId,
+                    WorkOrderNumber = inv.WorkOrder?.OrderNumber,
+                    CustomerId = inv.CustomerId,
+                    CustomerName = inv.Customer?.FullName ?? string.Empty,
+                    CustomerPhone = inv.Customer?.Phone ?? string.Empty,
+                    CarPlate = inv.Car?.LicensePlate ?? string.Empty,
+                    CarMakeModel = inv.Car != null ? $"{inv.Car.Make} {inv.Car.Model}" : string.Empty,
+                    InvoiceTotal = inv.TotalAmount,
+                    AmountRefunded = refundedAmount,
+                    StockRestored = stockRestored,
+                    Reason = reason,
+                    IssuedBy = auditLog?.UserName ?? "Admin",
+                    IssuedAt = auditLog?.Timestamp ?? inv.IssuedAt,
+                    Notes = inv.Notes
+                });
+            }
+
+            return result;
+        }
     }
 }
+

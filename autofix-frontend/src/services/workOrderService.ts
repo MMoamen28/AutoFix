@@ -133,6 +133,11 @@ export const workOrderService = {
     return `/api/work-orders/${id}/print`;
   },
 
+  getPrintHtml: async (id: number) => {
+    const res = await api.get<string>(`/WorkOrders/${id}/print`, { responseType: 'text' as any });
+    return res.data;
+  },
+
   delete: async (id: number) => {
     await api.delete(`/WorkOrders/${id}`);
   },

@@ -253,5 +253,116 @@
     "dataPath": "Data Storage Path",
     "healthy": "System Status: Healthy",
     "fallback": "Running in Fallback Mode"
+  },
+  "invoices": {
+    "title": "Tax Invoices",
+    "subtitle": "Official tax invoices, line items, customer settlements, payments, and credit notes.",
+    "customerSubtitle": "View, print, and track all your workshop invoices and payment receipts.",
+    "searchPlaceholder": "Search by invoice #, customer, car plate, work order...",
+    "empty": "No invoices match the specified criteria.",
+    "creditedNotice": "This invoice has been voided via Credit Note (CN-{{number}}). Stock restored and payments refunded.",
+    "paymentsHistory": "Payment Transactions",
+    "stats": {
+      "totalInvoiced": "Total Invoiced",
+      "totalCollected": "Total Collected",
+      "outstanding": "Outstanding",
+      "creditedCount": "Credit Notes"
+    },
+    "filters": {
+      "allStatus": "All Statuses",
+      "paid": "Paid",
+      "partial": "Partially Paid",
+      "unpaid": "Unpaid",
+      "credited": "Credited",
+      "from": "From:",
+      "to": "To:"
+    },
+    "table": {
+      "invoiceNumber": "Invoice #",
+      "date": "Date",
+      "customer": "Customer",
+      "vehicle": "Car / Plate",
+      "workOrder": "Work Order",
+      "total": "Total",
+      "paid": "Paid",
+      "remaining": "Remaining",
+      "status": "Status"
+    },
+    "actions": {
+      "view": "View Details",
+      "print": "Print Invoice",
+      "download": "Download Invoice",
+      "pay": "Record Payment",
+      "payShort": "Pay",
+      "credit": "Issue Credit Note"
+    },
+    "status": {
+      "paid": "Paid",
+      "partial": "Partially Paid",
+      "unpaid": "Unpaid",
+      "credited": "Credited"
+    },
+    "paymentModal": {
+      "title": "Record Invoice Payment",
+      "amount": "Payment Amount (L.E)",
+      "amountHint": "Partial payment allowed. Overpayment is strictly rejected.",
+      "method": "Payment Method",
+      "reference": "Reference / Transaction # (Optional)",
+      "notes": "Notes",
+      "submit": "Confirm Payment"
+    },
+    "paymentMethods": {
+      "cash": "Cash",
+      "card": "Bank Card / Visa",
+      "transfer": "Bank Transfer",
+      "cheque": "Cheque"
+    },
+    "creditModal": {
+      "title": "Issue Credit Note",
+      "warning": "Warning",
+      "desc": "Crediting this invoice will mark it as Credited (CN), remove it from outstanding receivables, automatically refund collected cash ({{amount}} L.E) via Treasury, and restore stock for issued parts once.",
+      "reasonLabel": "Mandatory Reason for Cancellation",
+      "reasonPlaceholder": "e.g. Customer returned parts / Warranty claim / Work cancelled by management...",
+      "confirm": "Issue Credit Note"
+    },
+    "breakdown": {
+      "title": "Invoice Financial Summary",
+      "subtotal": "Subtotal",
+      "discount": "Discount",
+      "vat": "VAT ({{vat}}%)",
+      "total": "Total Amount",
+      "paid": "Paid Amount",
+      "remaining": "Remaining"
+    },
+    "errors": {
+      "invalidAmount": "Please enter a valid positive payment amount.",
+      "overpayment": "Payment amount cannot exceed remaining balance.",
+      "reasonRequired": "A mandatory reason is required to issue a credit note."
+    }
+  },
+  "creditNotes": {
+    "title": "Credit Notes",
+    "subtitle": "Official credit notes for voided invoices. Automatically reverses revenue, logs refunds, and restores inventory.",
+    "searchPlaceholder": "Search by CN #, invoice #, customer, car, reason...",
+    "empty": "No credit notes recorded yet.",
+    "stockRestored": "Restored",
+    "originalTotal": "Original Invoice Total",
+    "printInvoice": "Print Invoice",
+    "stats": {
+      "totalNotes": "Total Credit Notes",
+      "totalRefunded": "Total Amount Refunded",
+      "stockRestored": "Stock Restored Batches"
+    },
+    "table": {
+      "cnNumber": "Credit Note #",
+      "invoice": "Original Invoice",
+      "date": "Date",
+      "customer": "Customer",
+      "vehicle": "Car / Plate",
+      "refunded": "Refunded Amount",
+      "stock": "Stock Restored",
+      "reason": "Reason",
+      "issuedBy": "By"
+    }
   }
 }

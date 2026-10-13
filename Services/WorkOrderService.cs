@@ -1019,9 +1019,49 @@ namespace AutoFix.Services
         .grand-total {{ font-size: 16px; font-weight: bold; color: #2563eb; border-top: 2px solid #2563eb; margin-top: 6px; padding-top: 6px; }}
         .signatures {{ display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }}
         .sig-block {{ width: 30%; text-align: center; border-top: 1px solid #94a3b8; padding-top: 5px; }}
+        @media print {{
+            .no-print {{ display: none !important; }}
+            body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+            table {{ page-break-inside: auto; }}
+            tr {{ page-break-inside: avoid; page-break-after: auto; }}
+        }}
+        .no-print-bar {{
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+        }}
+        .btn-print {{
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }}
+        .btn-download {{
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }}
     </style>
 </head>
 <body>
+    <div class='no-print-bar no-print'>
+        <button class='btn-print' onclick='window.print()'>طباعة أمر الشغل / Print Work Order</button>
+        <button class='btn-download' onclick='window.print()'>تحميل PDF / Download PDF</button>
+    </div>
     <div class='header'>
         <div>
             <h1 style='margin: 0; color: #1e3a8a; font-size: 22px;'>أوتوفكس لإدارة مراكز الصيانة | AutoFix Workshop</h1>
