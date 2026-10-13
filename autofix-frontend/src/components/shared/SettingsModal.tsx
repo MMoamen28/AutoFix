@@ -64,20 +64,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     }
   };
 
+  const [showVat, setShowVat] = useState(false);
+  const [printNotesOnInvoice, setPrintNotesOnInvoice] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setLabelEn(getCurrencyLabel('en'));
       setLabelAr(getCurrencyLabel('ar'));
       setDigitModeState(getDigitMode());
       setSavedSuccess(false);
+
+      const token = localStorage.getItem('token');
+      fetch('/api/settings', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data) {
+            setShowVat(!!data.showVat);
+            setPrintNotesOnInvoice(!!data.printNotesOnInvoice);
+          }
+        })
+        .catch(err => console.error('Failed to fetch settings', err));
     }
   }, [isOpen]);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setCurrencyLabel('en', labelEn);
     setCurrencyLabel('ar', labelAr);
     setDigitMode(digitMode);
+
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ showVat, printNotesOnInvoice })
+      });
+    } catch (err) {
+      console.error('Failed to update workshop settings', err);
+    }
+
     setSavedSuccess(true);
     setTimeout(() => {
       setSavedSuccess(false);
@@ -198,6 +229,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               </div>
               <input type="file" accept="image/*" onChange={handleWatermarkUpload} style={{ fontSize: '11px', width: '100%', color: '#94a3b8' }} />
             </div>
+          </div>
+        </div>
+
+        {/* Invoice Printing & Tax Options */}
+        <div>
+          <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary, #3b82f6)', margin: '0 0 10px 0' }}>
+            {t('settings.invoiceOptions', 'Invoice Printing & VAT Options (خيارات الفاتورة والضريبة)')}
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-secondary, #1e293b)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border, #334155)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
+                  Show VAT on Invoices (إظهار ضريبة القيمة المضافة)
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)' }}>
+                  Default OFF. When OFF, nothing about VAT is shown or asked, and new invoices are issued with 0% VAT.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={showVat}
+                onChange={e => setShowVat(e.target.checked)}
+                style={{ width: '18px', height: '18px', accentColor: 'var(--primary, #3b82f6)', cursor: 'pointer' }}
+              />
+            </label>
+
+            <div style={{ height: '1px', background: 'var(--border, #334155)' }} />
+
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#f8fafc' }}>
+                  Print notes on invoice (طباعة الملاحظات على الفاتورة)
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)' }}>
+                  Default OFF. When OFF, work order extra notes are hidden from printed invoice while workmanship stays.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={printNotesOnInvoice}
+                onChange={e => setPrintNotesOnInvoice(e.target.checked)}
+                style={{ width: '18px', height: '18px', accentColor: 'var(--primary, #3b82f6)', cursor: 'pointer' }}
+              />
+            </label>
           </div>
         </div>
 

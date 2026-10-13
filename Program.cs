@@ -73,6 +73,7 @@ builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IInspectionService, InspectionService>();
 builder.Services.AddScoped<IDraftService, DraftService>();
+builder.Services.AddScoped<ISettingsService, SettingsService>();
 
 builder.Services.AddHttpClient();
 builder.Services.AddSignalR();

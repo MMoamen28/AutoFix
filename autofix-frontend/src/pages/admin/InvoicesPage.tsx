@@ -10,6 +10,7 @@ import Money from '../../components/shared/Money';
 import { printInvoiceInPlace, downloadInvoiceDoc } from '../../utils/printHelper';
 import InvoicePreviewModal from '../../components/shared/InvoicePreviewModal';
 import EditInvoiceIdModal from '../../components/shared/EditInvoiceIdModal';
+import api from '../../services/axiosClient';
 
 const InvoicesPage: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -40,9 +41,11 @@ const InvoicesPage: React.FC = () => {
 
   // Credit Form
   const [creditReason, setCreditReason] = useState<string>('');
+  const [showVat, setShowVat] = useState<boolean>(false);
 
   useEffect(() => {
     loadInvoices();
+    api.get('/settings').then(res => setShowVat(res.data?.showVat ?? false)).catch(() => {});
   }, []);
 
   const loadInvoices = async () => {
@@ -734,10 +737,12 @@ const InvoicesPage: React.FC = () => {
                     <div style={{ fontWeight: 700, color: '#ef4444' }}>-<Money amount={selectedInvoice.discountAmount} /></div>
                   </div>
                 )}
-                <div>
-                  <div style={{ color: '#64748b' }}>{t('invoices.breakdown.vat', 'VAT ({vat}%)', { vat: selectedInvoice.vatPercentage })}</div>
-                  <div style={{ fontWeight: 700 }}><Money amount={selectedInvoice.vatAmount} /></div>
-                </div>
+                {showVat && (
+                  <div>
+                    <div style={{ color: '#64748b' }}>{t('invoices.breakdown.vat', 'VAT ({vat}%)', { vat: selectedInvoice.vatPercentage })}</div>
+                    <div style={{ fontWeight: 700 }}><Money amount={selectedInvoice.vatAmount} /></div>
+                  </div>
+                )}
                 <div>
                   <div style={{ color: '#2563eb', fontWeight: 700 }}>{t('invoices.breakdown.total', 'Total Amount')}</div>
                   <div style={{ fontWeight: 800, color: '#2563eb', fontSize: '15px' }}><Money amount={selectedInvoice.totalAmount} /></div>

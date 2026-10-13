@@ -22,31 +22,53 @@ namespace AutoFix.Services
 
         public async Task<AdminDashboardDto> GetAdminDashboardAsync()
         {
-            var now = DateTime.UtcNow;
-            var todayStart = new DateTime(now.Year, now.Month, now.Day, 0, 0, 0, DateTimeKind.Utc);
-            var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var cairoNow = InvoiceService.GetCairoNow();
+            var cairoToday = cairoNow.Date;
+            var cairoMonthStart = new DateTime(cairoNow.Year, cairoNow.Month, 1);
 
-            var orders = await _db.WorkOrders.AsNoTracking().ToListAsync();
+            // Active jobs: non-deleted, non-final orders (Pending, InProgress, WaitingForParts, Completed)
+            var activeOrders = await _db.WorkOrders.AsNoTracking()
+                .Where(w => !w.IsDeleted && w.Status != "Invoiced" && w.Status != "Cancelled" && w.Status != "Credited" && w.Status != "Delivered")
+                .ToListAsync();
 
-            var pendingCount = orders.Count(w => w.Status == "Pending");
-            var inProgressCount = orders.Count(w => w.Status == "InProgress" || w.Status == "WaitingForParts");
-            var completedCount = orders.Count(w => w.Status == "Completed");
-            var deliveredCount = orders.Count(w => w.Status == "Delivered");
-            var totalActive = pendingCount + inProgressCount + completedCount;
+            var pendingCount = activeOrders.Count(w => w.Status == "Pending");
+            var inProgressCount = activeOrders.Count(w => w.Status == "InProgress" || w.Status == "WaitingForParts");
+            var completedCount = activeOrders.Count(w => w.Status == "Completed");
+            var deliveredCount = await _db.WorkOrders.CountAsync(w => !w.IsDeleted && w.Status == "Delivered");
+            var totalActive = activeOrders.Count;
 
-            // Revenues from payments
-            var payments = await _db.InvoicePayments.AsNoTracking().ToListAsync();
-            var todayRevenue = payments.Where(p => p.PaidAt >= todayStart).Sum(p => p.Amount);
-            var monthRevenue = payments.Where(p => p.PaidAt >= monthStart).Sum(p => p.Amount);
+            // Revenues: payments collected minus refunds in Cairo timezone
+            var payments = await _db.InvoicePayments.AsNoTracking()
+                .Where(p => !p.IsDeleted)
+                .ToListAsync();
 
-            // Outstanding receivables (excluding Paid, Cancelled, and Credited)
-            var invoices = await _db.Invoices.AsNoTracking().ToListAsync();
-            var outstanding = invoices.Where(i => i.Status != "Paid" && i.Status != "Cancelled" && i.Status != "Credited").Sum(i => i.RemainingAmount);
+            decimal todayRevenue = 0;
+            decimal monthRevenue = 0;
 
-            var totalCustomers = await _db.Customers.CountAsync();
-            var totalCars = await _db.Cars.CountAsync();
-            var lowStockCount = await _db.SpareParts.CountAsync(sp => sp.StockQuantity <= sp.MinimumStockLevel);
-            var totalInspections = await _db.CarInspections.CountAsync();
+            foreach (var p in payments)
+            {
+                var pDate = p.PaidAt.AddHours(2).Date;
+                if (pDate == cairoToday)
+                {
+                    todayRevenue += p.Amount;
+                }
+                if (pDate >= cairoMonthStart && pDate <= cairoToday)
+                {
+                    monthRevenue += p.Amount;
+                }
+            }
+
+            // Outstanding receivables: invoices total minus payments (excluding Credited, Paid, Cancelled, and soft-deleted)
+            var activeInvoices = await _db.Invoices.AsNoTracking()
+                .Where(i => !i.IsDeleted && i.Status != "Paid" && i.Status != "Cancelled" && i.Status != "Credited")
+                .ToListAsync();
+
+            var outstanding = activeInvoices.Sum(i => Math.Max(0, i.TotalAmount - i.PaidAmount));
+
+            var totalCustomers = await _db.Customers.CountAsync(c => !c.IsDeleted);
+            var totalCars = await _db.Cars.CountAsync(c => !c.IsDeleted);
+            var lowStockCount = await _db.SpareParts.CountAsync(sp => !sp.IsDeleted && sp.StockQuantity <= sp.MinimumStockLevel);
+            var totalInspections = await _db.CarInspections.CountAsync(ci => !ci.IsDeleted);
 
             var recentOrders = await _workOrderService.GetAllAsync();
             var recentInspections = await _db.CarInspections

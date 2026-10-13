@@ -83,6 +83,30 @@ namespace AutoFix.Controllers
             }
         }
 
+        [HttpPost("bundle")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception")]
+        public async Task<ActionResult<WorkOrderResponseDto>> CreateBundle([FromBody] CreateWorkOrderBundleDto dto)
+        {
+            try
+            {
+                var userName = User.Identity?.Name ?? "Staff";
+                var created = await _service.CreateBundleAsync(dto, userName);
+                return Ok(created);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("car/{carId:int}/history")]
+        public async Task<ActionResult<List<CarServiceHistoryDto>>> GetCarServiceHistory(int carId)
+        {
+            var isCustomer = User.IsInRole("Customer");
+            var history = await _service.GetCarServiceHistoryAsync(carId, isCustomer);
+            return Ok(history);
+        }
+
         [HttpPut("{id:int}")]
         [Authorize(Roles = "Admin,Owner,Receptionist,Reception,Mechanic")]
         public async Task<ActionResult<WorkOrderResponseDto>> Update(int id, [FromBody] UpdateWorkOrderDto dto)

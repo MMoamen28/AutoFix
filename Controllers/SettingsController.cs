@@ -14,11 +14,28 @@ namespace AutoFix.Controllers
     {
         private readonly IDataFolderService _dataFolder;
         private readonly AppDbContext _db;
+        private readonly ISettingsService _settingsService;
 
-        public SettingsController(IDataFolderService dataFolder, AppDbContext db)
+        public SettingsController(IDataFolderService dataFolder, AppDbContext db, ISettingsService settingsService)
         {
             _dataFolder = dataFolder;
             _db = db;
+            _settingsService = settingsService;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetSettings()
+        {
+            var settings = await _settingsService.GetSettingsAsync();
+            return Ok(settings);
+        }
+
+        [HttpPut]
+        [Authorize(Roles = "Admin,Owner")]
+        public async Task<IActionResult> UpdateSettings([FromBody] AutoFix.DTOs.Settings.WorkshopSettingsDto dto)
+        {
+            var updated = await _settingsService.UpdateSettingsAsync(dto);
+            return Ok(updated);
         }
 
         [HttpGet("logo")]

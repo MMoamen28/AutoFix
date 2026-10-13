@@ -16,11 +16,13 @@ namespace AutoFix.Controllers
     {
         private readonly ICarService _service;
         private readonly AppDbContext _db;
+        private readonly IWorkOrderService _workOrderService;
 
-        public CarsController(ICarService service, AppDbContext db)
+        public CarsController(ICarService service, AppDbContext db, IWorkOrderService workOrderService)
         {
             _service = service;
             _db = db;
+            _workOrderService = workOrderService;
         }
 
         [HttpGet]
@@ -69,6 +71,22 @@ namespace AutoFix.Controllers
             }
 
             return Ok(car);
+        }
+
+        [HttpGet("{id:int}/service-history")]
+        public async Task<ActionResult<List<AutoFix.DTOs.WorkOrder.CarServiceHistoryDto>>> GetServiceHistory(int id)
+        {
+            var isCustomer = User.IsInRole("Customer");
+            if (isCustomer)
+            {
+                var customerId = await GetCurrentCustomerId();
+                var car = await _service.GetByIdAsync(id);
+                if (car == null) return NotFound();
+                if (car.CustomerId != customerId) return Forbid();
+            }
+
+            var history = await _workOrderService.GetCarServiceHistoryAsync(id, isCustomer);
+            return Ok(history);
         }
 
         [HttpGet("check-duplicate")]

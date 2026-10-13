@@ -24,33 +24,30 @@ export function printHtmlInIframe(html: string): void {
   iframe.style.pointerEvents = 'none';
   iframe.setAttribute('title', 'AutoFix Print Frame');
 
+  // Use UTF-8 Blob URL to guarantee UTF-8 decoding without ANSI/Latin-1 distortion
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const blobUrl = URL.createObjectURL(blob);
+  iframe.src = blobUrl;
+
+  iframe.onload = () => {
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (e) {
+        console.error('Error invoking print dialog:', e);
+      } finally {
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 2000);
+      }
+    }, 400);
+  };
+
   document.body.appendChild(iframe);
-
-  const frameDoc = iframe.contentWindow?.document || iframe.contentDocument;
-  if (!frameDoc || !iframe.contentWindow) {
-    console.error('Print iframe could not be initialized.');
-    return;
-  }
-
-  frameDoc.open();
-  frameDoc.write(html);
-  frameDoc.close();
-
-  // Give resources, fonts, and styles a moment to render cleanly
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-    } catch (e) {
-      console.error('Error invoking print dialog:', e);
-    } finally {
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 1500);
-    }
-  }, 350);
 }
 
 /**

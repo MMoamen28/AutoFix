@@ -7,6 +7,7 @@ import { LayoutDashboard } from 'lucide-react';
 import LoginPage from '../pages/LoginPage';
 
 import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
+import CustomersAndWorkOrdersPage from '../pages/admin/CustomersAndWorkOrdersPage';
 import WorkOrdersPage from '../pages/admin/WorkOrdersPage';
 import InspectionsListPage from '../pages/admin/InspectionsListPage';
 import InspectionEditorPage from '../pages/admin/InspectionEditorPage';
@@ -59,10 +60,11 @@ const router = createBrowserRouter(
 
       {/* Admin/Owner Shared Routes */}
       <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
-      <Route path="/customers" element={<CustomersPage />} />
-      <Route path="/customers/new" element={<CustomersPage openModal={true} />} />
+      <Route path="/workshop-orders" element={<CustomersAndWorkOrdersPage />} />
+      <Route path="/customers" element={<Navigate to="/workshop-orders" replace />} />
+      <Route path="/customers/new" element={<Navigate to="/workshop-orders" replace />} />
       <Route path="/customers/:id" element={<CustomerDetailPage />} />
-      <Route path="/work-orders" element={<WorkOrdersPage />} />
+      <Route path="/work-orders" element={<Navigate to="/workshop-orders" replace />} />
       <Route path="/invoices" element={<InvoicesPage />} />
       <Route path="/credit-notes" element={<CreditNotesPage />} />
       <Route path="/inspections" element={<InspectionsListPage />} />

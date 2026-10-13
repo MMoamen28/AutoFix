@@ -17,6 +17,12 @@ namespace AutoFix.Services
     {
         private readonly AppDbContext _db;
         private readonly IDataFolderService _dataFolder;
+        private readonly IRealtimeService? _realtime;
+        private readonly IServiceProvider? _serviceProvider;
+
+        private ISettingsService? Settings => _serviceProvider != null ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<ISettingsService>(_serviceProvider) : null;
+        private IInvoiceService? Invoices => _serviceProvider != null ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IInvoiceService>(_serviceProvider) : null;
+        private IInspectionService? Inspections => _serviceProvider != null ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IInspectionService>(_serviceProvider) : null;
 
         // Strict lifecycle transitions map
         private static readonly Dictionary<string, HashSet<string>> AllowedTransitions = new(StringComparer.OrdinalIgnoreCase)
@@ -24,19 +30,18 @@ namespace AutoFix.Services
             ["Pending"] = new(StringComparer.OrdinalIgnoreCase) { "InProgress", "Cancelled" },
             ["InProgress"] = new(StringComparer.OrdinalIgnoreCase) { "WaitingForParts", "Completed", "Cancelled" },
             ["WaitingForParts"] = new(StringComparer.OrdinalIgnoreCase) { "InProgress", "Cancelled" },
-            ["Completed"] = new(StringComparer.OrdinalIgnoreCase) { "Delivered", "Cancelled" },
-            ["Delivered"] = new(StringComparer.OrdinalIgnoreCase) { "Invoiced" },
+            ["Completed"] = new(StringComparer.OrdinalIgnoreCase) { "Delivered", "Invoiced", "Cancelled" },
+            ["Delivered"] = new(StringComparer.OrdinalIgnoreCase) { "Invoiced", "Cancelled" },
             ["Invoiced"] = new(StringComparer.OrdinalIgnoreCase) { }, // Terminal final state
             ["Cancelled"] = new(StringComparer.OrdinalIgnoreCase) { } // Terminal final state (no transitions out)
         };
 
-        private readonly IRealtimeService? _realtime;
-
-        public WorkOrderService(AppDbContext db, IDataFolderService dataFolder, IRealtimeService? realtime = null)
+        public WorkOrderService(AppDbContext db, IDataFolderService dataFolder, IRealtimeService? realtime = null, IServiceProvider? serviceProvider = null)
         {
             _db = db;
             _dataFolder = dataFolder;
             _realtime = realtime;
+            _serviceProvider = serviceProvider;
         }
 
         private IQueryable<WorkOrder> BaseQuery()
@@ -570,6 +575,8 @@ namespace AutoFix.Services
             });
 
             await _db.SaveChangesAsync();
+            await SyncWorkOrderToActiveInvoiceAsync(workOrder);
+            await _db.SaveChangesAsync();
             return (await GetByIdAsync(workOrder.Id))!;
         }
 
@@ -635,6 +642,8 @@ namespace AutoFix.Services
             });
 
             await _db.SaveChangesAsync();
+            await SyncWorkOrderToActiveInvoiceAsync(workOrder);
+            await _db.SaveChangesAsync();
             return (await GetByIdAsync(workOrder.Id))!;
         }
 
@@ -691,6 +700,8 @@ namespace AutoFix.Services
                 Timestamp = DateTime.UtcNow
             });
 
+            await _db.SaveChangesAsync();
+            await SyncWorkOrderToActiveInvoiceAsync(workOrder);
             await _db.SaveChangesAsync();
             return (await GetByIdAsync(workOrder.Id))!;
         }
@@ -892,9 +903,10 @@ namespace AutoFix.Services
             var discount = options?.DiscountAmount ?? 0m;
             var taxable = Math.Max(0, subtotal - discount);
 
-            // Dynamic VAT setting: default 14.0m, or passed setting (e.g. 0% for tax-exempt)
-            var vatPercentage = options?.VatPercentage ?? 14.0m;
-            var vatAmount = Math.Round(taxable * (vatPercentage / 100m), 2, MidpointRounding.AwayFromZero);
+            // Dynamic VAT setting: default 14.0m, or 0% when ShowVat is OFF
+            var settings = Settings != null ? await Settings.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();
+            var vatPercentage = settings.ShowVat ? (options?.VatPercentage ?? 14.0m) : 0m;
+            var vatAmount = settings.ShowVat ? Math.Round(taxable * (vatPercentage / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
             var totalAmount = taxable + vatAmount;
 
             var invoice = new Invoice
@@ -958,237 +970,267 @@ namespace AutoFix.Services
             var workOrder = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
             if (workOrder == null) throw new KeyNotFoundException($"WorkOrder {id} not found.");
 
-            var mainTech = workOrder.AssignedTechnician != null
-                ? $"{workOrder.AssignedTechnician.FirstName} {workOrder.AssignedTechnician.LastName}"
-                : "Not Assigned";
+            if (workOrder.WorkType == "Inspection")
+            {
+                var inspection = await _db.CarInspections.FirstOrDefaultAsync(ci => ci.WorkOrderId == id && !ci.IsDeleted);
+                if (inspection != null && Inspections != null)
+                {
+                    return await Inspections.GenerateHtmlPrintReportAsync(inspection.Id, showInvoiceTotal: true);
+                }
+            }
 
-            var helperTech = workOrder.HelperTechnician != null
-                ? $"{workOrder.HelperTechnician.FirstName} {workOrder.HelperTechnician.LastName}"
-                : "None";
+            if (Invoices != null)
+            {
+                return await Invoices.GenerateWordTemplateInvoiceHtmlForWorkOrderAsync(id);
+            }
 
-            var activeLines = workOrder.Lines.Where(l => !l.IsDeleted).ToList();
-            var workmanshipLines = activeLines.Where(l => l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase)).ToList();
-            var partsLines = activeLines.Where(l => !l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase)).ToList();
-            var otherLaborLines = activeLines.Where(l => l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase) && !l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase)).ToList();
+            throw new InvalidOperationException("Invoice template service is not available.");
+        }
 
-            var workmanshipSubtotal = workmanshipLines.Sum(l => l.Quantity * l.UnitPrice);
-            var partsSubtotal = partsLines.Sum(l => l.Quantity * l.UnitPrice);
-            var otherLaborSubtotal = otherLaborLines.Sum(l => l.Quantity * l.UnitPrice);
+        public async Task<WorkOrderResponseDto> CreateBundleAsync(CreateWorkOrderBundleDto dto, string? user = null)
+        {
+            using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                // 1. Customer
+                Customer customer;
+                if (dto.CustomerId.HasValue && dto.CustomerId.Value > 0)
+                {
+                    customer = await _db.Customers.FindAsync(dto.CustomerId.Value)
+                        ?? throw new KeyNotFoundException($"Customer {dto.CustomerId.Value} not found.");
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(dto.CustomerName))
+                        throw new InvalidOperationException("Customer name is required.");
+                    if (string.IsNullOrWhiteSpace(dto.CustomerPhone))
+                        throw new InvalidOperationException("Customer phone is required.");
 
-            var workmanshipRows = workmanshipLines.Count == 0
-                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد بنود مصنعية</td></tr>"
-                : string.Join("", workmanshipLines.Select((l, idx) => $@"
-                    <tr>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
-                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Description}</strong></td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Quantity:F1}</span></td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.UnitPrice:N2}</span> ج.م</td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{(l.Quantity * l.UnitPrice):N2}</span> ج.م</td>
-                    </tr>"));
+                    customer = new Customer
+                    {
+                        FullName = dto.CustomerName.Trim(),
+                        Phone = dto.CustomerPhone.Trim(),
+                        Notes = dto.CustomerNotes?.Trim() ?? string.Empty,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _db.Customers.Add(customer);
+                    await _db.SaveChangesAsync();
+                }
 
-            var partsRows = partsLines.Count == 0
-                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد قطع غيار</td></tr>"
-                : string.Join("", partsLines.Select((l, idx) => $@"
-                    <tr>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
-                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Description}</strong>{(l.IsExternalPart && !string.IsNullOrEmpty(l.ExternalVendorName) ? $" <small>({l.ExternalVendorName})</small>" : "")}</td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Quantity:F1}</span></td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.UnitPrice:N2}</span> ج.م</td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{(l.Quantity * l.UnitPrice):N2}</span> ج.م</td>
-                    </tr>"));
+                // 2. Car
+                Car car;
+                if (dto.CarId.HasValue && dto.CarId.Value > 0)
+                {
+                    car = await _db.Cars.FindAsync(dto.CarId.Value)
+                        ?? throw new KeyNotFoundException($"Car {dto.CarId.Value} not found.");
 
-            var otherLaborSection = otherLaborLines.Count > 0 ? $@"
-                <div class='card' style='margin-bottom: 15px;'>
-                    <h4>خدمات وعمالة أخرى (Other Labor / Services)</h4>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style='width: 30px; text-align: center;'>#</th>
-                                <th>البيان / الخدمة</th>
-                                <th style='width: 70px; text-align: center;'>الكمية</th>
-                                <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
-                                <th style='width: 110px; text-align: right;'>الإجمالي</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {string.Join("", otherLaborLines.Select((l, idx) => $@"
-                                <tr>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
-                                    <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.LineType}</strong>: {l.Description}</td>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Quantity:F1}</span></td>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.UnitPrice:N2}</span> ج.م</td>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{(l.Quantity * l.UnitPrice):N2}</span> ج.م</td>
-                                </tr>"))}
-                        </tbody>
-                    </table>
-                    <div style='text-align: left; margin-top: 6px; font-weight: bold;'>
-                        إجمالي الخدمات الأخرى: <span dir='ltr'>{otherLaborSubtotal:N2}</span> ج.م
-                    </div>
-                </div>" : "";
+                    if (dto.OdometerInKm.HasValue && dto.OdometerInKm.Value > 0)
+                    {
+                        car.CurrentOdometerKm = dto.OdometerInKm.Value;
+                    }
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(dto.Make))
+                        throw new InvalidOperationException("Car make is required.");
+                    if (string.IsNullOrWhiteSpace(dto.Model))
+                        throw new InvalidOperationException("Car model is required.");
+                    if (string.IsNullOrWhiteSpace(dto.LicensePlate))
+                        throw new InvalidOperationException("Car license plate is required.");
 
-            return $@"
-<!DOCTYPE html>
-<html lang='ar' dir='rtl'>
-<head>
-    <meta charset='UTF-8'>
-    <title>أمر شغل / Work Order - {workOrder.OrderNumber}</title>
-    <style>
-        @page {{ size: A4 portrait; margin: 15mm; }}
-        body {{ font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; color: #222; font-size: 13px; line-height: 1.5; }}
-        .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 15px; }}
-        .badge {{ display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; background: #e0f2fe; color: #0369a1; }}
-        .section-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }}
-        .card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 15px; }}
-        .card h4 {{ margin: 0 0 8px 0; color: #1e293b; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 14px; display: flex; justify-content: space-between; }}
-        table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-        th {{ background: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; text-align: right; }}
-        .totals {{ margin-top: 15px; text-align: left; }}
-        .totals-box {{ display: inline-block; min-width: 280px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; }}
-        .totals-row {{ display: flex; justify-content: space-between; padding: 4px 0; }}
-        .grand-total {{ font-size: 16px; font-weight: bold; color: #2563eb; border-top: 2px solid #2563eb; margin-top: 6px; padding-top: 6px; }}
-        .signatures {{ display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }}
-        .sig-block {{ width: 30%; text-align: center; border-top: 1px solid #94a3b8; padding-top: 5px; }}
-        @media print {{
-            .no-print {{ display: none !important; }}
-            body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-            table {{ page-break-inside: auto; }}
-            tr {{ page-break-inside: avoid; page-break-after: auto; }}
-        }}
-        .no-print-bar {{
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-bottom: 15px;
-            padding: 10px;
-            background: #f1f5f9;
-            border-radius: 6px;
-            border: 1px solid #cbd5e1;
-        }}
-        .btn-print {{
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
-        }}
-        .btn-download {{
-            background: #059669;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
-        }}
-    </style>
-</head>
-<body>
-    <div class='no-print-bar no-print'>
-        <button class='btn-print' onclick='window.print()'>طباعة أمر الشغل / Print Work Order</button>
-        <button class='btn-download' onclick='window.print()'>تحميل PDF / Download PDF</button>
-    </div>
-    <div class='header'>
-        <div>
-            <h1 style='margin: 0; color: #1e3a8a; font-size: 22px;'>أوتوفكس لإدارة مراكز الصيانة | AutoFix Workshop</h1>
-            <div style='color: #64748b; font-size: 12px;'>Professional Automotive Workshop Management System</div>
-        </div>
-        <div style='text-align: left;'>
-            <div style='font-size: 18px; font-weight: bold; color: #2563eb;'>{workOrder.OrderNumber}</div>
-            <div class='badge'>الحالة: {workOrder.Status}</div>
-            <div style='color: #64748b; font-size: 11px; margin-top: 4px;'>التاريخ: {workOrder.ReceivedAt:yyyy-MM-dd HH:mm}</div>
-        </div>
-    </div>
+                    car = new Car
+                    {
+                        CustomerId = customer.Id,
+                        Make = dto.Make.Trim(),
+                        Model = dto.Model.Trim(),
+                        Year = dto.Year > 1900 ? dto.Year : DateTime.UtcNow.Year,
+                        LicensePlate = dto.LicensePlate.Trim(),
+                        VIN = dto.VIN?.Trim() ?? string.Empty,
+                        CurrentOdometerKm = dto.OdometerInKm ?? 0
+                    };
+                    _db.Cars.Add(car);
+                    await _db.SaveChangesAsync();
+                }
 
-    <div class='section-grid'>
-        <div class='card' style='margin-bottom: 0;'>
-            <h4>بيانات العميل (Customer Details)</h4>
-            <div><strong>الاسم:</strong> <span dir='auto'>{workOrder.Customer?.FullName}</span></div>
-            <div><strong>الهاتف:</strong> <span dir='ltr'>{workOrder.Customer?.Phone}</span></div>
-            <div><strong>شكوى العميل:</strong> <span dir='auto'>{workOrder.CustomerComplaint}</span></div>
-        </div>
-        <div class='card' style='margin-bottom: 0;'>
-            <h4>بيانات السيارة (Vehicle Details)</h4>
-            <div><strong>السيارة:</strong> <span dir='auto'>{workOrder.Car?.Make} {workOrder.Car?.Model} ({workOrder.Car?.Year})</span></div>
-            <div><strong>رقم اللوحة:</strong> <span dir='auto'>{workOrder.Car?.LicensePlate}</span></div>
-            <div><strong>رقم الشاسية / VIN:</strong> <span dir='ltr'>{workOrder.Car?.VIN}</span></div>
-            <div><strong>قراءة العداد:</strong> <span dir='ltr'>{workOrder.OdometerInKm} كم</span></div>
-        </div>
-    </div>
+                // 3. Work Order
+                var cairoNow = InvoiceService.GetCairoNow();
+                var prefix = $"WO-{cairoNow:yyyyMM}-";
+                var existingCount = await _db.WorkOrders.IgnoreQueryFilters().Where(w => w.OrderNumber.StartsWith(prefix)).CountAsync();
+                var nextOrderNumber = $"{prefix}{(existingCount + 1):D4}";
 
-    <div class='card' style='margin-top: 15px;'>
-        <h4>الفنيون المسؤولون عن أمر الشغل (Assigned Technicians)</h4>
-        <div style='display: flex; justify-content: space-between;'>
-            <div><strong>الفني الرئيسي (Main Mechanic):</strong> <span style='color: #2563eb; font-weight: bold;'>{mainTech}</span></div>
-            <div><strong>الفني المساعد (Helper Mechanic):</strong> <span style='color: #0284c7; font-weight: bold;'>{helperTech}</span></div>
-        </div>
-    </div>
+                var workOrder = new WorkOrder
+                {
+                    OrderNumber = nextOrderNumber,
+                    CustomerId = customer.Id,
+                    CarId = car.Id,
+                    WorkType = string.IsNullOrWhiteSpace(dto.WorkType) ? "Maintenance" : dto.WorkType.Trim(),
+                    CustomerComplaint = dto.CustomerComplaint?.Trim() ?? string.Empty,
+                    Notes = dto.Notes?.Trim() ?? string.Empty,
+                    WorkDone = dto.WorkDone?.Trim() ?? string.Empty,
+                    WorkToBeDone = dto.WorkToBeDone?.Trim() ?? string.Empty,
+                    OdometerInKm = dto.OdometerInKm ?? car.CurrentOdometerKm,
+                    AssignedTechnicianId = dto.AssignedTechnicianId,
+                    Status = "Pending",
+                    ReceivedAt = DateTime.UtcNow
+                };
+                _db.WorkOrders.Add(workOrder);
+                await _db.SaveChangesAsync();
 
-    <!-- 1. Dedicated Workmanship Section (مصنعية) -->
-    <div class='card'>
-        <h4>
-            <span>مصنعية (Workmanship)</span>
-            <span style='color: #2563eb;'>إجمالي المصنعية: <span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span>
-        </h4>
-        <table>
-            <thead>
-                <tr>
-                    <th style='width: 30px; text-align: center;'>#</th>
-                    <th>بند المصنعية / الخدمة (Workmanship Service)</th>
-                    <th style='width: 70px; text-align: center;'>الكمية</th>
-                    <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
-                    <th style='width: 110px; text-align: right;'>الإجمالي</th>
-                </tr>
-            </thead>
-            <tbody>
-                {workmanshipRows}
-            </tbody>
-        </table>
-    </div>
+                // 4. Lines
+                if (dto.Lines != null && dto.Lines.Count > 0)
+                {
+                    foreach (var lineDto in dto.Lines)
+                    {
+                        var lineType = string.IsNullOrWhiteSpace(lineDto.LineType) ? "LaborManufacturer" : lineDto.LineType;
+                        var line = new WorkOrderLine
+                        {
+                            WorkOrderId = workOrder.Id,
+                            LineType = lineType,
+                            Description = (lineDto.Description ?? "").Trim(),
+                            ServiceId = lineDto.ServiceId,
+                            SparePartId = lineDto.SparePartId,
+                            IsExternalPart = lineDto.IsExternalPart,
+                            ExternalVendorName = lineDto.ExternalVendorName?.Trim(),
+                            Quantity = lineDto.Quantity > 0 ? lineDto.Quantity : 1,
+                            UnitCost = lineDto.UnitCost,
+                            UnitPrice = lineDto.UnitPrice,
+                            TechnicianId = lineDto.TechnicianId ?? workOrder.AssignedTechnicianId
+                        };
+                        workOrder.Lines.Add(line);
+                    }
 
-    <!-- 2. Dedicated Parts Section (قطع الغيار) -->
-    <div class='card'>
-        <h4>
-            <span>قطع الغيار (Spare Parts)</span>
-            <span style='color: #0284c7;'>إجمالي قطع الغيار: <span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span>
-        </h4>
-        <table>
-            <thead>
-                <tr>
-                    <th style='width: 30px; text-align: center;'>#</th>
-                    <th>قطعة الغيار / الصنف (Part Description)</th>
-                    <th style='width: 70px; text-align: center;'>الكمية</th>
-                    <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
-                    <th style='width: 110px; text-align: right;'>الإجمالي</th>
-                </tr>
-            </thead>
-            <tbody>
-                {partsRows}
-            </tbody>
-        </table>
-    </div>
+                    var activeLines = workOrder.Lines.ToList();
+                    workOrder.TotalWorkmanship = activeLines
+                        .Where(l => l.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                        .Sum(l => l.Quantity * l.UnitPrice);
+                    workOrder.TotalLabor = activeLines
+                        .Where(l => l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                        .Sum(l => l.Quantity * l.UnitPrice);
+                    workOrder.TotalParts = activeLines
+                        .Where(l => !l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                        .Sum(l => l.Quantity * l.UnitPrice);
+                    workOrder.TotalAmount = workOrder.TotalLabor + workOrder.TotalParts;
 
-    {otherLaborSection}
+                    await _db.SaveChangesAsync();
+                }
 
-    <div class='totals'>
-        <div class='totals-box'>
-            <div class='totals-row'><span>إجمالي المصنعية:</span><span><span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span></div>
-            <div class='totals-row'><span>إجمالي قطع الغيار:</span><span><span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span></div>
-            {(otherLaborSubtotal > 0 ? $"<div class='totals-row'><span>خدمات أخرى:</span><span><span dir='ltr'>{otherLaborSubtotal:N2}</span> ج.م</span></div>" : "")}
-            <div class='totals-row grand-total'><span>المجموع الكلي:</span><span><span dir='ltr'>{workOrder.TotalAmount:N2}</span> ج.م</span></div>
-        </div>
-    </div>
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "CreateWorkOrderBundle",
+                    EntityName = "WorkOrder",
+                    EntityId = workOrder.OrderNumber,
+                    UserName = user ?? "Staff",
+                    Details = $"Atomic bundle created: Customer {customer.FullName}, Car {car.LicensePlate}, WorkOrder {workOrder.OrderNumber} ({workOrder.WorkType}) with {workOrder.Lines.Count} lines. Total: {workOrder.TotalAmount:N2} L.E.",
+                    Timestamp = DateTime.UtcNow
+                });
+                await _db.SaveChangesAsync();
 
-    <div class='signatures'>
-        <div class='sig-block'>توقيع الفني الرئيسي ({mainTech})</div>
-        <div class='sig-block'>توقيع الاستقبال / الإدارة</div>
-        <div class='sig-block'>توقيع واستلام العميل</div>
-    </div>
-</body>
-</html>";
+                await tx.CommitAsync();
+
+                if (_realtime != null)
+                {
+                    await _realtime.NotifyAsync("workorder-created", new { OrderId = workOrder.Id, OrderNumber = workOrder.OrderNumber });
+                    await _realtime.NotifyAsync("dashboard-updated", new { });
+                }
+
+                return (await GetByIdAsync(workOrder.Id))!;
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<List<CarServiceHistoryDto>> GetCarServiceHistoryAsync(int carId, bool isCustomer = false)
+        {
+            var workOrders = await _db.WorkOrders
+                .Include(w => w.Lines).ThenInclude(l => l.Technician)
+                .Include(w => w.AssignedTechnician)
+                .AsNoTracking()
+                .Where(w => w.CarId == carId && !w.IsDeleted && w.Status != "Cancelled")
+                .OrderByDescending(w => w.ReceivedAt)
+                .ToListAsync();
+
+            var history = new List<CarServiceHistoryDto>();
+
+            foreach (var wo in workOrders)
+            {
+                var activeLines = wo.Lines.Where(l => !l.IsDeleted).ToList();
+                if (activeLines.Count == 0)
+                {
+                    history.Add(new CarServiceHistoryDto
+                    {
+                        WorkOrderId = wo.Id,
+                        OrderNumber = wo.OrderNumber,
+                        Date = wo.ReceivedAt,
+                        OdometerKm = wo.OdometerInKm,
+                        OperationName = !string.IsNullOrWhiteSpace(wo.CustomerComplaint) ? wo.CustomerComplaint : (!string.IsNullOrWhiteSpace(wo.WorkDone) ? wo.WorkDone : wo.WorkType),
+                        LineType = "Summary",
+                        Quantity = 1,
+                        UnitPrice = wo.TotalAmount,
+                        TotalPrice = wo.TotalAmount,
+                        UnitCost = isCustomer ? null : 0m,
+                        MechanicName = wo.AssignedTechnician != null ? $"{wo.AssignedTechnician.FirstName} {wo.AssignedTechnician.LastName}" : null,
+                        WorkType = wo.WorkType,
+                        Status = wo.Status
+                    });
+                }
+                else
+                {
+                    foreach (var l in activeLines)
+                    {
+                        var techName = l.Technician != null
+                            ? $"{l.Technician.FirstName} {l.Technician.LastName}"
+                            : (wo.AssignedTechnician != null ? $"{wo.AssignedTechnician.FirstName} {wo.AssignedTechnician.LastName}" : null);
+
+                        history.Add(new CarServiceHistoryDto
+                        {
+                            WorkOrderId = wo.Id,
+                            OrderNumber = wo.OrderNumber,
+                            Date = wo.ReceivedAt,
+                            OdometerKm = wo.OdometerInKm,
+                            OperationName = l.Description,
+                            LineType = l.LineType,
+                            Quantity = l.Quantity,
+                            UnitPrice = l.UnitPrice,
+                            TotalPrice = l.Quantity * l.UnitPrice,
+                            UnitCost = isCustomer ? null : l.UnitCost,
+                            MechanicName = techName,
+                            WorkType = wo.WorkType,
+                            Status = wo.Status
+                        });
+                    }
+                }
+            }
+
+            return history.OrderByDescending(h => h.Date).ToList();
+        }
+
+        private async Task SyncWorkOrderToActiveInvoiceAsync(WorkOrder workOrder)
+        {
+            var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.WorkOrderId == workOrder.Id && !i.IsDeleted && i.Status != "Credited");
+            if (invoice != null && invoice.Status != "Paid")
+            {
+                invoice.Subtotal = workOrder.TotalAmount;
+                var settings = Settings != null ? await Settings.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();
+                var afterDiscount = Math.Max(0, invoice.Subtotal - invoice.DiscountAmount);
+                var vatPct = settings.ShowVat ? invoice.VatPercentage : 0m;
+                invoice.VatPercentage = vatPct;
+                invoice.VatAmount = settings.ShowVat ? Math.Round(afterDiscount * (vatPct / 100m), 2) : 0m;
+                invoice.TotalAmount = afterDiscount + invoice.VatAmount;
+
+                if (_realtime != null)
+                {
+                    await _realtime.NotifyAsync("invoice-updated", new { InvoiceId = invoice.Id, InvoiceNumber = invoice.InvoiceNumber });
+                }
+            }
+
+            if (_realtime != null)
+            {
+                await _realtime.NotifyAsync("workorder-updated", new { OrderId = workOrder.Id, Status = workOrder.Status, OrderNumber = workOrder.OrderNumber });
+                await _realtime.NotifyAsync("dashboard-updated", new { });
+            }
         }
 
         private static InvoiceResponseDto MapInvoiceToDto(Invoice i, bool isCustomer = false)

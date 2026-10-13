@@ -7,13 +7,14 @@ import {
 import { Link } from 'react-router-dom';
 import Money from '../../components/shared/Money';
 
+import signalRService from '../../services/signalRService';
+
 const AdminDashboardPage: React.FC = () => {
   const [data, setData] = useState<AdminDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     try {
-      setLoading(true);
       const res = await dashboardService.getAdminDashboard();
       setData(res);
     } catch (err) {
@@ -25,9 +26,17 @@ const AdminDashboardPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    const unsub1 = signalRService.on("workorder-updated", loadData);
+    const unsub2 = signalRService.on("workorder-created", loadData);
+    const unsub3 = signalRService.on("invoice-updated", loadData);
+    const unsub4 = signalRService.on("invoice-issued", loadData);
+    const unsub5 = signalRService.on("dashboard-updated", loadData);
+    return () => {
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5();
+    };
   }, []);
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
         <RefreshCw className="animate-spin text-accent" size={40} />
@@ -77,7 +86,7 @@ const AdminDashboardPage: React.FC = () => {
           </div>
           <div style={{ fontSize: '32px', fontWeight: 800, marginTop: '8px' }}>{data.totalActiveWorkOrders}</div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            {data.pendingOrdersCount} Pending | {data.inProgressOrdersCount} In Progress
+            {data.pendingOrdersCount} Pending | {data.inProgressOrdersCount} In Progress | {data.completedOrdersCount} Completed
           </div>
         </div>
 
@@ -152,7 +161,7 @@ const AdminDashboardPage: React.FC = () => {
             <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <ClipboardList size={20} color="var(--accent)" /> Recent Work Orders (أحدث أوامر الشغل)
             </h2>
-            <Link to="/work-orders" style={{ fontSize: '13px', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+            <Link to="/workshop-orders" style={{ fontSize: '13px', color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
               View All →
             </Link>
           </div>

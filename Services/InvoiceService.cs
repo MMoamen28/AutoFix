@@ -19,12 +19,14 @@ namespace AutoFix.Services
     {
         private readonly AppDbContext _db;
         private readonly IDataFolderService? _dataFolder;
+        private readonly ISettingsService? _settingsService;
         private static readonly SemaphoreSlim _invoiceIdLock = new(1, 1);
 
-        public InvoiceService(AppDbContext db, IDataFolderService? dataFolder = null)
+        public InvoiceService(AppDbContext db, IDataFolderService? dataFolder = null, ISettingsService? settingsService = null)
         {
             _db = db;
             _dataFolder = dataFolder;
+            _settingsService = settingsService;
         }
 
         public static DateTime GetCairoNow()
@@ -262,8 +264,10 @@ namespace AutoFix.Services
                 if (wo != null) subtotal = wo.TotalAmount;
             }
 
+            var settings = _settingsService != null ? await _settingsService.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();
             var afterDiscount = Math.Max(0, subtotal - dto.DiscountAmount);
-            var vatAmount = Math.Round(afterDiscount * (dto.VatPercentage / 100m), 2);
+            var vatPercentage = settings.ShowVat ? dto.VatPercentage : 0m;
+            var vatAmount = settings.ShowVat ? Math.Round(afterDiscount * (vatPercentage / 100m), 2) : 0m;
             var totalAmount = afterDiscount + vatAmount;
 
             for (int attempt = 0; attempt < 5; attempt++)
@@ -278,7 +282,7 @@ namespace AutoFix.Services
                     CarId = dto.CarId,
                     Subtotal = subtotal,
                     DiscountAmount = dto.DiscountAmount,
-                    VatPercentage = dto.VatPercentage,
+                    VatPercentage = vatPercentage,
                     VatAmount = vatAmount,
                     TotalAmount = totalAmount,
                     PaidAmount = 0,
@@ -538,6 +542,31 @@ namespace AutoFix.Services
             return "";
         }
 
+        private static string? _cairo400Base64;
+        private static string? _cairo700Base64;
+
+        private static string GetCairo400Base64()
+        {
+            if (_cairo400Base64 != null) return _cairo400Base64;
+            var path = @"D:\AutoFix\Assets\Fonts\cairo-400.woff2";
+            if (File.Exists(path))
+            {
+                _cairo400Base64 = Convert.ToBase64String(File.ReadAllBytes(path));
+            }
+            return _cairo400Base64 ?? "";
+        }
+
+        private static string GetCairo700Base64()
+        {
+            if (_cairo700Base64 != null) return _cairo700Base64;
+            var path = @"D:\AutoFix\Assets\Fonts\cairo-700.woff2";
+            if (File.Exists(path))
+            {
+                _cairo700Base64 = Convert.ToBase64String(File.ReadAllBytes(path));
+            }
+            return _cairo700Base64 ?? "";
+        }
+
         public async Task<string> GeneratePrintedInvoiceHtmlAsync(int id)
         {
             return await GenerateWordTemplateInvoiceHtmlAsync(id, false);
@@ -563,7 +592,7 @@ namespace AutoFix.Services
                         var lineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() ?? "" : "";
                         var qty = el.TryGetProperty("Quantity", out var q) ? q.GetDecimal() : 1m;
                         var price = el.TryGetProperty("UnitPrice", out var p) ? p.GetDecimal() : 0m;
-                        var sub = el.TryGetProperty("Subtotal", out var s) ? s.GetDecimal() : qty * price;
+                        var sub = el.TryGetProperty("Subtotal", out var s) ? s.GetDecimal() : (qty * price);
 
                         if (lineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase) ||
                             lineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
@@ -597,9 +626,11 @@ namespace AutoFix.Services
                 workmanshipTotal = invoice.Subtotal;
             }
 
+            var settings = _settingsService != null ? await _settingsService.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();
+
             var docTitle = (invoice.WorkOrder?.WorkType == "Inspection")
-                ? "تقرير فحص واعتماد / Car Inspection Report"
-                : "Comprehensive Car Inspection - فحص سيارة شامل / فاتورة صيانة";
+                ? "فحص سيارة شامل"
+                : "فاتورة صيانة";
 
             return BuildWordTemplateHtml(
                 invoice.InvoiceNumber,
@@ -623,7 +654,9 @@ namespace AutoFix.Services
                 invoice.PaidAmount,
                 invoice.RemainingAmount,
                 docTitle,
-                isCustomer);
+                isCustomer,
+                settings.ShowVat,
+                settings.PrintNotesOnInvoice);
         }
 
         public async Task<string> GenerateWordTemplateInvoiceHtmlForWorkOrderAsync(int workOrderId, bool isCustomer = false)
@@ -656,14 +689,16 @@ namespace AutoFix.Services
             }
 
             var subtotal = itemsList.Sum(i => i.Subtotal) + workmanshipTotal;
-            var vatPercentage = 14m;
-            var vatAmount = Math.Round(subtotal * (vatPercentage / 100m), 2);
+            var settings = _settingsService != null ? await _settingsService.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();
+
+            var vatPercentage = settings.ShowVat ? 14m : 0m;
+            var vatAmount = settings.ShowVat ? Math.Round(subtotal * (vatPercentage / 100m), 2) : 0m;
             var totalAmount = subtotal + vatAmount;
 
             var draftInvNumber = $"DRAFT-{workOrder.OrderNumber}";
             var docTitle = (workOrder.WorkType == "Inspection")
-                ? "تقرير فحص واعتماد / Car Inspection Report"
-                : "Comprehensive Car Inspection - فحص سيارة شامل / فاتورة صيانة";
+                ? "فحص سيارة شامل"
+                : "فاتورة صيانة";
 
             return BuildWordTemplateHtml(
                 draftInvNumber,
@@ -687,7 +722,9 @@ namespace AutoFix.Services
                 0m,
                 totalAmount,
                 docTitle,
-                isCustomer);
+                isCustomer,
+                settings.ShowVat,
+                settings.PrintNotesOnInvoice);
         }
 
         private string BuildWordTemplateHtml(
@@ -712,7 +749,9 @@ namespace AutoFix.Services
             decimal paidAmount,
             decimal remainingAmount,
             string docTitle,
-            bool isCustomer = false)
+            bool isCustomer = false,
+            bool showVat = false,
+            bool printNotes = false)
         {
             var logoBase64 = GetLogoBase64();
             var watermarkBase64 = GetWatermarkBase64();
@@ -768,6 +807,18 @@ namespace AutoFix.Services
     <meta charset='UTF-8'>
     <title>فاتورة - {invoiceNumber}</title>
     <style>
+        @font-face {{
+            font-family: 'Cairo';
+            font-style: normal;
+            font-weight: 400;
+            src: url('data:font/woff2;base64,{GetCairo400Base64()}') format('woff2');
+        }}
+        @font-face {{
+            font-family: 'Cairo';
+            font-style: normal;
+            font-weight: 700;
+            src: url('data:font/woff2;base64,{GetCairo700Base64()}') format('woff2');
+        }}
         @page {{
             size: A4 portrait;
             margin: 10mm 12mm 10mm 12mm;
@@ -1169,6 +1220,7 @@ namespace AutoFix.Services
             <span class='workmanship-amount'><span dir='ltr'>{workmanshipTotal:N2}</span> ج.م</span>
         </div>
 
+        {(printNotes ? $@"
         <!-- Part 4: Notes (Work done, Work to be done, Notes) -->
         <div class='notes-section'>
             <div class='note-row'>
@@ -1183,7 +1235,7 @@ namespace AutoFix.Services
                 <span class='note-title'>ملاحظات / Notes:</span>
                 <span class='note-val' dir='auto'>{generalNotes}</span>
             </div>
-        </div>
+        </div>" : "")}
 
         <!-- Part 5: Totals Section -->
         <div class='totals-section'>
@@ -1196,7 +1248,9 @@ namespace AutoFix.Services
                 <div class='total-row' style='color: #dc2626;'>
                     <span>الخصم (Discount):</span>
                     <span>-<span dir='ltr'>{discountAmount:N2}</span> ج.م</span>
-                </div>
+                </div>" : "")}
+                {(showVat ? $@"
+                {(discountAmount > 0 ? $@"
                 <div class='total-row'>
                     <span>الوعاء الخاضع للضريبة (Taxable Base):</span>
                     <span><span dir='ltr'>{Math.Max(0, subtotal - discountAmount):N2}</span> ج.م</span>
@@ -1204,7 +1258,7 @@ namespace AutoFix.Services
                 <div class='total-row'>
                     <span>ضريبة القيمة المضافة ({vatPercentage}%):</span>
                     <span><span dir='ltr'>{vatAmount:N2}</span> ج.م</span>
-                </div>
+                </div>" : "")}
                 <div class='total-row grand-total'>
                     <span>الإجمالي النهائي (Total):</span>
                     <span><span dir='ltr'>{totalAmount:N2}</span> ج.م</span>

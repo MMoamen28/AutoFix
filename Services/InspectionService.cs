@@ -449,6 +449,31 @@ namespace AutoFix.Services
         // ======================================================================
         // 3-PAGE A4 EXACT PRINT LAYOUT BUILDER
         // ======================================================================
+        private static string? _cairo400Base64;
+        private static string? _cairo700Base64;
+
+        private static string GetCairo400Base64()
+        {
+            if (_cairo400Base64 != null) return _cairo400Base64;
+            var path = @"D:\AutoFix\Assets\Fonts\cairo-400.woff2";
+            if (File.Exists(path))
+            {
+                _cairo400Base64 = Convert.ToBase64String(File.ReadAllBytes(path));
+            }
+            return _cairo400Base64 ?? "";
+        }
+
+        private static string GetCairo700Base64()
+        {
+            if (_cairo700Base64 != null) return _cairo700Base64;
+            var path = @"D:\AutoFix\Assets\Fonts\cairo-700.woff2";
+            if (File.Exists(path))
+            {
+                _cairo700Base64 = Convert.ToBase64String(File.ReadAllBytes(path));
+            }
+            return _cairo700Base64 ?? "";
+        }
+
         private static string GetAssetBase64(string fileName)
         {
             try
@@ -586,6 +611,18 @@ namespace AutoFix.Services
     <meta charset=""UTF-8"">
     <title>Comprehensive Car Inspection - {insp.ReportNumber}</title>
     <style>
+        @font-face {{
+            font-family: 'Cairo';
+            font-style: normal;
+            font-weight: 400;
+            src: url('data:font/woff2;base64,{GetCairo400Base64()}') format('woff2');
+        }}
+        @font-face {{
+            font-family: 'Cairo';
+            font-style: normal;
+            font-weight: 700;
+            src: url('data:font/woff2;base64,{GetCairo700Base64()}') format('woff2');
+        }}
         @page {{
             size: A4 portrait;
             margin: 0;
@@ -598,7 +635,7 @@ namespace AutoFix.Services
         body {{
             margin: 0;
             padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Cairo, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: #ffffff;
             color: #000000;
             font-size: 10px;

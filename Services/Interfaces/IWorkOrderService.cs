@@ -23,5 +23,7 @@ namespace AutoFix.Services.Interfaces
         Task<WorkOrderResponseDto> ClaimOrderAsync(int id, int mechanicId);
         Task<InvoiceResponseDto> CreditWorkOrderInvoiceAsync(int id, string? reason = null);
         Task<string> GeneratePrintedOrderHtmlAsync(int id);
+        Task<WorkOrderResponseDto> CreateBundleAsync(CreateWorkOrderBundleDto dto, string? user = null);
+        Task<List<CarServiceHistoryDto>> GetCarServiceHistoryAsync(int carId, bool isCustomer = false);
     }
 }
