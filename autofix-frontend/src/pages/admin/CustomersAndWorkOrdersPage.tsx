@@ -837,30 +837,7 @@ export const CustomersAndWorkOrdersPage: React.FC = () => {
                   style={{ ...fieldInputStyle, resize: 'vertical' }}
                 />
               </div>
-              <div>
-                <label style={fieldLabelStyle}>
-                  {isArabic ? 'الأعمال المنجزة (تحفظ بأمر الشغل)' : 'Work Done (Saved on WO)'}
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder={isArabic ? 'تم تغيير تيل الفرامل، ضبط الزوايا...' : 'Completed repairs...'}
-                  value={formData.workDone}
-                  onChange={e => setFormData(prev => ({ ...prev, workDone: e.target.value }))}
-                  style={{ ...fieldInputStyle, resize: 'vertical' }}
-                />
-              </div>
-              <div>
-                <label style={fieldLabelStyle}>
-                  {isArabic ? 'أعمال يوصى بها مستقبلاً' : 'Work To Be Done / Recommendations'}
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder={isArabic ? 'تغيير كوتش، تغيير زيت بعد 5000 كم...' : 'Recommended future work...'}
-                  value={formData.workToBeDone}
-                  onChange={e => setFormData(prev => ({ ...prev, workToBeDone: e.target.value }))}
-                  style={{ ...fieldInputStyle, resize: 'vertical' }}
-                />
-              </div>
+
               <div>
                 <label style={fieldLabelStyle}>{isArabic ? 'الفني المسؤول' : 'Assigned Mechanic'}</label>
                 <select

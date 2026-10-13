@@ -53,9 +53,15 @@ export const AdminDashboardPage: React.FC = () => {
   const [partsSearch, setPartsSearch] = useState('');
   const [loadingParts, setLoadingParts] = useState(false);
 
-  // Workmanship Quick State
-  const [workmanshipPrice, setWorkmanshipPrice] = useState<number>(300);
-  const [workmanshipDesc, setWorkmanshipDesc] = useState<string>('فحص ومصنعية صيانة');
+  // Manual Line / Workmanship State
+  const [manualLinePrice, setManualLinePrice] = useState<number>(300);
+  const [manualLineDesc, setManualLineDesc] = useState<string>('مصنعية');
+  const [servicesList, setServicesList] = useState<any[]>([]);
+
+  // Active Invoice Notes State & Autosave
+  const [activeNotes, setActiveNotes] = useState<string>('');
+  const [isAutosavingNotes, setIsAutosavingNotes] = useState<boolean>(false);
+  const notesSaveTimerRef = useRef<any>(null);
 
   // Concurrency Conflict Banner State
   const [concurrencyNotice, setConcurrencyNotice] = useState<{
@@ -169,10 +175,49 @@ export const AdminDashboardPage: React.FC = () => {
     loadFinancial();
   }, [period]);
 
+  // Fetch Services (Workmanship Catalog) for suggestions
+  const loadServices = async () => {
+    try {
+      const res = await axiosClient.get('/services');
+      if (Array.isArray(res.data)) {
+        setServicesList(res.data.filter((s: any) => s.isActive !== false));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     loadActiveOrders();
     loadParts();
+    loadServices();
   }, []);
+
+  // Sync active invoice notes with selected order
+  useEffect(() => {
+    if (selectedOrder) {
+      setActiveNotes(selectedOrder.notes || '');
+    } else {
+      setActiveNotes('');
+    }
+  }, [selectedOrder?.id]);
+
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setActiveNotes(val);
+    if (!selectedOrder) return;
+
+    setIsAutosavingNotes(true);
+    if (notesSaveTimerRef.current) clearTimeout(notesSaveTimerRef.current);
+    notesSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await axiosClient.patch(`/work-orders/${selectedOrder.id}/notes`, { notes: val });
+        setSelectedOrder((prev: any) => prev ? { ...prev, notes: val } : null);
+      } catch (err) {
+        console.error('Failed to autosave notes', err);
+      } finally {
+        setIsAutosavingNotes(false);
+      }
+    }, 600);
+  };
 
   // Listen to global open-new-work-order and search events
   useEffect(() => {
@@ -261,35 +306,37 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  // Add / Update Workmanship Line
-  const handleApplyWorkmanship = async () => {
-    if (!selectedOrder) return;
+  // Add Manual Line / Workmanship
+  const handleManualDescChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setManualLineDesc(val);
+    const matched = servicesList.find(s => s.nameAr === val || s.nameEn === val);
+    if (matched && matched.defaultPrice) {
+      setManualLinePrice(matched.defaultPrice);
+    }
+  };
+
+  const handleAddManualLine = async () => {
+    if (!selectedOrder) {
+      alert('يرجى اختيار سيارة نشطة أولاً لإضافة البند إليها');
+      return;
+    }
+    const desc = manualLineDesc.trim() || 'مصنعية';
     try {
-      // Find existing workmanship line or add new
-      const existing = (selectedOrder.lines || []).find(
-        (l: any) => l.lineType.startsWith('Labor') || l.description.includes('مصنعية')
-      );
+      await workOrderService.addLine(selectedOrder.id, {
+        lineType: 'LaborMechanical',
+        description: desc,
+        quantity: 1,
+        unitPrice: Number(manualLinePrice) || 0,
+        unitCost: 0
+      });
 
-      if (existing) {
-        await workOrderService.updateLine(selectedOrder.id, existing.id, {
-          lineType: existing.lineType,
-          description: workmanshipDesc,
-          quantity: 1,
-          unitPrice: Number(workmanshipPrice) || 0
-        });
-      } else {
-        await workOrderService.addLine(selectedOrder.id, {
-          lineType: 'LaborMechanical',
-          description: workmanshipDesc,
-          quantity: 1,
-          unitPrice: Number(workmanshipPrice) || 0
-        });
-      }
-
+      setManualLineDesc('');
+      setManualLinePrice(0);
       await reloadSelectedOrder(selectedOrder.id);
       await loadActiveOrders();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'فشل تحديث المصنعية');
+      alert(err.response?.data?.message || 'فشل إضافة بند المصنعية');
     }
   };
 
@@ -764,31 +811,39 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Workmanship Box (Fixed with editable price) */}
+          {/* Manual Line / Workmanship Box */}
           <div style={workmanshipBoxStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#e2e8f0' }}>بند المصنعية / أتعاب الورشة</span>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#e2e8f0' }}>إضافة بند يدوي / مصنعية</span>
               <button
                 type="button"
-                onClick={handleApplyWorkmanship}
+                onClick={handleAddManualLine}
                 disabled={!selectedOrder}
                 style={applyWorkmanshipBtnStyle}
               >
-                تحديث للفاتورة ✓
+                + إضافة للفاتورة
               </button>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input
                 type="text"
-                value={workmanshipDesc}
-                onChange={e => setWorkmanshipDesc(e.target.value)}
-                placeholder="بيان المصنعية..."
+                list="services-suggestions"
+                value={manualLineDesc}
+                onChange={handleManualDescChange}
+                placeholder="اسم البند (مثال: مصنعية، صيانة...)"
                 style={{ ...panelSearchInputStyle, flex: 2, background: '#0d1117', border: '1px solid #212c3d', borderRadius: '6px', padding: '6px 10px' }}
               />
+              <datalist id="services-suggestions">
+                {servicesList.map(s => (
+                  <option key={s.id} value={s.nameAr || s.nameEn}>
+                    {s.defaultPrice ? `${s.defaultPrice} ج.م` : ''}
+                  </option>
+                ))}
+              </datalist>
               <input
                 type="number"
-                value={workmanshipPrice}
-                onChange={e => setWorkmanshipPrice(Number(e.target.value))}
+                value={manualLinePrice}
+                onChange={e => setManualLinePrice(Number(e.target.value))}
                 placeholder="السعر"
                 style={{ ...panelSearchInputStyle, flex: 1, background: '#0d1117', border: '1px solid #212c3d', borderRadius: '6px', padding: '6px 10px', fontWeight: 800, color: '#10b981' }}
               />
@@ -950,6 +1005,33 @@ export const AdminDashboardPage: React.FC = () => {
                     );
                   })
                 )}
+              </div>
+
+              {/* Notes Box (ملاحظات) with Autosave */}
+              <div style={{ padding: '8px 14px', borderTop: '1px solid #212c3d', background: '#0d1117' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8' }}>ملاحظات الفاتورة</label>
+                  {isAutosavingNotes && <span style={{ fontSize: '10px', color: '#38bdf8' }}>جاري الحفظ تلقائياً...</span>}
+                </div>
+                <textarea
+                  value={activeNotes}
+                  onChange={handleNotesChange}
+                  disabled={selectedOrder.status === 'Invoiced'}
+                  placeholder="اكتب أي ملاحظات خاصة بالفاتورة هنا... (حفظ تلقائي)"
+                  rows={2}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    backgroundColor: '#161c24',
+                    border: '1px solid #212c3d',
+                    borderRadius: '6px',
+                    color: '#ffffff',
+                    fontSize: '12px',
+                    outline: 'none',
+                    resize: 'none',
+                    fontFamily: 'Cairo, sans-serif'
+                  }}
+                />
               </div>
 
               {/* Total & Summary Box (No VAT unless setting is ON) */}

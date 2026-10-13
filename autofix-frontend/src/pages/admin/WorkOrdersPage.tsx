@@ -953,26 +953,7 @@ const WorkOrdersPage: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={labelStyle}>Work Done (ما تم تنفيذه):</label>
-                  <input 
-                    type="text" style={inputStyle} 
-                    value={newOrder.workDone}
-                    onChange={e => setNewOrder({ ...newOrder, workDone: e.target.value })}
-                    placeholder="e.g. Changed oil, replaced front brake pads"
-                  />
-                </div>
-                <div>
-                  <label style={labelStyle}>Work To Be Done (ما سيتم تنفيذه):</label>
-                  <input 
-                    type="text" style={inputStyle} 
-                    value={newOrder.workToBeDone}
-                    onChange={e => setNewOrder({ ...newOrder, workToBeDone: e.target.value })}
-                    placeholder="e.g. Schedule timing belt replacement"
-                  />
-                </div>
-              </div>
+
 
               <div>
                 <label style={labelStyle}>Notes (ملاحظات):</label>

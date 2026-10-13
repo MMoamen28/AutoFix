@@ -70,10 +70,33 @@ export const InvoicePreviewModal: React.FC<InvoicePreviewModalProps> = ({
   const handlePrint = () => {
     if (!printIframeRef.current) return;
     const iframeWindow = printIframeRef.current.contentWindow;
-    if (iframeWindow) {
-      iframeWindow.focus();
-      iframeWindow.print();
+    const iframeDoc = printIframeRef.current.contentDocument;
+    if (!iframeWindow) return;
+
+    if (iframeDoc && iframeDoc.images) {
+      const images = Array.from(iframeDoc.images);
+      const uncompleted = images.filter(img => !img.complete);
+      if (uncompleted.length > 0) {
+        let loadedCount = 0;
+        uncompleted.forEach(img => {
+          img.onload = img.onerror = () => {
+            loadedCount++;
+            if (loadedCount === uncompleted.length) {
+              iframeWindow.focus();
+              iframeWindow.print();
+            }
+          };
+        });
+        setTimeout(() => {
+          iframeWindow.focus();
+          iframeWindow.print();
+        }, 500);
+        return;
+      }
     }
+
+    iframeWindow.focus();
+    iframeWindow.print();
   };
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 15, 175));

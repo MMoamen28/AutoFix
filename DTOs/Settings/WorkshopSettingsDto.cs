@@ -23,6 +23,7 @@ namespace AutoFix.DTOs.Settings
         public string PinHash { get; set; } = "";
         public int PinRememberDays { get; set; } = 30;
         public bool AllowNetworkAccess { get; set; } = false;
+        public string DigitMode { get; set; } = "western";
         public List<ConnectedDeviceDto> ConnectedDevices { get; set; } = new();
     }
 }

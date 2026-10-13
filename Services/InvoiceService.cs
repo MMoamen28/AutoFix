@@ -5,6 +5,7 @@ using AutoFix.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -577,9 +578,8 @@ namespace AutoFix.Services
             var invoice = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) throw new KeyNotFoundException($"Invoice {id} not found.");
 
-            // Extract items lines and workmanship
+            // Extract all item lines (parts, labor, workmanship, manual lines) into a unified itemsList
             var itemsList = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
-            decimal workmanshipTotal = 0;
 
             if (!string.IsNullOrEmpty(invoice.SnapshotDetailsJson) && invoice.SnapshotDetailsJson != "[]")
             {
@@ -589,41 +589,26 @@ namespace AutoFix.Services
                     foreach (var el in doc.RootElement.EnumerateArray())
                     {
                         var desc = el.TryGetProperty("Description", out var d) ? d.GetString() ?? "" : "";
-                        var lineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() ?? "" : "";
                         var qty = el.TryGetProperty("Quantity", out var q) ? q.GetDecimal() : 1m;
                         var price = el.TryGetProperty("UnitPrice", out var p) ? p.GetDecimal() : 0m;
                         var sub = el.TryGetProperty("Subtotal", out var s) ? s.GetDecimal() : (qty * price);
-
-                        if (lineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase) ||
-                            lineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
-                        {
-                            workmanshipTotal += sub;
-                        }
-                        else
-                        {
-                            itemsList.Add((desc, qty, price, sub));
-                        }
+                        itemsList.Add((desc, qty, price, sub));
                     }
                 }
                 catch { }
             }
             else if (invoice.WorkOrder != null)
             {
-                workmanshipTotal = invoice.WorkOrder.TotalWorkmanship > 0 ? invoice.WorkOrder.TotalWorkmanship : invoice.WorkOrder.TotalLabor;
                 foreach (var line in invoice.WorkOrder.Lines.Where(l => !l.IsDeleted))
                 {
-                    if (!line.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase) &&
-                        !line.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
-                    {
-                        itemsList.Add((line.Description, line.Quantity, line.UnitPrice, line.Quantity * line.UnitPrice));
-                    }
+                    itemsList.Add((line.Description, line.Quantity, line.UnitPrice, line.Quantity * line.UnitPrice));
                 }
             }
 
-            // Fallback: If no snapshot and subtotal > 0
-            if (itemsList.Count == 0 && workmanshipTotal == 0)
+            // Fallback: If no snapshot lines and subtotal > 0
+            if (itemsList.Count == 0 && invoice.Subtotal > 0)
             {
-                workmanshipTotal = invoice.Subtotal;
+                itemsList.Add(("خدمات صيانة وإصلاح", 1m, invoice.Subtotal, invoice.Subtotal));
             }
 
             var settings = _settingsService != null ? await _settingsService.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();
@@ -631,6 +616,8 @@ namespace AutoFix.Services
             var docTitle = (invoice.WorkOrder?.WorkType == "Inspection")
                 ? "فحص سيارة شامل"
                 : "فاتورة صيانة";
+
+            var effectiveNotes = !string.IsNullOrWhiteSpace(invoice.WorkOrder?.Notes) ? invoice.WorkOrder.Notes : invoice.Notes;
 
             return BuildWordTemplateHtml(
                 invoice.InvoiceNumber,
@@ -642,10 +629,7 @@ namespace AutoFix.Services
                 invoice.Customer?.Phone,
                 invoice.WorkOrder?.OdometerInKm,
                 itemsList,
-                workmanshipTotal,
-                invoice.WorkOrder?.WorkDone,
-                invoice.WorkOrder?.WorkToBeDone,
-                !string.IsNullOrWhiteSpace(invoice.WorkOrder?.Notes) ? invoice.WorkOrder.Notes : invoice.Notes,
+                effectiveNotes,
                 invoice.Subtotal,
                 invoice.DiscountAmount,
                 invoice.VatPercentage,
@@ -656,7 +640,8 @@ namespace AutoFix.Services
                 docTitle,
                 isCustomer,
                 settings.ShowVat,
-                settings.PrintNotesOnInvoice);
+                settings.PrintNotesOnInvoice,
+                settings.DigitMode);
         }
 
         public async Task<string> GenerateWordTemplateInvoiceHtmlForWorkOrderAsync(int workOrderId, bool isCustomer = false)
@@ -676,19 +661,19 @@ namespace AutoFix.Services
 
             if (workOrder == null) throw new KeyNotFoundException($"WorkOrder {workOrderId} not found.");
 
+            // Extract all item lines into a unified itemsList
             var itemsList = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
-            decimal workmanshipTotal = workOrder.TotalWorkmanship > 0 ? workOrder.TotalWorkmanship : workOrder.TotalLabor;
-
             foreach (var line in workOrder.Lines.Where(l => !l.IsDeleted))
             {
-                if (!line.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase) &&
-                    !line.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
-                {
-                    itemsList.Add((line.Description, line.Quantity, line.UnitPrice, line.Quantity * line.UnitPrice));
-                }
+                itemsList.Add((line.Description, line.Quantity, line.UnitPrice, line.Quantity * line.UnitPrice));
             }
 
-            var subtotal = itemsList.Sum(i => i.Subtotal) + workmanshipTotal;
+            if (itemsList.Count == 0 && workOrder.TotalAmount > 0)
+            {
+                itemsList.Add(("خدمات صيانة وإصلاح", 1m, workOrder.TotalAmount, workOrder.TotalAmount));
+            }
+
+            var subtotal = itemsList.Sum(i => i.Subtotal);
             var settings = _settingsService != null ? await _settingsService.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();
 
             var vatPercentage = settings.ShowVat ? 14m : 0m;
@@ -710,9 +695,6 @@ namespace AutoFix.Services
                 workOrder.Customer?.Phone,
                 workOrder.OdometerInKm,
                 itemsList,
-                workmanshipTotal,
-                workOrder.WorkDone,
-                workOrder.WorkToBeDone,
                 workOrder.Notes,
                 subtotal,
                 0m,
@@ -724,7 +706,8 @@ namespace AutoFix.Services
                 docTitle,
                 isCustomer,
                 settings.ShowVat,
-                settings.PrintNotesOnInvoice);
+                settings.PrintNotesOnInvoice,
+                settings.DigitMode);
         }
 
         private string BuildWordTemplateHtml(
@@ -737,9 +720,6 @@ namespace AutoFix.Services
             string? customerPhone,
             int? odometerInKm,
             List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)> itemsList,
-            decimal workmanshipTotal,
-            string? workDoneText,
-            string? workToBeDoneText,
             string? notesText,
             decimal subtotal,
             decimal discountAmount,
@@ -751,12 +731,37 @@ namespace AutoFix.Services
             string docTitle,
             bool isCustomer = false,
             bool showVat = false,
-            bool printNotes = false)
+            bool printNotes = false,
+            string? digitMode = null)
         {
             var logoBase64 = GetLogoBase64();
             var watermarkBase64 = GetWatermarkBase64();
 
-            // Client & Car values (never hardcode sample values like 0.00 or 23/07/2026)
+            string FormatDigits(string input)
+            {
+                if (string.IsNullOrEmpty(input)) return input;
+                if (digitMode != "arabic-indic") return input;
+                char[] arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+                var sb = new StringBuilder(input.Length);
+                foreach (var ch in input)
+                {
+                    if (ch >= '0' && ch <= '9')
+                        sb.Append(arabicDigits[ch - '0']);
+                    else
+                        sb.Append(ch);
+                }
+                return sb.ToString();
+            }
+
+            string FmtMoney(decimal amount)
+            {
+                var isNeg = amount < 0;
+                var absStr = Math.Abs(amount).ToString("N2", CultureInfo.InvariantCulture);
+                var formatted = FormatDigits(absStr);
+                return $"{(isNeg ? "-" : "")}{formatted} ج.م";
+            }
+
+            // Client & Car values
             string Val(string? v) => string.IsNullOrWhiteSpace(v) ? "______" : WebUtility.HtmlEncode(v.Trim());
 
             var carType = Val(carMake);
@@ -767,11 +772,11 @@ namespace AutoFix.Services
             var clientName = Val(customerName);
             var clientPhone = Val(customerPhone);
             var kmVal = odometerInKm.HasValue && odometerInKm.Value > 0
-                ? odometerInKm.Value.ToString("N0")
+                ? FormatDigits(odometerInKm.Value.ToString("N0", CultureInfo.InvariantCulture))
                 : "______";
 
             // Cairo system date dd/MM/yyyy
-            var cairoDate = issuedAt.AddHours(2).ToString("dd/MM/yyyy");
+            var cairoDate = FormatDigits(issuedAt.AddHours(2).ToString("dd/MM/yyyy"));
 
             // Dynamic items rows (1 item = 1 row, 3 items = 3 rows, no empty placeholder rows)
             var rowsBuilder = new StringBuilder();
@@ -780,11 +785,11 @@ namespace AutoFix.Services
                 var item = itemsList[idx];
                 rowsBuilder.Append($@"
                 <tr>
-                    <td style='text-align: center; font-weight: bold;'>{idx + 1}</td>
+                    <td style='text-align: center; font-weight: bold;'>{FormatDigits((idx + 1).ToString())}</td>
                     <td dir='auto' style='text-align: start; padding-inline: 8px;'>{WebUtility.HtmlEncode(item.Desc)}</td>
-                    <td dir='ltr' style='text-align: center;'>{item.Qty:0.##}</td>
-                    <td dir='ltr' style='text-align: right; padding-inline: 8px;'>{item.Price:N2}</td>
-                    <td dir='ltr' style='text-align: right; padding-inline: 8px;'>{item.Subtotal:N2}</td>
+                    <td dir='ltr' style='text-align: center;'>{FormatDigits(item.Qty.ToString("0.##", CultureInfo.InvariantCulture))}</td>
+                    <td dir='ltr' style='text-align: right; padding-inline: 8px;'>{FormatDigits(item.Price.ToString("N2", CultureInfo.InvariantCulture))}</td>
+                    <td dir='ltr' style='text-align: right; padding-inline: 8px;'>{FormatDigits(item.Subtotal.ToString("N2", CultureInfo.InvariantCulture))}</td>
                 </tr>");
             }
 
@@ -792,14 +797,12 @@ namespace AutoFix.Services
             {
                 rowsBuilder.Append(@"
                 <tr>
-                    <td colspan='5' style='text-align: center; color: #64748b; padding: 12px;'>لا توجد بنود قطع غيار مضافة / No spare parts items</td>
+                    <td colspan='5' style='text-align: center; color: #64748b; padding: 12px;'>لا توجد بنود مضافة / No items added</td>
                 </tr>");
             }
 
-            // Notes areas
-            var workDone = Val(workDoneText);
-            var workToBeDone = Val(workToBeDoneText);
-            var generalNotes = Val(notesText);
+            var hasNotes = !string.IsNullOrWhiteSpace(notesText);
+            var showNotesBlock = hasNotes || printNotes;
 
             var html = $@"<!DOCTYPE html>
 <html lang='ar' dir='rtl'>
@@ -839,9 +842,12 @@ namespace AutoFix.Services
                 left: 50% !important;
                 transform: translate(-50%, -50%) !important;
                 width: 440px !important;
-                opacity: 0.08 !important;
+                max-width: 80% !important;
+                opacity: 0.10 !important;
                 z-index: 0 !important;
                 pointer-events: none !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }}
             .table-container table {{
                 page-break-inside: auto;
@@ -852,6 +858,9 @@ namespace AutoFix.Services
             }}
             thead {{
                 display: table-header-group;
+            }}
+            .items-table, .items-table td, .info-card, .totals-card, .notes-section {{
+                background: transparent !important;
             }}
             .footer-page-num:after {{
                 content: counter(page);
@@ -872,16 +881,19 @@ namespace AutoFix.Services
             background: #ffffff;
             position: relative;
         }}
-        /* Faded Watermark */
+        /* Watermark visible behind table text, repeated across pages */
         .page-watermark {{
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             width: 440px;
-            opacity: 0.08;
+            max-width: 80%;
+            opacity: 0.10;
             z-index: 0;
             pointer-events: none;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }}
         .content-wrap {{
             position: relative;
@@ -941,11 +953,11 @@ namespace AutoFix.Services
             font-size: 15px;
             font-weight: 800;
             color: #000000;
-            background: #ffffff;
+            background: rgba(255, 255, 255, 0.85);
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }}
 
-        /* Two Header Boxes */
+        /* Two Header Boxes (semi-transparent to reveal watermark behind text) */
         .header-boxes-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -956,11 +968,11 @@ namespace AutoFix.Services
             border: 2px solid #000000;
             border-radius: 8px;
             overflow: hidden;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.65);
         }}
         .info-card-header {{
             border-bottom: 2px solid #000000;
-            background: #ffffff;
+            background: rgba(241, 245, 249, 0.85);
             font-weight: 800;
             font-size: 13.5px;
             text-align: center;
@@ -976,6 +988,7 @@ namespace AutoFix.Services
             font-size: 12.5px;
             vertical-align: middle;
             border: none;
+            background: transparent;
         }}
         .label-en {{
             text-align: left;
@@ -996,7 +1009,7 @@ namespace AutoFix.Services
             width: 25%;
         }}
 
-        /* Dynamic Items Table */
+        /* Dynamic Items Table (transparent body so watermark shines behind text) */
         .table-container {{
             margin-top: 10px;
             margin-bottom: 12px;
@@ -1005,10 +1018,10 @@ namespace AutoFix.Services
             width: 100%;
             border-collapse: collapse;
             border: 1.5px solid #000000;
-            background: rgba(255, 255, 255, 0.95);
+            background: transparent;
         }}
         .items-table th {{
-            background: #f1f5f9;
+            background: rgba(241, 245, 249, 0.85);
             border: 1.5px solid #000000;
             padding: 6px 8px;
             font-size: 12.5px;
@@ -1021,109 +1034,86 @@ namespace AutoFix.Services
             padding: 5px 6px;
             font-size: 12px;
             color: #0f172a;
+            background: transparent;
         }}
 
-        /* Fixed Workmanship Box */
-        .workmanship-box {{
-            border: 1.5px solid #000000;
-            border-radius: 6px;
-            padding: 8px 14px;
-            background: #f8fafc;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-            font-weight: 800;
-            font-size: 13.5px;
-        }}
-        .workmanship-amount {{
-            font-size: 14px;
-            color: #1e3a8a;
+        /* Final Total & Notes Grid */
+        .bottom-section {{
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 16px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            align-items: start;
         }}
 
-        /* Notes Section */
+        /* Notes Box */
         .notes-section {{
             border: 1.5px solid #000000;
             border-radius: 6px;
             padding: 10px 14px;
-            margin-bottom: 14px;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.65);
+            min-height: 90px;
         }}
-        .note-row {{
-            margin-bottom: 8px;
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            font-size: 12.5px;
-        }}
-        .note-row:last-child {{
-            margin-bottom: 0;
-        }}
-        .note-title {{
+        .notes-header {{
             font-weight: 800;
-            white-space: nowrap;
-            color: #000000;
-            min-width: 170px;
+            font-size: 13px;
+            color: #0f172a;
+            margin-bottom: 6px;
+            border-bottom: 1px dashed #cbd5e1;
+            padding-bottom: 4px;
         }}
-        .note-val {{
-            flex: 1;
-            word-break: break-word;
+        .notes-body {{
+            font-size: 12.5px;
             color: #1e293b;
+            word-break: break-word;
+            white-space: pre-wrap;
+            line-height: 1.6;
         }}
 
-        /* Totals Area */
-        .totals-section {{
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 10px;
-            margin-bottom: 20px;
-        }}
+        /* Final Total Box under items table */
         .totals-card {{
-            border: 1.5px solid #000000;
+            border: 2px solid #000000;
             border-radius: 6px;
-            min-width: 310px;
             padding: 10px 14px;
-            background: #f8fafc;
+            background: rgba(248, 250, 252, 0.75);
         }}
         .total-row {{
             display: flex;
             justify-content: space-between;
+            align-items: center;
             padding: 3px 0;
             font-size: 12.5px;
         }}
         .grand-total {{
             border-top: 2px solid #000000;
-            margin-top: 6px;
-            padding-top: 6px;
+            border-bottom: 2px solid #000000;
+            margin: 6px 0;
+            padding: 6px 0;
             font-size: 15px;
             font-weight: 800;
             color: #1e3a8a;
         }}
-
-        /* Footer & Signatures */
-        .signatures-grid {{
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 20px;
-            margin-top: 35px;
-            text-align: center;
-        }}
-        .sig-col {{
-            border-top: 1px solid #000000;
-            padding-top: 6px;
-            font-size: 12px;
-            font-weight: 700;
-        }}
     </style>
+    <script>
+        function triggerPrint() {{
+            const watermark = document.getElementById('invoice-watermark');
+            if (watermark && !watermark.complete) {{
+                watermark.onload = () => window.print();
+            }} else {{
+                window.print();
+            }}
+        }}
+    </script>
 </head>
 <body>
-    {(!string.IsNullOrEmpty(watermarkBase64) ? $"<img src='{watermarkBase64}' class='page-watermark' alt='Watermark' />" : "")}
+    {(!string.IsNullOrEmpty(watermarkBase64) ? $"<img id='invoice-watermark' src='{watermarkBase64}' class='page-watermark' alt='Watermark' />" : "")}
 
     <div class='content-wrap'>
         <!-- Action Bar (Hidden in Print) -->
         <div class='actions-bar no-print'>
-            <button class='btn btn-print' onclick='window.print()'>طباعة الفاتورة / Print</button>
-            <button class='btn btn-download' onclick='window.print()'>تحميل PDF / Download PDF</button>
+            <button class='btn btn-print' onclick='triggerPrint()'>طباعة الفاتورة / Print</button>
+            <button class='btn btn-download' onclick='triggerPrint()'>تحميل PDF / Download PDF</button>
         </div>
 
         <!-- Top Header: Logo Left & Title Badge Center -->
@@ -1202,10 +1192,10 @@ namespace AutoFix.Services
                 <thead>
                     <tr>
                         <th style='width: 35px;'>#</th>
-                        <th>SpareParts/Operation / قطع غيار</th>
-                        <th style='width: 80px;'>Qty / الكمية</th>
-                        <th style='width: 110px;'>Price / السعر</th>
-                        <th style='width: 120px;'>Total / الإجمالي</th>
+                        <th>البيان / الخدمة / قطع الغيار (Description / Operation)</th>
+                        <th style='width: 80px;'>الكمية (Qty)</th>
+                        <th style='width: 110px;'>السعر (Price)</th>
+                        <th style='width: 120px;'>الإجمالي (Total)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1214,71 +1204,49 @@ namespace AutoFix.Services
             </table>
         </div>
 
-        <!-- Part 3: Fixed Workmanship Box -->
-        <div class='workmanship-box'>
-            <span>مصنعية / Workmanship:</span>
-            <span class='workmanship-amount'><span dir='ltr'>{workmanshipTotal:N2}</span> ج.م</span>
-        </div>
+        <!-- Part 3: Bottom Section (Notes Box & Final Total Box) -->
+        <div class='bottom-section'>
+            {(showNotesBlock ? $@"
+            <div class='notes-section'>
+                <div class='notes-header'>ملاحظات / Notes</div>
+                <div class='notes-body'>{(hasNotes ? WebUtility.HtmlEncode(notesText) : "<span style='display:inline-block; width:100%; border-bottom:1px solid #94a3b8; height:20px;'></span>")}</div>
+            </div>" : "<div class='notes-section' style='visibility:hidden;'></div>")}
 
-        {(printNotes ? $@"
-        <!-- Part 4: Notes (Work done, Work to be done, Notes) -->
-        <div class='notes-section'>
-            <div class='note-row'>
-                <span class='note-title'>ما تم تنفيذه / Work done:</span>
-                <span class='note-val' dir='auto'>{workDone}</span>
-            </div>
-            <div class='note-row'>
-                <span class='note-title'>ما سيتم تنفيذه / Work to be done:</span>
-                <span class='note-val' dir='auto'>{workToBeDone}</span>
-            </div>
-            <div class='note-row'>
-                <span class='note-title'>ملاحظات / Notes:</span>
-                <span class='note-val' dir='auto'>{generalNotes}</span>
-            </div>
-        </div>" : "")}
-
-        <!-- Part 5: Totals Section -->
-        <div class='totals-section'>
+            <!-- Final Total Box: الإجمالي النهائي -->
             <div class='totals-card'>
                 <div class='total-row'>
-                    <span>المجموع الفرعي (Subtotal):</span>
-                    <span><span dir='ltr'>{subtotal:N2}</span> ج.م</span>
+                    <span>المجموع الفرعي:</span>
+                    <span dir='ltr'>{FmtMoney(subtotal)}</span>
                 </div>
                 {(discountAmount > 0 ? $@"
                 <div class='total-row' style='color: #dc2626;'>
-                    <span>الخصم (Discount):</span>
-                    <span>-<span dir='ltr'>{discountAmount:N2}</span> ج.م</span>
+                    <span>الخصم:</span>
+                    <span dir='ltr'>-{FmtMoney(discountAmount)}</span>
                 </div>" : "")}
                 {(showVat ? $@"
                 {(discountAmount > 0 ? $@"
                 <div class='total-row'>
-                    <span>الوعاء الخاضع للضريبة (Taxable Base):</span>
-                    <span><span dir='ltr'>{Math.Max(0, subtotal - discountAmount):N2}</span> ج.م</span>
+                    <span>الوعاء الخاضع للضريبة:</span>
+                    <span dir='ltr'>{FmtMoney(Math.Max(0, subtotal - discountAmount))}</span>
                 </div>" : "")}
                 <div class='total-row'>
-                    <span>ضريبة القيمة المضافة ({vatPercentage}%):</span>
-                    <span><span dir='ltr'>{vatAmount:N2}</span> ج.م</span>
+                    <span>ضريبة القيمة المضافة ({FormatDigits(vatPercentage.ToString())}%):</span>
+                    <span dir='ltr'>{FmtMoney(vatAmount)}</span>
                 </div>" : "")}
                 <div class='total-row grand-total'>
-                    <span>الإجمالي النهائي (Total):</span>
-                    <span><span dir='ltr'>{totalAmount:N2}</span> ج.م</span>
+                    <span>الإجمالي النهائي:</span>
+                    <span dir='ltr'>{FmtMoney(totalAmount)}</span>
                 </div>
+                {(paidAmount > 0 || remainingAmount < totalAmount ? $@"
                 <div class='total-row' style='color: #059669; font-weight: 700; margin-top: 4px;'>
-                    <span>المدفوع (Paid):</span>
-                    <span><span dir='ltr'>{paidAmount:N2}</span> ج.م</span>
+                    <span>المدفوع:</span>
+                    <span dir='ltr'>{FmtMoney(paidAmount)}</span>
                 </div>
                 <div class='total-row' style='font-weight: 800; color: {(remainingAmount > 0 ? "#dc2626" : "#059669")};'>
-                    <span>المتبقي (Remaining):</span>
-                    <span><span dir='ltr'>{remainingAmount:N2}</span> ج.م</span>
-                </div>
+                    <span>المتبقي:</span>
+                    <span dir='ltr'>{FmtMoney(remainingAmount)}</span>
+                </div>" : "")}
             </div>
-        </div>
-
-        <!-- Signatures -->
-        <div class='signatures-grid'>
-            <div class='sig-col'>المحاسب المسؤول / Accountant</div>
-            <div class='sig-col'>إدارة المركز / Management Stamp</div>
-            <div class='sig-col'>استلام العميل / Customer Receipt</div>
         </div>
     </div>
 </body>

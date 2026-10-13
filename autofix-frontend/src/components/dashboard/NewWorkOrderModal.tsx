@@ -40,10 +40,6 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
   const [customerComplaint, setCustomerComplaint] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Workmanship / Lines
-  const [initialLaborPrice, setInitialLaborPrice] = useState<number>(300);
-  const [initialLaborDesc, setInitialLaborDesc] = useState<string>('فحص وصيانة ميكانيكية');
-
   // Warnings & State
   const [warningMessage, setWarningMessage] = useState<string>('');
   const [warningConfirmed, setWarningConfirmed] = useState(false);
@@ -128,15 +124,7 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
       assignedTechnicianId: Number(assignedTechnicianId) || null,
       customerComplaint: customerComplaint.trim(),
       notes: notes.trim(),
-      lines: [
-        {
-          lineType: 'LaborMechanical',
-          description: initialLaborDesc.trim() || 'فحص وصيانة',
-          quantity: 1,
-          unitPrice: Number(initialLaborPrice) || 0,
-          unitCost: 0
-        }
-      ],
+      lines: [],
       confirmDuplicatePhone: warningConfirmed,
       confirmDuplicatePlate: warningConfirmed,
       confirmLowerOdometer: warningConfirmed
@@ -381,26 +369,7 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
-            <div>
-              <label style={labelStyle}>بند المصنعية الأولي</label>
-              <input
-                type="text"
-                value={initialLaborDesc}
-                onChange={e => setInitialLaborDesc(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>سعر المصنعية (ج.م)</label>
-              <input
-                type="number"
-                value={initialLaborPrice}
-                onChange={e => setInitialLaborPrice(Number(e.target.value))}
-                style={inputStyle}
-              />
-            </div>
-          </div>
+
         </div>
 
         {/* Warning Alert */}

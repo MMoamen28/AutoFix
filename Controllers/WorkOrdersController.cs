@@ -130,6 +130,31 @@ namespace AutoFix.Controllers
             }
         }
 
+        public class UpdateNotesRequestDto
+        {
+            public string? Notes { get; set; }
+        }
+
+        [HttpPatch("{id:int}/notes")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception,Mechanic")]
+        public async Task<ActionResult<WorkOrderResponseDto>> UpdateNotes(int id, [FromBody] UpdateNotesRequestDto dto)
+        {
+            try
+            {
+                var userName = User.Identity?.Name ?? "Staff";
+                var updated = await _service.UpdateNotesAsync(id, dto?.Notes ?? string.Empty, userName);
+                return Ok(updated);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpPost("{id:int}/lines")]
         [Authorize(Roles = "Admin,Owner,Receptionist,Reception")]
         public async Task<ActionResult<WorkOrderResponseDto>> AddLine(int id, [FromBody] CreateWorkOrderLineDto lineDto)

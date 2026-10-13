@@ -918,10 +918,15 @@ namespace AutoFix.Services
                 return MapInvoiceToDto(existingInvoice);
             }
 
-            // Allowed to invoice from Completed or Delivered
+            // Allowed to invoice from Completed, Delivered, or Active (Pending / InProgress)
+            if (workOrder.Status == "Cancelled")
+            {
+                throw new InvalidOperationException($"Cannot convert cancelled WorkOrder {workOrder.OrderNumber} to Invoice.");
+            }
             if (workOrder.Status != "Completed" && workOrder.Status != "Delivered")
             {
-                throw new InvalidOperationException($"WorkOrder must be in 'Completed' or 'Delivered' status to convert to Invoice. Current status: '{workOrder.Status}'.");
+                workOrder.Status = "Completed";
+                workOrder.CompletedAt = DateTime.UtcNow;
             }
 
             var nextInvNum = await InvoiceService.GenerateUniqueInvoiceNumberStaticAsync(_db);
@@ -949,6 +954,10 @@ namespace AutoFix.Services
             var vatAmount = settings.ShowVat ? Math.Round(taxable * (vatPercentage / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
             var totalAmount = taxable + vatAmount;
 
+            var invoiceNotes = !string.IsNullOrWhiteSpace(options?.Notes)
+                ? options.Notes
+                : (!string.IsNullOrWhiteSpace(workOrder.Notes) ? workOrder.Notes : $"Generated from WorkOrder {workOrder.OrderNumber}");
+
             var invoice = new Invoice
             {
                 InvoiceNumber = nextInvNum,
@@ -965,7 +974,7 @@ namespace AutoFix.Services
                 Status = "Issued",
                 Currency = options?.Currency ?? "EGP",
                 IssuedAt = DateTime.UtcNow,
-                Notes = options?.Notes ?? $"Generated from WorkOrder {workOrder.OrderNumber}",
+                Notes = invoiceNotes,
                 SnapshotDetailsJson = JsonSerializer.Serialize(snapshotItems)
             };
 
@@ -1619,6 +1628,32 @@ namespace AutoFix.Services
             _db.WorkOrders.Remove(workOrder);
             await _db.SaveChangesAsync();
             return true;
+        }
+
+        public async Task<WorkOrderResponseDto> UpdateNotesAsync(int id, string notes, string? user = null)
+        {
+            var workOrder = await _db.WorkOrders
+                .Include(w => w.Lines)
+                .Include(w => w.Customer)
+                .Include(w => w.Car)
+                .FirstOrDefaultAsync(w => w.Id == id);
+
+            if (workOrder == null) throw new KeyNotFoundException($"WorkOrder {id} not found.");
+
+            if (workOrder.Status == "Invoiced" || workOrder.Status == "Delivered")
+            {
+                throw new InvalidOperationException($"Cannot modify notes on WorkOrder {workOrder.OrderNumber} in status '{workOrder.Status}'.");
+            }
+
+            workOrder.Notes = notes?.Trim() ?? string.Empty;
+            await _db.SaveChangesAsync();
+
+            if (_realtime != null)
+            {
+                await _realtime.NotifyAsync("workorder-updated", new { OrderId = workOrder.Id, UpdatedByDevice = user, OrderNumber = workOrder.OrderNumber });
+            }
+
+            return (await GetByIdAsync(workOrder.Id))!;
         }
     }
 }

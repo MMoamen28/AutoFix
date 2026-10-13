@@ -25,5 +25,6 @@ namespace AutoFix.Services.Interfaces
         Task<string> GeneratePrintedOrderHtmlAsync(int id);
         Task<WorkOrderResponseDto> CreateBundleAsync(CreateWorkOrderBundleDto dto, string? user = null);
         Task<List<CarServiceHistoryDto>> GetCarServiceHistoryAsync(int carId, bool isCustomer = false);
+        Task<WorkOrderResponseDto> UpdateNotesAsync(int id, string notes, string? user = null);
     }
 }
