@@ -66,6 +66,34 @@ namespace AutoFix.DTOs.Invoice
 
         public string SnapshotDetailsJson { get; set; } = "[]";
         public List<PaymentResponseDto> Payments { get; set; } = new();
+        public List<InvoiceIdHistoryResponseDto> IdHistories { get; set; } = new();
+    }
+
+    public class UpdateInvoiceNumberDto
+    {
+        [Required(ErrorMessage = "New invoice ID is required.")]
+        public string NewInvoiceNumber { get; set; } = string.Empty;
+
+        public string? Reason { get; set; }
+    }
+
+    public class UpdateInvoiceDateDto
+    {
+        [Required(ErrorMessage = "New issue date is required.")]
+        public DateTime NewIssuedAt { get; set; }
+
+        public string? Reason { get; set; }
+    }
+
+    public class InvoiceIdHistoryResponseDto
+    {
+        public int Id { get; set; }
+        public int InvoiceId { get; set; }
+        public string OldInvoiceNumber { get; set; } = string.Empty;
+        public string NewInvoiceNumber { get; set; } = string.Empty;
+        public string ChangedBy { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime ChangedAt { get; set; }
     }
 
     public class PaymentResponseDto
@@ -120,4 +148,5 @@ namespace AutoFix.DTOs.Invoice
         public string Notes { get; set; } = string.Empty;
     }
 }
+
 

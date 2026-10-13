@@ -58,17 +58,117 @@ namespace AutoFix.Controllers
             return Ok(invoice);
         }
 
-        [HttpGet("{id:int}/print")]
-        public async Task<IActionResult> Print(int id)
+        [HttpGet("by-number/{invoiceNumber}")]
+        public async Task<ActionResult<InvoiceResponseDto>> GetByNumber(string invoiceNumber)
+        {
+            var isCustomer = User.IsInRole("Customer");
+            var invoice = await _service.GetByInvoiceNumberAsync(invoiceNumber, isCustomer);
+            if (invoice == null) return NotFound();
+
+            if (isCustomer)
+            {
+                var userCustId = User.FindFirst("customer_id")?.Value;
+                if (int.TryParse(userCustId, out var cid) && invoice.CustomerId != cid)
+                {
+                    return Forbid();
+                }
+            }
+
+            return Ok(invoice);
+        }
+
+        [HttpGet("{id:int}/preview")]
+        public async Task<IActionResult> Preview(int id)
         {
             try
             {
-                var html = await _service.GeneratePrintedInvoiceHtmlAsync(id);
+                var isCustomer = User.IsInRole("Customer");
+                var html = await _service.GenerateWordTemplateInvoiceHtmlAsync(id, isCustomer);
                 return Content(html, "text/html; charset=utf-8");
             }
             catch (KeyNotFoundException)
             {
                 return NotFound();
+            }
+        }
+
+        [HttpGet("{id:int}/print")]
+        public async Task<IActionResult> Print(int id)
+        {
+            try
+            {
+                var isCustomer = User.IsInRole("Customer");
+                var html = await _service.GenerateWordTemplateInvoiceHtmlAsync(id, isCustomer);
+                return Content(html, "text/html; charset=utf-8");
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
+
+        [HttpGet("by-work-order/{workOrderId:int}/preview")]
+        public async Task<IActionResult> PreviewByWorkOrder(int workOrderId)
+        {
+            try
+            {
+                var isCustomer = User.IsInRole("Customer");
+                var html = await _service.GenerateWordTemplateInvoiceHtmlForWorkOrderAsync(workOrderId, isCustomer);
+                return Content(html, "text/html; charset=utf-8");
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
+
+        [HttpPut("{id:int}/number")]
+        [Authorize(Roles = "Admin,Owner")]
+        public async Task<ActionResult<InvoiceResponseDto>> UpdateInvoiceNumber(int id, [FromBody] UpdateInvoiceNumberDto dto)
+        {
+            try
+            {
+                var userName = User.Identity?.Name ?? "Admin";
+                var isAdmin = User.IsInRole("Admin") || User.IsInRole("Owner");
+                var result = await _service.UpdateInvoiceNumberAsync(id, dto, userName, isAdmin);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("{id:int}/date")]
+        [Authorize(Roles = "Admin,Owner")]
+        public async Task<ActionResult<InvoiceResponseDto>> UpdateInvoiceDate(int id, [FromBody] UpdateInvoiceDateDto dto)
+        {
+            try
+            {
+                var userName = User.Identity?.Name ?? "Admin";
+                var isAdmin = User.IsInRole("Admin") || User.IsInRole("Owner");
+                var result = await _service.UpdateInvoiceDateAsync(id, dto, userName, isAdmin);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
 

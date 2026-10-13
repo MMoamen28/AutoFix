@@ -23,6 +23,12 @@ namespace AutoFix.DTOs.WorkOrder
         public string? InspectionNotes { get; set; }
         public DateTime? ExpectedDeliveryAt { get; set; }
 
+        // Work type and template notes
+        public string WorkType { get; set; } = "Maintenance"; // Maintenance, Inspection
+        public string? WorkDone { get; set; }
+        public string? WorkToBeDone { get; set; }
+        public string? Notes { get; set; }
+
         public List<CreateWorkOrderLineDto> Lines { get; set; } = new();
     }
 
@@ -69,6 +75,10 @@ namespace AutoFix.DTOs.WorkOrder
         public string FuelLevel { get; set; } = "Quarter";
         public string CustomerComplaint { get; set; } = string.Empty;
         public string? InspectionNotes { get; set; }
+        public string? WorkType { get; set; }
+        public string? WorkDone { get; set; }
+        public string? WorkToBeDone { get; set; }
+        public string? Notes { get; set; }
         public DateTime? ExpectedDeliveryAt { get; set; }
         public List<CreateWorkOrderLineDto> Lines { get; set; } = new();
     }
@@ -136,6 +146,11 @@ namespace AutoFix.DTOs.WorkOrder
         public string CustomerComplaint { get; set; } = string.Empty;
         public string InspectionNotes { get; set; } = string.Empty;
         public string Status { get; set; } = "Pending";
+
+        public string WorkType { get; set; } = "Maintenance";
+        public string WorkDone { get; set; } = string.Empty;
+        public string WorkToBeDone { get; set; } = string.Empty;
+        public string Notes { get; set; } = string.Empty;
 
         public decimal TotalLabor { get; set; }
         public decimal TotalParts { get; set; }

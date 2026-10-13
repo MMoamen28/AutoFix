@@ -30,6 +30,12 @@ namespace AutoFix.Models
         public string CustomerComplaint { get; set; } = string.Empty;
         public string InspectionNotes { get; set; } = string.Empty;
         
+        // Work type: Maintenance (صيانة), Inspection (فحص سيارة)
+        public string WorkType { get; set; } = "Maintenance";
+        public string WorkDone { get; set; } = string.Empty; // ما تم تنفيذه
+        public string WorkToBeDone { get; set; } = string.Empty; // ما سيتم تنفيذه
+        public string Notes { get; set; } = string.Empty; // ملاحظات
+        
         // Status: Pending, InProgress, WaitingForParts, Completed, Delivered, Cancelled
         public string Status { get; set; } = "Pending";
         

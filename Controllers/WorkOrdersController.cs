@@ -348,6 +348,45 @@ namespace AutoFix.Controllers
             return 0;
         }
 
+        [HttpGet("{id:int}/inspection")]
+        public async Task<IActionResult> GetOrCreateInspection(int id)
+        {
+            var wo = await _db.WorkOrders.Include(w => w.Customer).Include(w => w.Car).FirstOrDefaultAsync(w => w.Id == id);
+            if (wo == null) return NotFound(new { message = $"Work order {id} not found." });
+
+            var existing = await _db.CarInspections.FirstOrDefaultAsync(ci => ci.WorkOrderId == id && !ci.IsDeleted);
+            if (existing != null)
+            {
+                return Ok(new { inspectionId = existing.Id, reportNumber = existing.ReportNumber, status = existing.Status });
+            }
+
+            var count = await _db.CarInspections.CountAsync() + 1;
+            var reportNum = $"INSP-{DateTime.UtcNow:yyyyMM}-{count:D4}";
+
+            var newInsp = new AutoFix.Models.CarInspection
+            {
+                ReportNumber = reportNum,
+                WorkOrderId = wo.Id,
+                CustomerId = wo.CustomerId,
+                CustomerName = wo.Customer?.FullName ?? string.Empty,
+                CustomerPhone = wo.Customer?.Phone ?? string.Empty,
+                CarId = wo.CarId,
+                CarPlate = wo.Car?.LicensePlate ?? string.Empty,
+                CarChassis = wo.Car?.VIN ?? string.Empty,
+                CarMake = wo.Car?.Make ?? string.Empty,
+                CarModel = wo.Car?.Model ?? string.Empty,
+                CarYear = wo.Car?.Year ?? DateTime.UtcNow.Year,
+                OdometerKm = wo.OdometerInKm,
+                Status = "Draft",
+                InspectedAt = DateTime.UtcNow
+            };
+
+            _db.CarInspections.Add(newInsp);
+            await _db.SaveChangesAsync();
+
+            return Ok(new { inspectionId = newInsp.Id, reportNumber = newInsp.ReportNumber, status = newInsp.Status });
+        }
+
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin,Owner")]
         public async Task<IActionResult> Delete(int id)

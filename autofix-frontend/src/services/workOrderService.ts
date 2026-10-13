@@ -60,6 +60,10 @@ export interface WorkOrder {
   customerComplaint: string;
   inspectionNotes: string;
   status: string;
+  workType?: string;
+  workDone?: string;
+  workToBeDone?: string;
+  notes?: string;
   totalLabor: number;
   totalParts: number;
   totalWorkmanship?: number;
@@ -85,6 +89,11 @@ export const workOrderService = {
 
   getById: async (id: number) => {
     const res = await api.get<WorkOrder>(`/WorkOrders/${id}`);
+    return res.data;
+  },
+
+  getOrCreateInspection: async (id: number) => {
+    const res = await api.get<{ inspectionId: number; reportNumber: string; status: string }>(`/WorkOrders/${id}/inspection`);
     return res.data;
   },
 

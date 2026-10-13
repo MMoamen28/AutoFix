@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   FileText, Search, Printer, Download, CreditCard, RotateCcw, 
-  Eye, CheckCircle2, AlertCircle, Clock, Ban, X, Plus, Filter, MessageCircle
+  Eye, CheckCircle2, AlertCircle, Clock, Ban, X, Plus, Filter, MessageCircle, Edit3
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import invoiceService, { Invoice, InvoiceLineSnapshot } from '../../services/invoiceService';
 import Money from '../../components/shared/Money';
 import { printInvoiceInPlace, downloadInvoiceDoc } from '../../utils/printHelper';
+import InvoicePreviewModal from '../../components/shared/InvoicePreviewModal';
+import EditInvoiceIdModal from '../../components/shared/EditInvoiceIdModal';
 
 const InvoicesPage: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -25,6 +27,8 @@ const InvoicesPage: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const [creditInvoice, setCreditInvoice] = useState<Invoice | null>(null);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<number | null>(null);
+  const [editIdInvoice, setEditIdInvoice] = useState<Invoice | null>(null);
 
   // Payment Form
   const [payAmount, setPayAmount] = useState<string>('');
@@ -168,12 +172,8 @@ const InvoicesPage: React.FC = () => {
     }
   };
 
-  const handlePrint = async (inv: Invoice) => {
-    try {
-      await printInvoiceInPlace(inv.id);
-    } catch (err) {
-      alert('Failed to load printable invoice.');
-    }
+  const handlePrint = (inv: Invoice) => {
+    setPreviewInvoiceId(inv.id);
   };
 
   const handleDownload = async (inv: Invoice) => {
@@ -419,14 +419,25 @@ const InvoicesPage: React.FC = () => {
                           <Eye size={15} />
                         </button>
 
-                        {/* In-place Print */}
+                        {/* In-place Preview / Print */}
                         <button
                           onClick={() => handlePrint(inv)}
-                          title={t('invoices.actions.print', 'Print Invoice (In-Place)')}
+                          title={t('invoices.actions.print', 'Preview & Print Invoice (A4)')}
                           style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'transparent', cursor: 'pointer', color: '#2563eb' }}
                         >
                           <Printer size={15} />
                         </button>
+
+                        {/* Edit Unique ID (Admin/Staff only) */}
+                        {!isCustomer && (
+                          <button
+                            onClick={() => setEditIdInvoice(inv)}
+                            title={t('invoices.actions.editId', 'Edit Invoice ID / تعديل رقم الفاتورة')}
+                            style={{ padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1', background: 'transparent', cursor: 'pointer', color: '#6366f1' }}
+                          >
+                            <Edit3 size={15} />
+                          </button>
+                        )}
 
                         {/* Download Document */}
                         <button
@@ -784,6 +795,30 @@ const InvoicesPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Invoice Preview Modal (A4 Word Template Layout) */}
+      <InvoicePreviewModal
+        isOpen={previewInvoiceId !== null}
+        onClose={() => setPreviewInvoiceId(null)}
+        invoiceId={previewInvoiceId || undefined}
+        title={t('invoices.previewTitle', 'Tax Invoice Preview (A4) / معاينة الفاتورة')}
+        onEdit={!isCustomer ? () => {
+          const inv = invoices.find(i => i.id === previewInvoiceId);
+          if (inv) {
+            setEditIdInvoice(inv);
+          }
+        } : undefined}
+      />
+
+      {/* Edit Unique Invoice ID Modal */}
+      <EditInvoiceIdModal
+        isOpen={editIdInvoice !== null}
+        onClose={() => setEditIdInvoice(null)}
+        invoice={editIdInvoice}
+        onSuccess={() => {
+          loadInvoices();
+        }}
+      />
     </div>
   );
 };

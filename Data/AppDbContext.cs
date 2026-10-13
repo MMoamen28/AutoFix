@@ -50,6 +50,7 @@ namespace AutoFix.Data
         public DbSet<CarOdometerLog> CarOdometerLogs => Set<CarOdometerLog>();
         public DbSet<WorkOrderMechanicHistory> WorkOrderMechanicHistories => Set<WorkOrderMechanicHistory>();
         public DbSet<FormDraft> FormDrafts => Set<FormDraft>();
+        public DbSet<InvoiceIdHistory> InvoiceIdHistories => Set<InvoiceIdHistory>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -196,6 +197,21 @@ namespace AutoFix.Data
             modelBuilder.Entity<FormDraft>()
                 .HasIndex(d => new { d.UserId, d.FormKey })
                 .IsUnique();
+
+            // 14. Unique index on InvoiceNumber (system-wide uniqueness)
+            modelBuilder.Entity<Invoice>()
+                .HasIndex(i => i.InvoiceNumber)
+                .IsUnique();
+
+            // 15. InvoiceIdHistory configuration
+            modelBuilder.Entity<InvoiceIdHistory>()
+                .HasOne(h => h.Invoice)
+                .WithMany(i => i.IdHistories)
+                .HasForeignKey(h => h.InvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<InvoiceIdHistory>()
+                .HasIndex(h => h.OldInvoiceNumber);
 
             // Universal Soft Delete
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())

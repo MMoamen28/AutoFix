@@ -290,6 +290,8 @@
     },
     "actions": {
       "view": "View Details",
+      "preview": "Preview Invoice",
+      "editId": "Edit Invoice ID",
       "print": "Print Invoice",
       "download": "Download Invoice",
       "pay": "Record Payment",

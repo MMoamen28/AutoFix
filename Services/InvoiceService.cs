@@ -5,7 +5,12 @@ using AutoFix.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AutoFix.Services
@@ -13,10 +18,71 @@ namespace AutoFix.Services
     public class InvoiceService : IInvoiceService
     {
         private readonly AppDbContext _db;
+        private readonly IDataFolderService? _dataFolder;
+        private static readonly SemaphoreSlim _invoiceIdLock = new(1, 1);
 
-        public InvoiceService(AppDbContext db)
+        public InvoiceService(AppDbContext db, IDataFolderService? dataFolder = null)
         {
             _db = db;
+            _dataFolder = dataFolder;
+        }
+
+        public static DateTime GetCairoNow()
+        {
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? "Egypt Standard Time" : "Africa/Cairo");
+                return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            }
+            catch
+            {
+                return DateTime.UtcNow.AddHours(2);
+            }
+        }
+
+        public static async Task<string> GenerateUniqueInvoiceNumberStaticAsync(AppDbContext db)
+        {
+            await _invoiceIdLock.WaitAsync();
+            try
+            {
+                var cairoNow = GetCairoNow();
+                var prefix = $"INV-{cairoNow:yyyyMM}-";
+
+                // Query both existing Invoices and historic IDs (ignoring soft delete query filters)
+                var existingNumbers = await db.Invoices
+                    .IgnoreQueryFilters()
+                    .Where(i => i.InvoiceNumber.StartsWith(prefix))
+                    .Select(i => i.InvoiceNumber)
+                    .ToListAsync();
+
+                var historyNumbers = await db.InvoiceIdHistories
+                    .IgnoreQueryFilters()
+                    .Where(h => h.OldInvoiceNumber.StartsWith(prefix) || h.NewInvoiceNumber.StartsWith(prefix))
+                    .Select(h => h.OldInvoiceNumber)
+                    .ToListAsync();
+
+                var allNumbers = existingNumbers.Concat(historyNumbers).Distinct().ToList();
+
+                int maxSeq = 0;
+                foreach (var num in allNumbers)
+                {
+                    if (num.Length > prefix.Length)
+                    {
+                        var suffix = num.Substring(prefix.Length);
+                        if (int.TryParse(suffix, out var seq) && seq > maxSeq)
+                        {
+                            maxSeq = seq;
+                        }
+                    }
+                }
+
+                var nextSeq = maxSeq + 1;
+                return $"{prefix}{nextSeq:D4}";
+            }
+            finally
+            {
+                _invoiceIdLock.Release();
+            }
         }
 
         private IQueryable<Invoice> BaseQuery()
@@ -25,7 +91,9 @@ namespace AutoFix.Services
                 .Include(i => i.Customer)
                 .Include(i => i.Car)
                 .Include(i => i.WorkOrder)
-                .Include(i => i.Payments);
+                    .ThenInclude(w => w!.Lines)
+                .Include(i => i.Payments)
+                .Include(i => i.IdHistories);
         }
 
         private static InvoiceResponseDto MapToDto(Invoice i, bool isCustomer = false)
@@ -39,7 +107,7 @@ namespace AutoFix.Services
             {
                 try
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(i.SnapshotDetailsJson);
+                    using var doc = JsonDocument.Parse(i.SnapshotDetailsJson);
                     foreach (var el in doc.RootElement.EnumerateArray())
                     {
                         var lineType = el.TryGetProperty("LineType", out var lt) ? lt.GetString() ?? "" : "";
@@ -70,7 +138,7 @@ namespace AutoFix.Services
                             Subtotal = el.TryGetProperty("Subtotal", out var sub) ? sub.GetDecimal() : 0m,
                             Technician = el.TryGetProperty("Technician", out var tech) ? tech.GetString() : null
                         }).ToList();
-                        snapshotJson = System.Text.Json.JsonSerializer.Serialize(sanitized);
+                        snapshotJson = JsonSerializer.Serialize(sanitized);
                     }
                 }
                 catch { }
@@ -118,7 +186,20 @@ namespace AutoFix.Services
                     ReferenceNumber = p.ReferenceNumber,
                     PaidAt = p.PaidAt,
                     ReceivedBy = p.ReceivedByUserId,
-                    Notes = p.Notes
+                    Notes = p.Notes,
+                    TotalAmount = i.TotalAmount,
+                    PaidAmount = i.PaidAmount,
+                    RemainingAmount = i.RemainingAmount
+                }).ToList(),
+                IdHistories = i.IdHistories.Where(h => !h.IsDeleted).OrderByDescending(h => h.ChangedAt).Select(h => new InvoiceIdHistoryResponseDto
+                {
+                    Id = h.Id,
+                    InvoiceId = h.InvoiceId,
+                    OldInvoiceNumber = h.OldInvoiceNumber,
+                    NewInvoiceNumber = h.NewInvoiceNumber,
+                    ChangedBy = h.ChangedBy,
+                    Reason = h.Reason,
+                    ChangedAt = h.ChangedAt
                 }).ToList()
             };
         }
@@ -142,6 +223,30 @@ namespace AutoFix.Services
             return invoice == null ? null : MapToDto(invoice, isCustomer);
         }
 
+        public async Task<InvoiceResponseDto?> GetByInvoiceNumberAsync(string invoiceNumber, bool isCustomer = false)
+        {
+            if (string.IsNullOrWhiteSpace(invoiceNumber)) return null;
+            var trimmed = invoiceNumber.Trim();
+
+            var invoice = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(i => i.InvoiceNumber == trimmed);
+            if (invoice != null)
+            {
+                return MapToDto(invoice, isCustomer);
+            }
+
+            var history = await _db.InvoiceIdHistories
+                .Include(h => h.Invoice)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(h => h.OldInvoiceNumber == trimmed);
+
+            if (history != null)
+            {
+                return await GetByIdAsync(history.InvoiceId, isCustomer);
+            }
+
+            return null;
+        }
+
         public async Task<InvoiceResponseDto> CreateAsync(CreateInvoiceDto dto)
         {
             var customer = await _db.Customers.FindAsync(dto.CustomerId);
@@ -161,40 +266,152 @@ namespace AutoFix.Services
             var vatAmount = Math.Round(afterDiscount * (dto.VatPercentage / 100m), 2);
             var totalAmount = afterDiscount + vatAmount;
 
-            var nextNum = $"INV-{DateTime.UtcNow:yyyyMM}-{(await _db.Invoices.CountAsync() + 1):D4}";
-
-            var invoice = new Invoice
+            for (int attempt = 0; attempt < 5; attempt++)
             {
-                InvoiceNumber = nextNum,
-                WorkOrderId = dto.WorkOrderId,
-                CustomerId = dto.CustomerId,
-                CarId = dto.CarId,
-                Subtotal = subtotal,
-                DiscountAmount = dto.DiscountAmount,
-                VatPercentage = dto.VatPercentage,
-                VatAmount = vatAmount,
-                TotalAmount = totalAmount,
-                PaidAmount = 0,
-                Status = "Issued",
-                Currency = "EGP",
-                IssuedAt = DateTime.UtcNow,
-                Notes = dto.Notes ?? string.Empty
-            };
+                var nextNum = await GenerateUniqueInvoiceNumberStaticAsync(_db);
 
-            _db.Invoices.Add(invoice);
+                var invoice = new Invoice
+                {
+                    InvoiceNumber = nextNum,
+                    WorkOrderId = dto.WorkOrderId,
+                    CustomerId = dto.CustomerId,
+                    CarId = dto.CarId,
+                    Subtotal = subtotal,
+                    DiscountAmount = dto.DiscountAmount,
+                    VatPercentage = dto.VatPercentage,
+                    VatAmount = vatAmount,
+                    TotalAmount = totalAmount,
+                    PaidAmount = 0,
+                    Status = "Issued",
+                    Currency = "EGP",
+                    IssuedAt = GetCairoNow(),
+                    Notes = dto.Notes ?? string.Empty
+                };
+
+                _db.Invoices.Add(invoice);
+
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "CreateInvoice",
+                    EntityName = "Invoice",
+                    EntityId = nextNum,
+                    Details = $"Manual invoice {nextNum} created for Customer {customer.FullName}. Total: {totalAmount:F2} L.E.",
+                    Timestamp = DateTime.UtcNow
+                });
+
+                try
+                {
+                    await _db.SaveChangesAsync();
+                    return (await GetByIdAsync(invoice.Id))!;
+                }
+                catch (DbUpdateException) when (attempt < 4)
+                {
+                    _db.Entry(invoice).State = EntityState.Detached;
+                    await Task.Delay(25 * (attempt + 1));
+                }
+            }
+
+            throw new InvalidOperationException("Failed to generate a unique invoice number after multiple attempts.");
+        }
+
+        public async Task<InvoiceResponseDto> UpdateInvoiceNumberAsync(int id, UpdateInvoiceNumberDto dto, string changedBy, bool isAdmin)
+        {
+            var invoice = await _db.Invoices.Include(i => i.Payments).Include(i => i.IdHistories).FirstOrDefaultAsync(i => i.Id == id);
+            if (invoice == null) throw new KeyNotFoundException($"Invoice {id} not found.");
+
+            if (string.IsNullOrWhiteSpace(dto.NewInvoiceNumber))
+            {
+                throw new InvalidOperationException("Invoice ID cannot be empty.");
+            }
+
+            var newId = dto.NewInvoiceNumber.Trim();
+            if (newId.Equals(invoice.InvoiceNumber, StringComparison.OrdinalIgnoreCase))
+            {
+                return (await GetByIdAsync(id))!;
+            }
+
+            // System-wide uniqueness across active, deleted, credited, and historical IDs
+            var inUse = await _db.Invoices.IgnoreQueryFilters().AnyAsync(i => i.InvoiceNumber == newId && i.Id != id) ||
+                        await _db.InvoiceIdHistories.IgnoreQueryFilters().AnyAsync(h => h.OldInvoiceNumber == newId || h.NewInvoiceNumber == newId);
+
+            if (inUse)
+            {
+                throw new InvalidOperationException($"Invoice ID '{newId}' is already in use by another invoice or historical ID. Please enter a unique ID.");
+            }
+
+            var isLocked = invoice.Status != "Draft" || invoice.PaidAmount > 0 || invoice.Payments.Any(p => !p.IsDeleted);
+
+            if (isLocked)
+            {
+                if (!isAdmin)
+                {
+                    throw new UnauthorizedAccessException("Only an Administrator can edit the ID of an issued or paid invoice.");
+                }
+
+                if (string.IsNullOrWhiteSpace(dto.Reason))
+                {
+                    throw new InvalidOperationException("A mandatory reason is required to change an issued invoice ID.");
+                }
+            }
+
+            var oldId = invoice.InvoiceNumber;
+
+            // Record history entry
+            _db.InvoiceIdHistories.Add(new InvoiceIdHistory
+            {
+                InvoiceId = invoice.Id,
+                OldInvoiceNumber = oldId,
+                NewInvoiceNumber = newId,
+                ChangedBy = string.IsNullOrWhiteSpace(changedBy) ? "Admin" : changedBy,
+                Reason = string.IsNullOrWhiteSpace(dto.Reason) ? "Draft modification" : dto.Reason.Trim(),
+                ChangedAt = DateTime.UtcNow
+            });
+
+            // Audit log
+            _db.AuditLogs.Add(new AuditLog
+            {
+                Action = "UpdateInvoiceNumber",
+                EntityName = "Invoice",
+                EntityId = newId,
+                Details = $"Invoice ID changed from '{oldId}' to '{newId}' by {changedBy}. Reason: {dto.Reason ?? "Draft update"}",
+                Timestamp = DateTime.UtcNow
+            });
+
+            invoice.InvoiceNumber = newId;
+            await _db.SaveChangesAsync();
+
+            return (await GetByIdAsync(id))!;
+        }
+
+        public async Task<InvoiceResponseDto> UpdateInvoiceDateAsync(int id, UpdateInvoiceDateDto dto, string changedBy, bool isAdmin)
+        {
+            var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.Id == id);
+            if (invoice == null) throw new KeyNotFoundException($"Invoice {id} not found.");
+
+            if (!isAdmin)
+            {
+                throw new UnauthorizedAccessException("Only an Administrator can edit invoice date.");
+            }
+
+            if (invoice.Status != "Draft")
+            {
+                throw new InvalidOperationException("Invoice date can only be edited before the invoice is issued.");
+            }
+
+            var oldDate = invoice.IssuedAt;
+            invoice.IssuedAt = dto.NewIssuedAt;
 
             _db.AuditLogs.Add(new AuditLog
             {
-                Action = "CreateInvoice",
+                Action = "UpdateInvoiceDate",
                 EntityName = "Invoice",
-                EntityId = nextNum,
-                Details = $"Manual invoice {nextNum} created for Customer {customer.FullName}. Total: {totalAmount:F2} L.E.",
+                EntityId = invoice.InvoiceNumber,
+                Details = $"Invoice date changed from '{oldDate:yyyy-MM-dd HH:mm}' to '{dto.NewIssuedAt:yyyy-MM-dd HH:mm}' by {changedBy}. Reason: {dto.Reason ?? "Admin correction"}",
                 Timestamp = DateTime.UtcNow
             });
 
             await _db.SaveChangesAsync();
-
-            return (await GetByIdAsync(invoice.Id))!;
+            return (await GetByIdAsync(id))!;
         }
 
         public async Task<PaymentResponseDto> RecordPaymentAsync(int invoiceId, RecordPaymentDto dto, string? receivedBy = null)
@@ -271,20 +488,75 @@ namespace AutoFix.Services
             return true;
         }
 
+        private string GetLogoBase64()
+        {
+            try
+            {
+                if (_dataFolder != null)
+                {
+                    var customPath = Path.Combine(_dataFolder.RootPath, "Files", "Settings", "logo.png");
+                    if (File.Exists(customPath))
+                    {
+                        var bytes = File.ReadAllBytes(customPath);
+                        return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
+                    }
+                }
+
+                var defaultPath = Path.Combine(@"D:\AutoFix\Assets\InvoiceTemplate", "logo.png");
+                if (File.Exists(defaultPath))
+                {
+                    var bytes = File.ReadAllBytes(defaultPath);
+                    return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
+                }
+            }
+            catch { }
+            return "";
+        }
+
+        private string GetWatermarkBase64()
+        {
+            try
+            {
+                if (_dataFolder != null)
+                {
+                    var customPath = Path.Combine(_dataFolder.RootPath, "Files", "Settings", "watermark.png");
+                    if (File.Exists(customPath))
+                    {
+                        var bytes = File.ReadAllBytes(customPath);
+                        return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
+                    }
+                }
+
+                var defaultPath = Path.Combine(@"D:\AutoFix\Assets\InvoiceTemplate", "watermark.png");
+                if (File.Exists(defaultPath))
+                {
+                    var bytes = File.ReadAllBytes(defaultPath);
+                    return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
+                }
+            }
+            catch { }
+            return "";
+        }
+
         public async Task<string> GeneratePrintedInvoiceHtmlAsync(int id)
+        {
+            return await GenerateWordTemplateInvoiceHtmlAsync(id, false);
+        }
+
+        public async Task<string> GenerateWordTemplateInvoiceHtmlAsync(int id, bool isCustomer = false)
         {
             var invoice = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) throw new KeyNotFoundException($"Invoice {id} not found.");
 
-            var workmanshipLines = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
-            var partsLines = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
-            var otherLaborLines = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
+            // Extract items lines and workmanship
+            var itemsList = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
+            decimal workmanshipTotal = 0;
 
             if (!string.IsNullOrEmpty(invoice.SnapshotDetailsJson) && invoice.SnapshotDetailsJson != "[]")
             {
                 try
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(invoice.SnapshotDetailsJson);
+                    using var doc = JsonDocument.Parse(invoice.SnapshotDetailsJson);
                     foreach (var el in doc.RootElement.EnumerateArray())
                     {
                         var desc = el.TryGetProperty("Description", out var d) ? d.GetString() ?? "" : "";
@@ -293,242 +565,672 @@ namespace AutoFix.Services
                         var price = el.TryGetProperty("UnitPrice", out var p) ? p.GetDecimal() : 0m;
                         var sub = el.TryGetProperty("Subtotal", out var s) ? s.GetDecimal() : qty * price;
 
-                        if (lineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase))
+                        if (lineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase) ||
+                            lineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
                         {
-                            workmanshipLines.Add((desc, qty, price, sub));
-                        }
-                        else if (lineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
-                        {
-                            otherLaborLines.Add((desc, qty, price, sub));
+                            workmanshipTotal += sub;
                         }
                         else
                         {
-                            partsLines.Add((desc, qty, price, sub));
+                            itemsList.Add((desc, qty, price, sub));
                         }
                     }
                 }
                 catch { }
             }
+            else if (invoice.WorkOrder != null)
+            {
+                workmanshipTotal = invoice.WorkOrder.TotalWorkmanship > 0 ? invoice.WorkOrder.TotalWorkmanship : invoice.WorkOrder.TotalLabor;
+                foreach (var line in invoice.WorkOrder.Lines.Where(l => !l.IsDeleted))
+                {
+                    if (!line.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase) &&
+                        !line.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                    {
+                        itemsList.Add((line.Description, line.Quantity, line.UnitPrice, line.Quantity * line.UnitPrice));
+                    }
+                }
+            }
 
-            var workmanshipSubtotal = workmanshipLines.Sum(x => x.Subtotal);
-            var partsSubtotal = partsLines.Sum(x => x.Subtotal);
-            var otherLaborSubtotal = otherLaborLines.Sum(x => x.Subtotal);
+            // Fallback: If no snapshot and subtotal > 0
+            if (itemsList.Count == 0 && workmanshipTotal == 0)
+            {
+                workmanshipTotal = invoice.Subtotal;
+            }
 
-            var workmanshipRows = workmanshipLines.Count == 0
-                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد بنود مصنعية</td></tr>"
-                : string.Join("", workmanshipLines.Select((l, idx) => $@"
-                    <tr>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
-                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Desc}</strong></td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Qty:F1}</span></td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Price:N2}</span> ج.م</td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Subtotal:N2}</span> ج.م</td>
-                    </tr>"));
+            var docTitle = (invoice.WorkOrder?.WorkType == "Inspection")
+                ? "تقرير فحص واعتماد / Car Inspection Report"
+                : "Comprehensive Car Inspection - فحص سيارة شامل / فاتورة صيانة";
 
-            var partsRows = partsLines.Count == 0
-                ? "<tr><td colspan='5' style='padding: 8px; text-align: center; color: #64748b;'>لا توجد قطع غيار</td></tr>"
-                : string.Join("", partsLines.Select((l, idx) => $@"
-                    <tr>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
-                        <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'><strong>{l.Desc}</strong></td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Qty:F1}</span></td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Price:N2}</span> ج.م</td>
-                        <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Subtotal:N2}</span> ج.م</td>
-                    </tr>"));
+            return BuildWordTemplateHtml(
+                invoice.InvoiceNumber,
+                invoice.IssuedAt,
+                invoice.Car?.Make,
+                invoice.Car != null ? $"{invoice.Car.Model} {invoice.Car.Year}".Trim() : null,
+                invoice.Car?.LicensePlate,
+                invoice.Customer?.FullName,
+                invoice.Customer?.Phone,
+                invoice.WorkOrder?.OdometerInKm,
+                itemsList,
+                workmanshipTotal,
+                invoice.WorkOrder?.WorkDone,
+                invoice.WorkOrder?.WorkToBeDone,
+                !string.IsNullOrWhiteSpace(invoice.WorkOrder?.Notes) ? invoice.WorkOrder.Notes : invoice.Notes,
+                invoice.Subtotal,
+                invoice.DiscountAmount,
+                invoice.VatPercentage,
+                invoice.VatAmount,
+                invoice.TotalAmount,
+                invoice.PaidAmount,
+                invoice.RemainingAmount,
+                docTitle,
+                isCustomer);
+        }
 
-            var otherLaborSection = otherLaborLines.Count > 0 ? $@"
-                <div class='card' style='margin-bottom: 15px;'>
-                    <h4>خدمات وعمالة أخرى (Other Labor / Services)</h4>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style='width: 30px; text-align: center;'>#</th>
-                                <th>البيان / الخدمة</th>
-                                <th style='width: 70px; text-align: center;'>الكمية</th>
-                                <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
-                                <th style='width: 110px; text-align: right;'>الإجمالي</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {string.Join("", otherLaborLines.Select((l, idx) => $@"
-                                <tr>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'>{idx + 1}</td>
-                                    <td dir='auto' style='padding: 8px; border: 1px solid #ddd; text-align: right;'>{l.Desc}</td>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: center;'><span dir='ltr'>{l.Qty:F1}</span></td>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Price:N2}</span> ج.م</td>
-                                    <td style='padding: 8px; border: 1px solid #ddd; text-align: right;'><span dir='ltr'>{l.Subtotal:N2}</span> ج.م</td>
-                                </tr>"))}
-                        </tbody>
-                    </table>
-                    <div style='text-align: left; margin-top: 6px; font-weight: bold;'>
-                        إجمالي الخدمات الأخرى: <span dir='ltr'>{otherLaborSubtotal:N2}</span> ج.م
-                    </div>
-                </div>" : "";
+        public async Task<string> GenerateWordTemplateInvoiceHtmlForWorkOrderAsync(int workOrderId, bool isCustomer = false)
+        {
+            var existingInvoice = await _db.Invoices.AsNoTracking().FirstOrDefaultAsync(i => i.WorkOrderId == workOrderId);
+            if (existingInvoice != null)
+            {
+                return await GenerateWordTemplateInvoiceHtmlAsync(existingInvoice.Id, isCustomer);
+            }
 
-            return $@"
-<!DOCTYPE html>
+            var workOrder = await _db.WorkOrders
+                .Include(w => w.Customer)
+                .Include(w => w.Car)
+                .Include(w => w.Lines)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.Id == workOrderId);
+
+            if (workOrder == null) throw new KeyNotFoundException($"WorkOrder {workOrderId} not found.");
+
+            var itemsList = new List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)>();
+            decimal workmanshipTotal = workOrder.TotalWorkmanship > 0 ? workOrder.TotalWorkmanship : workOrder.TotalLabor;
+
+            foreach (var line in workOrder.Lines.Where(l => !l.IsDeleted))
+            {
+                if (!line.LineType.Equals("LaborManufacturer", StringComparison.OrdinalIgnoreCase) &&
+                    !line.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase))
+                {
+                    itemsList.Add((line.Description, line.Quantity, line.UnitPrice, line.Quantity * line.UnitPrice));
+                }
+            }
+
+            var subtotal = itemsList.Sum(i => i.Subtotal) + workmanshipTotal;
+            var vatPercentage = 14m;
+            var vatAmount = Math.Round(subtotal * (vatPercentage / 100m), 2);
+            var totalAmount = subtotal + vatAmount;
+
+            var draftInvNumber = $"DRAFT-{workOrder.OrderNumber}";
+            var docTitle = (workOrder.WorkType == "Inspection")
+                ? "تقرير فحص واعتماد / Car Inspection Report"
+                : "Comprehensive Car Inspection - فحص سيارة شامل / فاتورة صيانة";
+
+            return BuildWordTemplateHtml(
+                draftInvNumber,
+                workOrder.ReceivedAt,
+                workOrder.Car?.Make,
+                workOrder.Car != null ? $"{workOrder.Car.Model} {workOrder.Car.Year}".Trim() : null,
+                workOrder.Car?.LicensePlate,
+                workOrder.Customer?.FullName,
+                workOrder.Customer?.Phone,
+                workOrder.OdometerInKm,
+                itemsList,
+                workmanshipTotal,
+                workOrder.WorkDone,
+                workOrder.WorkToBeDone,
+                workOrder.Notes,
+                subtotal,
+                0m,
+                vatPercentage,
+                vatAmount,
+                totalAmount,
+                0m,
+                totalAmount,
+                docTitle,
+                isCustomer);
+        }
+
+        private string BuildWordTemplateHtml(
+            string invoiceNumber,
+            DateTime issuedAt,
+            string? carMake,
+            string? carModelAndYear,
+            string? carPlateStr,
+            string? customerName,
+            string? customerPhone,
+            int? odometerInKm,
+            List<(string Desc, decimal Qty, decimal Price, decimal Subtotal)> itemsList,
+            decimal workmanshipTotal,
+            string? workDoneText,
+            string? workToBeDoneText,
+            string? notesText,
+            decimal subtotal,
+            decimal discountAmount,
+            decimal vatPercentage,
+            decimal vatAmount,
+            decimal totalAmount,
+            decimal paidAmount,
+            decimal remainingAmount,
+            string docTitle,
+            bool isCustomer = false)
+        {
+            var logoBase64 = GetLogoBase64();
+            var watermarkBase64 = GetWatermarkBase64();
+
+            // Client & Car values (never hardcode sample values like 0.00 or 23/07/2026)
+            string Val(string? v) => string.IsNullOrWhiteSpace(v) ? "______" : WebUtility.HtmlEncode(v.Trim());
+
+            var carType = Val(carMake);
+            var carModel = Val(carModelAndYear);
+            var carPlate = Val(carPlateStr);
+            var invoiceId = Val(invoiceNumber);
+
+            var clientName = Val(customerName);
+            var clientPhone = Val(customerPhone);
+            var kmVal = odometerInKm.HasValue && odometerInKm.Value > 0
+                ? odometerInKm.Value.ToString("N0")
+                : "______";
+
+            // Cairo system date dd/MM/yyyy
+            var cairoDate = issuedAt.AddHours(2).ToString("dd/MM/yyyy");
+
+            // Dynamic items rows (1 item = 1 row, 3 items = 3 rows, no empty placeholder rows)
+            var rowsBuilder = new StringBuilder();
+            for (int idx = 0; idx < itemsList.Count; idx++)
+            {
+                var item = itemsList[idx];
+                rowsBuilder.Append($@"
+                <tr>
+                    <td style='text-align: center; font-weight: bold;'>{idx + 1}</td>
+                    <td dir='auto' style='text-align: start; padding-inline: 8px;'>{WebUtility.HtmlEncode(item.Desc)}</td>
+                    <td dir='ltr' style='text-align: center;'>{item.Qty:0.##}</td>
+                    <td dir='ltr' style='text-align: right; padding-inline: 8px;'>{item.Price:N2}</td>
+                    <td dir='ltr' style='text-align: right; padding-inline: 8px;'>{item.Subtotal:N2}</td>
+                </tr>");
+            }
+
+            if (itemsList.Count == 0)
+            {
+                rowsBuilder.Append(@"
+                <tr>
+                    <td colspan='5' style='text-align: center; color: #64748b; padding: 12px;'>لا توجد بنود قطع غيار مضافة / No spare parts items</td>
+                </tr>");
+            }
+
+            // Notes areas
+            var workDone = Val(workDoneText);
+            var workToBeDone = Val(workToBeDoneText);
+            var generalNotes = Val(notesText);
+
+            var html = $@"<!DOCTYPE html>
 <html lang='ar' dir='rtl'>
 <head>
     <meta charset='UTF-8'>
-    <title>فاتورة ضريبية / Tax Invoice - {invoice.InvoiceNumber}</title>
+    <title>فاتورة - {invoiceNumber}</title>
     <style>
-        @page {{ size: A4 portrait; margin: 12mm; }}
-        body {{ font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; color: #1e293b; font-size: 13px; line-height: 1.5; }}
-        .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 15px; }}
-        .badge {{ display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; background: #e0f2fe; color: #0369a1; }}
-        .section-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }}
-        .card {{ background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 15px; }}
-        .card h4 {{ margin: 0 0 8px 0; color: #1e293b; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; font-size: 14px; display: flex; justify-content: space-between; }}
-        table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-        th {{ background: #f1f5f9; padding: 8px; border: 1px solid #cbd5e1; text-align: right; }}
-        .totals {{ margin-top: 15px; text-align: left; }}
-        .totals-box {{ display: inline-block; min-width: 300px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px; }}
-        .totals-row {{ display: flex; justify-content: space-between; padding: 4px 0; }}
-        .grand-total {{ font-size: 16px; font-weight: bold; color: #2563eb; border-top: 2px solid #2563eb; margin-top: 6px; padding-top: 6px; }}
-        .signatures {{ display: flex; justify-content: space-between; margin-top: 40px; padding-top: 20px; border-top: 1px dashed #cbd5e1; }}
-        .sig-block {{ width: 30%; text-align: center; border-top: 1px solid #94a3b8; padding-top: 5px; }}
-        @media print {{
-            .no-print {{ display: none !important; }}
-            body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-            table {{ page-break-inside: auto; }}
-            tr {{ page-break-inside: avoid; page-break-after: auto; }}
+        @page {{
+            size: A4 portrait;
+            margin: 10mm 12mm 10mm 12mm;
         }}
-        .no-print-bar {{
+        @media print {{
+            body {{
+                background: #fff !important;
+                color: #000 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }}
+            .no-print {{
+                display: none !important;
+            }}
+            .page-watermark {{
+                position: fixed !important;
+                top: 50% !important;
+                left: 50% !important;
+                transform: translate(-50%, -50%) !important;
+                width: 440px !important;
+                opacity: 0.08 !important;
+                z-index: 0 !important;
+                pointer-events: none !important;
+            }}
+            .table-container table {{
+                page-break-inside: auto;
+            }}
+            tr {{
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }}
+            thead {{
+                display: table-header-group;
+            }}
+            .footer-page-num:after {{
+                content: counter(page);
+            }}
+        }}
+        * {{
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }}
+        body {{
+            font-family: Cairo, 'Segoe UI', Tahoma, Arial, sans-serif;
+            margin: 0;
+            padding: 10px 15px;
+            color: #0f172a;
+            font-size: 13px;
+            line-height: 1.4;
+            background: #ffffff;
+            position: relative;
+        }}
+        /* Faded Watermark */
+        .page-watermark {{
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 440px;
+            opacity: 0.08;
+            z-index: 0;
+            pointer-events: none;
+        }}
+        .content-wrap {{
+            position: relative;
+            z-index: 1;
+        }}
+        /* Action buttons bar */
+        .actions-bar {{
             display: flex;
             justify-content: flex-end;
             gap: 10px;
             margin-bottom: 15px;
-            padding: 10px;
+            padding: 8px 14px;
             background: #f1f5f9;
             border-radius: 6px;
             border: 1px solid #cbd5e1;
         }}
-        .btn-print {{
-            background: #2563eb;
-            color: white;
+        .btn {{
             border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
+            padding: 8px 18px;
+            border-radius: 5px;
+            font-weight: 700;
             font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
         }}
-        .btn-download {{
-            background: #059669;
-            color: white;
+        .btn-print {{ background: #2563eb; color: #ffffff; }}
+        .btn-download {{ background: #059669; color: #ffffff; }}
+        .btn:hover {{ opacity: 0.9; transform: translateY(-1px); }}
+
+        /* Top Bar: Logo Left & Title Center */
+        .top-header {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            position: relative;
+        }}
+        .logo-box {{
+            flex: 0 0 160px;
+            text-align: left;
+        }}
+        .logo-box img {{
+            max-width: 150px;
+            max-height: 70px;
+            object-fit: contain;
+        }}
+        .center-title-box {{
+            flex: 1;
+            text-align: center;
+            margin: 0 15px;
+        }}
+        .title-badge {{
+            display: inline-block;
+            border: 2px solid #000000;
+            border-radius: 10px;
+            padding: 6px 24px;
+            font-size: 15px;
+            font-weight: 800;
+            color: #000000;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }}
+
+        /* Two Header Boxes */
+        .header-boxes-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 14px;
+        }}
+        .info-card {{
+            border: 2px solid #000000;
+            border-radius: 8px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.95);
+        }}
+        .info-card-header {{
+            border-bottom: 2px solid #000000;
+            background: #ffffff;
+            font-weight: 800;
+            font-size: 13.5px;
+            text-align: center;
+            padding: 4px 8px;
+            color: #000000;
+        }}
+        .info-table {{
+            width: 100%;
+            border-collapse: collapse;
+        }}
+        .info-table td {{
+            padding: 4px 8px;
+            font-size: 12.5px;
+            vertical-align: middle;
             border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
+        }}
+        .label-en {{
+            text-align: left;
+            font-weight: 700;
+            color: #1e293b;
+            width: 25%;
+        }}
+        .info-val {{
+            text-align: center;
+            font-weight: 600;
+            color: #0f172a;
+            width: 50%;
+        }}
+        .label-ar {{
+            text-align: right;
+            font-weight: 700;
+            color: #1e293b;
+            width: 25%;
+        }}
+
+        /* Dynamic Items Table */
+        .table-container {{
+            margin-top: 10px;
+            margin-bottom: 12px;
+        }}
+        .items-table {{
+            width: 100%;
+            border-collapse: collapse;
+            border: 1.5px solid #000000;
+            background: rgba(255, 255, 255, 0.95);
+        }}
+        .items-table th {{
+            background: #f1f5f9;
+            border: 1.5px solid #000000;
+            padding: 6px 8px;
+            font-size: 12.5px;
+            font-weight: 800;
+            text-align: center;
+            color: #0f172a;
+        }}
+        .items-table td {{
+            border: 1.5px solid #000000;
+            padding: 5px 6px;
+            font-size: 12px;
+            color: #0f172a;
+        }}
+
+        /* Fixed Workmanship Box */
+        .workmanship-box {{
+            border: 1.5px solid #000000;
+            border-radius: 6px;
+            padding: 8px 14px;
+            background: #f8fafc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-weight: 800;
+            font-size: 13.5px;
+        }}
+        .workmanship-amount {{
+            font-size: 14px;
+            color: #1e3a8a;
+        }}
+
+        /* Notes Section */
+        .notes-section {{
+            border: 1.5px solid #000000;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 14px;
+            background: rgba(255, 255, 255, 0.95);
+        }}
+        .note-row {{
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 12.5px;
+        }}
+        .note-row:last-child {{
+            margin-bottom: 0;
+        }}
+        .note-title {{
+            font-weight: 800;
+            white-space: nowrap;
+            color: #000000;
+            min-width: 170px;
+        }}
+        .note-val {{
+            flex: 1;
+            word-break: break-word;
+            color: #1e293b;
+        }}
+
+        /* Totals Area */
+        .totals-section {{
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }}
+        .totals-card {{
+            border: 1.5px solid #000000;
+            border-radius: 6px;
+            min-width: 310px;
+            padding: 10px 14px;
+            background: #f8fafc;
+        }}
+        .total-row {{
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+            font-size: 12.5px;
+        }}
+        .grand-total {{
+            border-top: 2px solid #000000;
+            margin-top: 6px;
+            padding-top: 6px;
+            font-size: 15px;
+            font-weight: 800;
+            color: #1e3a8a;
+        }}
+
+        /* Footer & Signatures */
+        .signatures-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-top: 35px;
+            text-align: center;
+        }}
+        .sig-col {{
+            border-top: 1px solid #000000;
+            padding-top: 6px;
+            font-size: 12px;
+            font-weight: 700;
         }}
     </style>
 </head>
 <body>
-    <div class='no-print-bar no-print'>
-        <button class='btn-print' onclick='window.print()'>طباعة الفاتورة / Print Invoice</button>
-        <button class='btn-download' onclick='window.print()'>تحميل PDF / Download PDF</button>
-    </div>
-    <div class='header'>
-        <div>
-            <h1 style='margin: 0; color: #1e3a8a; font-size: 22px;'>أوتوفكس لإدارة مراكز الصيانة | AutoFix Workshop</h1>
-            <div style='color: #64748b; font-size: 12px;'>فاتورة ضريبية رسمية | Official Tax Invoice</div>
+    {(!string.IsNullOrEmpty(watermarkBase64) ? $"<img src='{watermarkBase64}' class='page-watermark' alt='Watermark' />" : "")}
+
+    <div class='content-wrap'>
+        <!-- Action Bar (Hidden in Print) -->
+        <div class='actions-bar no-print'>
+            <button class='btn btn-print' onclick='window.print()'>طباعة الفاتورة / Print</button>
+            <button class='btn btn-download' onclick='window.print()'>تحميل PDF / Download PDF</button>
         </div>
-        <div style='text-align: left;'>
-            <div style='font-size: 18px; font-weight: bold; color: #2563eb;'>{invoice.InvoiceNumber}</div>
-            <div class='badge'>الحالة: {invoice.Status}</div>
-            <div style='color: #64748b; font-size: 11px; margin-top: 4px;'>التاريخ: {invoice.IssuedAt:yyyy-MM-dd HH:mm}</div>
+
+        <!-- Top Header: Logo Left & Title Badge Center -->
+        <div class='top-header'>
+            <div class='logo-box'>
+                {(!string.IsNullOrEmpty(logoBase64) ? $"<img src='{logoBase64}' alt='AP AUTO SERVICE CENTER' />" : "<div style='font-weight:900;font-size:16px;'>AP AUTO SERVICE CENTER</div>")}
+            </div>
+            <div class='center-title-box'>
+                <div class='title-badge'>{docTitle}</div>
+            </div>
+            <div style='flex: 0 0 160px; text-align: right;'>
+                <span style='font-size: 11px; color: #64748b; font-weight: bold;'>A4 Standard</span>
+            </div>
         </div>
-    </div>
 
-    <div class='section-grid'>
-        <div class='card' style='margin-bottom: 0;'>
-            <h4>بيانات العميل (Customer Details)</h4>
-            <div><strong>الاسم:</strong> <span dir='auto'>{invoice.Customer?.FullName}</span></div>
-            <div><strong>الهاتف:</strong> <span dir='ltr'>{invoice.Customer?.Phone}</span></div>
-            <div><strong>أمر الشغل المرجعي:</strong> {invoice.WorkOrder?.OrderNumber ?? "N/A"}</div>
+        <!-- Part 1: Two Header Boxes -->
+        <div class='header-boxes-grid'>
+            <!-- Left Box: Car Information -->
+            <div class='info-card'>
+                <div class='info-card-header'>بيانات السيارة - Car Information</div>
+                <table class='info-table'>
+                    <tr>
+                        <td class='label-en'>Type</td>
+                        <td class='info-val' dir='auto'>{carType}</td>
+                        <td class='label-ar'>الطراز</td>
+                    </tr>
+                    <tr>
+                        <td class='label-en'>Model</td>
+                        <td class='info-val' dir='auto'>{carModel}</td>
+                        <td class='label-ar'>الموديل</td>
+                    </tr>
+                    <tr>
+                        <td class='label-en'>Plate No.</td>
+                        <td class='info-val' dir='auto'>{carPlate}</td>
+                        <td class='label-ar'>اللوحة</td>
+                    </tr>
+                    <tr>
+                        <td class='label-en'>Invoice ID</td>
+                        <td class='info-val' dir='ltr'><strong>{invoiceId}</strong></td>
+                        <td class='label-ar'>رقم الفاتورة</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Right Box: Client Information -->
+            <div class='info-card'>
+                <div class='info-card-header'>بيانات العميل - Client Information</div>
+                <table class='info-table'>
+                    <tr>
+                        <td class='label-en'>Name</td>
+                        <td class='info-val' dir='auto'>{clientName}</td>
+                        <td class='label-ar'>اسم العميل</td>
+                    </tr>
+                    <tr>
+                        <td class='label-en'>Phone</td>
+                        <td class='info-val' dir='ltr'>{clientPhone}</td>
+                        <td class='label-ar'>موبايل العميل</td>
+                    </tr>
+                    <tr>
+                        <td class='label-en'>KM.</td>
+                        <td class='info-val' dir='ltr'>{kmVal}</td>
+                        <td class='label-ar'>قراءة العداد</td>
+                    </tr>
+                    <tr>
+                        <td class='label-en'>Date</td>
+                        <td class='info-val' dir='ltr'>{cairoDate}</td>
+                        <td class='label-ar'>التاريخ</td>
+                    </tr>
+                </table>
+            </div>
         </div>
-        <div class='card' style='margin-bottom: 0;'>
-            <h4>بيانات السيارة (Vehicle Details)</h4>
-            <div><strong>السيارة:</strong> <span dir='auto'>{invoice.Car?.Make} {invoice.Car?.Model} ({invoice.Car?.Year})</span></div>
-            <div><strong>رقم اللوحة:</strong> <span dir='auto'>{invoice.Car?.LicensePlate}</span></div>
-            <div><strong>رقم الشاسية / VIN:</strong> <span dir='ltr'>{invoice.Car?.VIN}</span></div>
+
+        <!-- Part 2: Dynamic Items Table -->
+        <div class='table-container'>
+            <table class='items-table'>
+                <thead>
+                    <tr>
+                        <th style='width: 35px;'>#</th>
+                        <th>SpareParts/Operation / قطع غيار</th>
+                        <th style='width: 80px;'>Qty / الكمية</th>
+                        <th style='width: 110px;'>Price / السعر</th>
+                        <th style='width: 120px;'>Total / الإجمالي</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rowsBuilder}
+                </tbody>
+            </table>
         </div>
-    </div>
 
-    <!-- 1. Dedicated Workmanship Section (مصنعية) -->
-    <div class='card' style='margin-top: 15px;'>
-        <h4>
-            <span>مصنعية (Workmanship)</span>
-            <span style='color: #2563eb;'>إجمالي المصنعية: <span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span>
-        </h4>
-        <table>
-            <thead>
-                <tr>
-                    <th style='width: 30px; text-align: center;'>#</th>
-                    <th>بند المصنعية / الخدمة (Workmanship Service)</th>
-                    <th style='width: 70px; text-align: center;'>الكمية</th>
-                    <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
-                    <th style='width: 110px; text-align: right;'>الإجمالي</th>
-                </tr>
-            </thead>
-            <tbody>
-                {workmanshipRows}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- 2. Dedicated Parts Section (قطع الغيار) -->
-    <div class='card'>
-        <h4>
-            <span>قطع الغيار (Spare Parts)</span>
-            <span style='color: #0284c7;'>إجمالي قطع الغيار: <span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span>
-        </h4>
-        <table>
-            <thead>
-                <tr>
-                    <th style='width: 30px; text-align: center;'>#</th>
-                    <th>قطع الغيار والمستهلكات (Part Description)</th>
-                    <th style='width: 70px; text-align: center;'>الكمية</th>
-                    <th style='width: 100px; text-align: right;'>سعر الوحدة</th>
-                    <th style='width: 110px; text-align: right;'>الإجمالي</th>
-                </tr>
-            </thead>
-            <tbody>
-                {partsRows}
-            </tbody>
-        </table>
-    </div>
-
-    {otherLaborSection}
-
-    <div class='totals'>
-        <div class='totals-box'>
-            <div class='totals-row'><span>المجموع الفرعي (Subtotal):</span><span><span dir='ltr'>{invoice.Subtotal:N2}</span> ج.م</span></div>
-            <div class='totals-row' style='font-size: 12px; color: #64748b;'><span>منها مصنعية (Workmanship):</span><span><span dir='ltr'>{workmanshipSubtotal:N2}</span> ج.م</span></div>
-            <div class='totals-row' style='font-size: 12px; color: #64748b;'><span>منها قطع غيار (Parts):</span><span><span dir='ltr'>{partsSubtotal:N2}</span> ج.م</span></div>
-            {(invoice.DiscountAmount > 0 ? $"<div class='totals-row' style='color: #ef4444;'><span>الخصم (Discount):</span><span>-<span dir='ltr'>{invoice.DiscountAmount:N2}</span> ج.م</span></div>" : "")}
-            <div class='totals-row'><span>الوعاء الخاضع للضريبة:</span><span><span dir='ltr'>{Math.Max(0, invoice.Subtotal - invoice.DiscountAmount):N2}</span> ج.م</span></div>
-            <div class='totals-row'><span>ضريبة القيمة المضافة ({invoice.VatPercentage}%):</span><span><span dir='ltr'>{invoice.VatAmount:N2}</span> ج.م</span></div>
-            <div class='totals-row grand-total'><span>إجمالي الفاتورة (Total):</span><span><span dir='ltr'>{invoice.TotalAmount:N2}</span> ج.م</span></div>
-            <div class='totals-row' style='color: #10b981; margin-top: 4px;'><span>المدفوع (Paid):</span><span><span dir='ltr'>{invoice.PaidAmount:N2}</span> ج.م</span></div>
-            <div class='totals-row' style='font-weight: bold; color: {(invoice.RemainingAmount > 0 ? "#ef4444" : "#10b981")};'><span>المتبقي (Remaining):</span><span><span dir='ltr'>{invoice.RemainingAmount:N2}</span> ج.م</span></div>
+        <!-- Part 3: Fixed Workmanship Box -->
+        <div class='workmanship-box'>
+            <span>مصنعية / Workmanship:</span>
+            <span class='workmanship-amount'><span dir='ltr'>{workmanshipTotal:N2}</span> ج.م</span>
         </div>
-    </div>
 
-    {(invoice.Status == "Credited" ? $@"
-    <div style='margin-top: 20px; background: #fee2e2; border: 2px dashed #dc2626; border-radius: 6px; padding: 12px; text-align: center; color: #991b1b; font-weight: bold;'>
-        ⚠️ فاتورة ملغاة بموجب إشعار دائن رسمي رقم (CN-{invoice.InvoiceNumber}) - تم استرداد المبالغ وإعادة القطع للمخزن
-    </div>" : "")}
+        <!-- Part 4: Notes (Work done, Work to be done, Notes) -->
+        <div class='notes-section'>
+            <div class='note-row'>
+                <span class='note-title'>ما تم تنفيذه / Work done:</span>
+                <span class='note-val' dir='auto'>{workDone}</span>
+            </div>
+            <div class='note-row'>
+                <span class='note-title'>ما سيتم تنفيذه / Work to be done:</span>
+                <span class='note-val' dir='auto'>{workToBeDone}</span>
+            </div>
+            <div class='note-row'>
+                <span class='note-title'>ملاحظات / Notes:</span>
+                <span class='note-val' dir='auto'>{generalNotes}</span>
+            </div>
+        </div>
 
-    <div class='signatures'>
-        <div class='sig-block'>المحاسب المسؤول</div>
-        <div class='sig-block'>إدارة المركز / الختم</div>
-        <div class='sig-block'>توقيع واستلام العميل</div>
+        <!-- Part 5: Totals Section -->
+        <div class='totals-section'>
+            <div class='totals-card'>
+                <div class='total-row'>
+                    <span>المجموع الفرعي (Subtotal):</span>
+                    <span><span dir='ltr'>{subtotal:N2}</span> ج.م</span>
+                </div>
+                {(discountAmount > 0 ? $@"
+                <div class='total-row' style='color: #dc2626;'>
+                    <span>الخصم (Discount):</span>
+                    <span>-<span dir='ltr'>{discountAmount:N2}</span> ج.م</span>
+                </div>
+                <div class='total-row'>
+                    <span>الوعاء الخاضع للضريبة (Taxable Base):</span>
+                    <span><span dir='ltr'>{Math.Max(0, subtotal - discountAmount):N2}</span> ج.م</span>
+                </div>" : "")}
+                <div class='total-row'>
+                    <span>ضريبة القيمة المضافة ({vatPercentage}%):</span>
+                    <span><span dir='ltr'>{vatAmount:N2}</span> ج.م</span>
+                </div>
+                <div class='total-row grand-total'>
+                    <span>الإجمالي النهائي (Total):</span>
+                    <span><span dir='ltr'>{totalAmount:N2}</span> ج.م</span>
+                </div>
+                <div class='total-row' style='color: #059669; font-weight: 700; margin-top: 4px;'>
+                    <span>المدفوع (Paid):</span>
+                    <span><span dir='ltr'>{paidAmount:N2}</span> ج.م</span>
+                </div>
+                <div class='total-row' style='font-weight: 800; color: {(remainingAmount > 0 ? "#dc2626" : "#059669")};'>
+                    <span>المتبقي (Remaining):</span>
+                    <span><span dir='ltr'>{remainingAmount:N2}</span> ج.م</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signatures -->
+        <div class='signatures-grid'>
+            <div class='sig-col'>المحاسب المسؤول / Accountant</div>
+            <div class='sig-col'>إدارة المركز / Management Stamp</div>
+            <div class='sig-col'>استلام العميل / Customer Receipt</div>
+        </div>
     </div>
 </body>
 </html>";
+
+            return html;
         }
 
         public async Task<InvoiceResponseDto> CreditInvoiceAsync(int invoiceId, string reason, string? issuedBy = null)
@@ -563,7 +1265,6 @@ namespace AutoFix.Services
                 invoice.WorkOrder.Status = "Credited";
             }
 
-            // If payments were previously made, issue an automatic customer refund and record in Treasury
             if (previousPaidAmount > 0)
             {
                 _db.InvoicePayments.Add(new InvoicePayment
@@ -589,7 +1290,6 @@ namespace AutoFix.Services
                 });
             }
 
-            // Restore stock if parts were issued from work order (once only)
             if (invoice.WorkOrder != null)
             {
                 var issuedMovements = await _db.PartMovements
@@ -716,4 +1416,3 @@ namespace AutoFix.Services
         }
     }
 }
-

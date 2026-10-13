@@ -42,6 +42,7 @@ namespace AutoFix.Models
         public string SnapshotDetailsJson { get; set; } = "[]";
 
         public ICollection<InvoicePayment> Payments { get; set; } = new List<InvoicePayment>();
+        public ICollection<InvoiceIdHistory> IdHistories { get; set; } = new List<InvoiceIdHistory>();
 
         // Soft delete
         public bool IsDeleted { get; set; } = false;
@@ -62,6 +63,24 @@ namespace AutoFix.Models
         public DateTime PaidAt { get; set; } = DateTime.UtcNow;
         public string? ReceivedByUserId { get; set; }
         public string? Notes { get; set; }
+
+        // Soft delete
+        public bool IsDeleted { get; set; } = false;
+        public DateTime? DeletedAt { get; set; }
+        public string? DeletedBy { get; set; }
+    }
+
+    public class InvoiceIdHistory : ISoftDeletable
+    {
+        public int Id { get; set; }
+        public int InvoiceId { get; set; }
+        public Invoice Invoice { get; set; } = null!;
+
+        public string OldInvoiceNumber { get; set; } = string.Empty;
+        public string NewInvoiceNumber { get; set; } = string.Empty;
+        public string ChangedBy { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
 
         // Soft delete
         public bool IsDeleted { get; set; } = false;

@@ -90,7 +90,16 @@ export const invoiceService = {
   getPrintHtml: (id: number) => 
     axiosClient.get<string>(`/invoices/${id}/print`, { responseType: 'text' as any }).then(r => r.data),
   
+  getPreviewHtml: (id: number) => 
+    axiosClient.get<string>(`/invoices/${id}/preview`, { responseType: 'text' as any }).then(r => r.data),
+
   getPrintUrl: (id: number) => `/api/invoices/${id}/print`,
+
+  updateInvoiceNumber: (id: number, newInvoiceNumber: string, reason?: string) =>
+    axiosClient.put<Invoice>(`/invoices/${id}/number`, { newInvoiceNumber, reason }).then(r => r.data),
+
+  updateInvoiceDate: (id: number, newIssuedAt: string, reason?: string) =>
+    axiosClient.put<Invoice>(`/invoices/${id}/date`, { newIssuedAt, reason }).then(r => r.data),
   
   delete: (id: number) => 
     axiosClient.delete(`/invoices/${id}`).then(r => r.data)

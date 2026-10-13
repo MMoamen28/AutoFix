@@ -14,17 +14,27 @@ import { useTranslation } from 'react-i18next';
 import WorkOrderLinesModal from '../../components/workorders/WorkOrderLinesModal';
 import serviceService from '../../services/serviceService';
 import { printWorkOrderInPlace, downloadWorkOrderDoc } from '../../utils/printHelper';
+import InvoicePreviewModal from '../../components/shared/InvoicePreviewModal';
 
 const WorkOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterWorkType, setFilterWorkType] = useState<string>('All');
   const [filterMechanicId, setFilterMechanicId] = useState<number>(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
   const [mechanics, setMechanics] = useState<any[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number>(0);
   const [customerCars, setCustomerCars] = useState<any[]>([]);
+
+  // Document Preview Modal State
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<number | undefined>(undefined);
+  const [previewInspectionId, setPreviewInspectionId] = useState<number | undefined>(undefined);
+  const [previewWorkOrderId, setPreviewWorkOrderId] = useState<number | undefined>(undefined);
+  const [previewWorkOrderInvoiceId, setPreviewWorkOrderInvoiceId] = useState<number | undefined>(undefined);
+  const [previewTitle, setPreviewTitle] = useState<string>('');
 
   // Assign Mechanics Modal state
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -54,6 +64,10 @@ const WorkOrdersPage: React.FC = () => {
     fuelLevel: 'Quarter',
     customerComplaint: '',
     inspectionNotes: '',
+    workType: 'Maintenance',
+    workDone: '',
+    workToBeDone: '',
+    notes: '',
     laborDescription: 'Mechanical Inspection & Labor',
     laborPrice: 300,
     partDescription: '',
@@ -141,6 +155,62 @@ const WorkOrdersPage: React.FC = () => {
     setSelectedWoForLines(updatedWo);
   };
 
+  const handleSmartPrint = async (wo: WorkOrder) => {
+    if (wo.workType === 'Inspection') {
+      try {
+        const res = await workOrderService.getOrCreateInspection(wo.id);
+        setPreviewInspectionId(res.inspectionId);
+        setPreviewInvoiceId(undefined);
+        setPreviewWorkOrderId(undefined);
+        setPreviewWorkOrderInvoiceId(undefined);
+        setPreviewTitle(`Inspection Report (تقرير فحص شامل) - ${res.reportNumber}`);
+        setPreviewModalOpen(true);
+      } catch (err) {
+        console.error('Failed to get or create inspection', err);
+        alert('Failed to load inspection report.');
+      }
+    } else {
+      setPreviewWorkOrderInvoiceId(wo.id);
+      setPreviewInvoiceId(undefined);
+      setPreviewInspectionId(undefined);
+      setPreviewWorkOrderId(undefined);
+      setPreviewTitle(`Invoice Preview (معاينة الفاتورة) - ${wo.orderNumber}`);
+      setPreviewModalOpen(true);
+    }
+  };
+
+  const handlePrintInspectionDirect = async (wo: WorkOrder) => {
+    try {
+      const res = await workOrderService.getOrCreateInspection(wo.id);
+      setPreviewInspectionId(res.inspectionId);
+      setPreviewInvoiceId(undefined);
+      setPreviewWorkOrderId(undefined);
+      setPreviewWorkOrderInvoiceId(undefined);
+      setPreviewTitle(`Inspection Report (تقرير فحص شامل) - ${res.reportNumber}`);
+      setPreviewModalOpen(true);
+    } catch (err) {
+      alert('Failed to load inspection report.');
+    }
+  };
+
+  const handlePrintWorkOrderDirect = (wo: WorkOrder) => {
+    setPreviewWorkOrderId(wo.id);
+    setPreviewInspectionId(undefined);
+    setPreviewInvoiceId(undefined);
+    setPreviewWorkOrderInvoiceId(undefined);
+    setPreviewTitle(`Work Order (أمر شغل) - ${wo.orderNumber}`);
+    setPreviewModalOpen(true);
+  };
+
+  const handlePrintInvoiceDirect = (wo: WorkOrder) => {
+    setPreviewWorkOrderInvoiceId(wo.id);
+    setPreviewInspectionId(undefined);
+    setPreviewInvoiceId(undefined);
+    setPreviewWorkOrderId(undefined);
+    setPreviewTitle(`Invoice Preview (معاينة الفاتورة) - ${wo.orderNumber}`);
+    setPreviewModalOpen(true);
+  };
+
   const handleCustomerChange = (custId: number) => {
     setSelectedCustomerId(custId);
     const found = customers.find(c => c.id === custId);
@@ -188,6 +258,10 @@ const WorkOrdersPage: React.FC = () => {
         fuelLevel: newOrder.fuelLevel,
         customerComplaint: newOrder.customerComplaint,
         inspectionNotes: newOrder.inspectionNotes,
+        workType: newOrder.workType,
+        workDone: newOrder.workDone,
+        workToBeDone: newOrder.workToBeDone,
+        notes: newOrder.notes,
         lines
       });
 
@@ -313,8 +387,8 @@ const WorkOrdersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
+      {/* Filter Tabs: Status */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
         {statuses.map(st => (
           <button
             key={st}
@@ -332,93 +406,160 @@ const WorkOrdersPage: React.FC = () => {
         ))}
       </div>
 
+      {/* Filter Tabs: Work Type */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-muted)' }}>Work Type (نوع الشغل):</span>
+        {['All', 'Maintenance', 'Inspection'].map(wt => (
+          <button
+            key={wt}
+            type="button"
+            onClick={() => setFilterWorkType(wt)}
+            style={{
+              padding: '6px 14px', borderRadius: '6px', fontWeight: 700, fontSize: '12px',
+              border: filterWorkType === wt ? '1px solid var(--accent)' : '1px solid var(--border)',
+              backgroundColor: filterWorkType === wt ? 'rgba(59, 130, 246, 0.2)' : 'var(--bg-card)',
+              color: filterWorkType === wt ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor: 'pointer'
+            }}
+          >
+            {wt === 'All' ? 'All Types (الكل)' : wt === 'Maintenance' ? 'Maintenance (صيانة)' : 'Inspection (فحص سيارة)'}
+          </button>
+        ))}
+      </div>
+
       {/* Orders List */}
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-          <RefreshCw className="animate-spin text-accent" size={36} />
-        </div>
-      ) : orders.length === 0 ? (
-        <div style={{ background: 'var(--bg-card)', padding: '40px', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          No work orders found in status "{filterStatus}".
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '16px' }}>
-          {orders.map(wo => (
-            <div key={wo.id} style={{
-              background: 'var(--bg-card)', borderRadius: '12px', padding: '20px',
-              border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
-            }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '16px', color: 'var(--text-primary)' }}>{wo.orderNumber}</span>
-                  <span style={{
-                    padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
-                    textTransform: 'uppercase',
-                    backgroundColor: wo.status === 'Completed' ? 'rgba(16, 185, 129, 0.15)' :
-                                     wo.status === 'InProgress' ? 'rgba(59, 130, 246, 0.15)' :
-                                     wo.status === 'Invoiced' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                    color: wo.status === 'Completed' ? '#10b981' :
-                           wo.status === 'InProgress' ? '#3b82f6' :
-                           wo.status === 'Invoiced' ? '#8b5cf6' : '#f59e0b'
-                  }}>
-                    {wo.status}
-                  </span>
-                </div>
+      {(() => {
+        const displayedOrders = orders.filter(wo => filterWorkType === 'All' || (wo.workType || 'Maintenance') === filterWorkType);
+        return loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
+            <RefreshCw className="animate-spin text-accent" size={36} />
+          </div>
+        ) : displayedOrders.length === 0 ? (
+          <div style={{ background: 'var(--bg-card)', padding: '40px', borderRadius: '12px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            No work orders found in status "{filterStatus}" with type "{filterWorkType}".
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '16px' }}>
+            {displayedOrders.map(wo => (
+              <div key={wo.id} style={{
+                background: 'var(--bg-card)', borderRadius: '12px', padding: '20px',
+                border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+              }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontWeight: 800, fontSize: '16px', color: 'var(--text-primary)' }}>{wo.orderNumber}</span>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700,
+                        backgroundColor: wo.workType === 'Inspection' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(14, 165, 233, 0.15)',
+                        color: wo.workType === 'Inspection' ? '#c084fc' : '#38bdf8',
+                        border: `1px solid ${wo.workType === 'Inspection' ? 'rgba(168, 85, 247, 0.4)' : 'rgba(14, 165, 233, 0.3)'}`
+                      }}>
+                        {wo.workType === 'Inspection' ? 'Inspection (فحص)' : 'Maintenance (صيانة)'}
+                      </span>
+                    </div>
+                    <span style={{
+                      padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700,
+                      textTransform: 'uppercase',
+                      backgroundColor: wo.status === 'Completed' ? 'rgba(16, 185, 129, 0.15)' :
+                                       wo.status === 'InProgress' ? 'rgba(59, 130, 246, 0.15)' :
+                                       wo.status === 'Invoiced' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                      color: wo.status === 'Completed' ? '#10b981' :
+                             wo.status === 'InProgress' ? '#3b82f6' :
+                             wo.status === 'Invoiced' ? '#8b5cf6' : '#f59e0b'
+                    }}>
+                      {wo.status}
+                    </span>
+                  </div>
 
-                <div style={{ fontSize: '14px', fontWeight: 700 }}>
-                  {wo.carMake} {wo.carModel} <span style={{ color: 'var(--accent)' }}>({wo.carPlate})</span>
-                </div>
-                <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Customer: {wo.customerName} ({wo.customerPhone})
-                </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700 }}>
+                    {wo.carMake} {wo.carModel} <span style={{ color: 'var(--accent)' }}>({wo.carPlate})</span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Customer: {wo.customerName} ({wo.customerPhone})
+                  </div>
 
-                {/* Mechanics Assignment Display */}
-                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '6px', margin: '8px 0', fontSize: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span><strong>Main Tech:</strong> {wo.assignedTechnicianName || 'Not Assigned'}</span>
-                    <span><strong>Helper:</strong> {wo.helperTechnicianName || 'None'}</span>
+                  {/* Mechanics Assignment Display */}
+                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '6px', margin: '8px 0', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span><strong>Main Tech:</strong> {wo.assignedTechnicianName || 'Not Assigned'}</span>
+                      <span><strong>Helper:</strong> {wo.helperTechnicianName || 'None'}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Odometer: <strong>{wo.odometerInKm?.toLocaleString()} KM</strong> | Fuel: {wo.fuelLevel}
+                  </div>
+                  <div style={{ fontSize: '13px', marginTop: '8px', padding: '8px', background: 'rgba(0,0,0,0.15)', borderRadius: '6px' }}>
+                    <strong>Complaint:</strong> {wo.customerComplaint || 'N/A'}
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '13px', fontWeight: 700 }}>
+                    <span>{t('workOrders.workmanshipSection')}: <Money value={wo.totalWorkmanship ?? wo.totalLabor} /></span>
+                    <span>{t('workOrders.partsSubtotal')}: <Money value={wo.totalParts} /></span>
+                    <span style={{ color: '#10b981' }}>{t('workOrders.grandTotal')}: <Money value={wo.totalAmount} style={{ color: '#10b981' }} /></span>
                   </div>
                 </div>
 
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Odometer: <strong>{wo.odometerInKm?.toLocaleString()} KM</strong> | Fuel: {wo.fuelLevel}
-                </div>
-                <div style={{ fontSize: '13px', marginTop: '8px', padding: '8px', background: 'rgba(0,0,0,0.15)', borderRadius: '6px' }}>
-                  <strong>Complaint:</strong> {wo.customerComplaint || 'N/A'}
-                </div>
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button 
+                    onClick={() => setSelectedWoForLines(wo)}
+                    style={actionBtnStyle('#10b981')}
+                    title="Manage Workmanship & Lines"
+                  >
+                    <Wrench size={13} style={{ marginRight: '4px' }} /> {t('workOrders.workmanshipSection')}
+                  </button>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', fontSize: '13px', fontWeight: 700 }}>
-                  <span>{t('workOrders.workmanshipSection')}: <Money value={wo.totalWorkmanship ?? wo.totalLabor} /></span>
-                  <span>{t('workOrders.partsSubtotal')}: <Money value={wo.totalParts} /></span>
-                  <span style={{ color: '#10b981' }}>{t('workOrders.grandTotal')}: <Money value={wo.totalAmount} style={{ color: '#10b981' }} /></span>
-                </div>
-              </div>
+                  {/* Smart Print Button */}
+                  <button 
+                    onClick={() => handleSmartPrint(wo)}
+                    style={actionBtnStyle('var(--accent)')}
+                    title={wo.workType === 'Inspection' ? "Open 3-page inspection report preview" : "Open invoice preview"}
+                  >
+                    <Printer size={13} style={{ marginRight: '4px' }} />
+                    {wo.workType === 'Inspection' ? 'Print Report' : 'Print Invoice'}
+                  </button>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
-                <button 
-                  onClick={() => setSelectedWoForLines(wo)}
-                  style={actionBtnStyle('#10b981')}
-                  title="Manage Workmanship & Lines"
-                >
-                  <Wrench size={13} style={{ marginRight: '4px' }} /> {t('workOrders.workmanshipSection')}
-                </button>
+                  {/* Secondary Print Actions Dropdown */}
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'invoice') {
+                        handlePrintInvoiceDirect(wo);
+                      } else if (val === 'inspection') {
+                        handlePrintInspectionDirect(wo);
+                      } else if (val === 'workOrder') {
+                        handlePrintWorkOrderDirect(wo);
+                      }
+                      e.target.value = '';
+                    }}
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border)',
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                    title="Also print: Invoice / Inspection report / Work order"
+                  >
+                    <option value="" disabled>Also print...</option>
+                    <option value="invoice">Also print: Invoice</option>
+                    <option value="inspection">Also print: Inspection Report</option>
+                    <option value="workOrder">Also print: Work Order</option>
+                  </select>
 
-                <button 
-                  onClick={() => handlePrint(wo.id)}
-                  style={actionBtnStyle('#64748b')}
-                  title="Print Work Order"
-                >
-                  <Printer size={13} style={{ marginRight: '4px' }} /> Print
-                </button>
-
-                <button 
-                  onClick={() => handleOpenAssignModal(wo)}
-                  style={actionBtnStyle('#0284c7')}
-                  title="Assign Mechanics"
-                >
-                  <UserCheck size={13} style={{ marginRight: '4px' }} /> Assign
-                </button>
+                  <button 
+                    onClick={() => handleOpenAssignModal(wo)}
+                    style={actionBtnStyle('#0284c7')}
+                    title="Assign Mechanics"
+                  >
+                    <UserCheck size={13} style={{ marginRight: '4px' }} /> Assign
+                  </button>
 
                 {wo.status === 'Pending' && !wo.assignedTechnicianId && (
                   <button 
@@ -530,8 +671,9 @@ const WorkOrdersPage: React.FC = () => {
               </div>
             </div>
           ))}
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {/* Modal: Assign Mechanics */}
       {assignModalOpen && selectedWoForAssign && (
@@ -734,6 +876,18 @@ const WorkOrdersPage: React.FC = () => {
                 </select>
               </div>
 
+              <div>
+                <label style={labelStyle}>Work Type (نوع الشغل):</label>
+                <select 
+                  style={{ ...inputStyle, fontWeight: 700 }}
+                  value={newOrder.workType}
+                  onChange={e => setNewOrder({ ...newOrder, workType: e.target.value })}
+                >
+                  <option value="Maintenance">Maintenance (صيانة)</option>
+                  <option value="Inspection">Inspection (فحص سيارة)</option>
+                </select>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={labelStyle}>Main Mechanic (الفني الرئيسي):</label>
@@ -799,6 +953,37 @@ const WorkOrdersPage: React.FC = () => {
                 />
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={labelStyle}>Work Done (ما تم تنفيذه):</label>
+                  <input 
+                    type="text" style={inputStyle} 
+                    value={newOrder.workDone}
+                    onChange={e => setNewOrder({ ...newOrder, workDone: e.target.value })}
+                    placeholder="e.g. Changed oil, replaced front brake pads"
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Work To Be Done (ما سيتم تنفيذه):</label>
+                  <input 
+                    type="text" style={inputStyle} 
+                    value={newOrder.workToBeDone}
+                    onChange={e => setNewOrder({ ...newOrder, workToBeDone: e.target.value })}
+                    placeholder="e.g. Schedule timing belt replacement"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>Notes (ملاحظات):</label>
+                <input 
+                  type="text" style={inputStyle} 
+                  value={newOrder.notes}
+                  onChange={e => setNewOrder({ ...newOrder, notes: e.target.value })}
+                  placeholder="Additional workshop notes..."
+                />
+              </div>
+
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
                 <span style={{ fontWeight: 700, fontSize: '13px' }}>Estimated Labor & Parts:</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
@@ -857,6 +1042,16 @@ const WorkOrdersPage: React.FC = () => {
           services={services}
         />
       )}
+      {/* Modal: Document Preview (Invoice / Inspection / Work Order) */}
+      <InvoicePreviewModal
+        isOpen={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        invoiceId={previewInvoiceId}
+        inspectionId={previewInspectionId}
+        workOrderId={previewWorkOrderId}
+        workOrderInvoicePreviewId={previewWorkOrderInvoiceId}
+        title={previewTitle}
+      />
     </div>
   );
 };

@@ -86,6 +86,10 @@ namespace AutoFix.Services
                 CustomerComplaint = w.CustomerComplaint,
                 InspectionNotes = w.InspectionNotes,
                 Status = w.Status,
+                WorkType = string.IsNullOrWhiteSpace(w.WorkType) ? "Maintenance" : w.WorkType,
+                WorkDone = w.WorkDone ?? string.Empty,
+                WorkToBeDone = w.WorkToBeDone ?? string.Empty,
+                Notes = w.Notes ?? string.Empty,
                 TotalLabor = w.TotalLabor,
                 TotalParts = w.TotalParts,
                 TotalWorkmanship = workmanshipTotal,
@@ -194,6 +198,10 @@ namespace AutoFix.Services
                 FuelLevel = dto.FuelLevel,
                 CustomerComplaint = dto.CustomerComplaint.Trim(),
                 InspectionNotes = dto.InspectionNotes?.Trim() ?? string.Empty,
+                WorkType = string.IsNullOrWhiteSpace(dto.WorkType) ? "Maintenance" : dto.WorkType,
+                WorkDone = dto.WorkDone?.Trim() ?? string.Empty,
+                WorkToBeDone = dto.WorkToBeDone?.Trim() ?? string.Empty,
+                Notes = dto.Notes?.Trim() ?? string.Empty,
                 Status = "Pending",
                 ReceivedAt = DateTime.UtcNow,
                 ExpectedDeliveryAt = dto.ExpectedDeliveryAt
@@ -342,6 +350,27 @@ namespace AutoFix.Services
             workOrder.CustomerComplaint = dto.CustomerComplaint.Trim();
             workOrder.InspectionNotes = dto.InspectionNotes?.Trim() ?? string.Empty;
             workOrder.ExpectedDeliveryAt = dto.ExpectedDeliveryAt;
+
+            if (!string.IsNullOrWhiteSpace(dto.WorkType) && dto.WorkType != workOrder.WorkType)
+            {
+                if (workOrder.Status == "Invoiced")
+                {
+                    throw new InvalidOperationException("Cannot change work type after the work order has been invoiced.");
+                }
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "ChangeWorkType",
+                    EntityName = "WorkOrder",
+                    EntityId = workOrder.OrderNumber,
+                    Details = $"WorkType changed from '{workOrder.WorkType}' to '{dto.WorkType}'",
+                    Timestamp = DateTime.UtcNow
+                });
+                workOrder.WorkType = dto.WorkType;
+            }
+
+            if (dto.WorkDone != null) workOrder.WorkDone = dto.WorkDone.Trim();
+            if (dto.WorkToBeDone != null) workOrder.WorkToBeDone = dto.WorkToBeDone.Trim();
+            if (dto.Notes != null) workOrder.Notes = dto.Notes.Trim();
 
             if (dto.Lines.Count > 0)
             {
@@ -844,7 +873,7 @@ namespace AutoFix.Services
                 throw new InvalidOperationException($"WorkOrder must be in 'Completed' or 'Delivered' status to convert to Invoice. Current status: '{workOrder.Status}'.");
             }
 
-            var nextInvNum = $"INV-{DateTime.UtcNow:yyyyMM}-{(await _db.Invoices.CountAsync() + 1):D4}";
+            var nextInvNum = await InvoiceService.GenerateUniqueInvoiceNumberStaticAsync(_db);
 
             // Freeze line items snapshot JSON
             var snapshotItems = workOrder.Lines.Where(l => !l.IsDeleted).Select(l => new

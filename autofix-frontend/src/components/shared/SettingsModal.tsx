@@ -25,6 +25,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [labelAr, setLabelAr] = useState(getCurrencyLabel('ar'));
   const [digitMode, setDigitModeState] = useState<'western' | 'arabic-indic'>(getDigitMode());
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [logoKey, setLogoKey] = useState<number>(Date.now());
+  const [watermarkKey, setWatermarkKey] = useState<number>(Date.now());
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/settings/logo', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData
+      });
+      setLogoKey(Date.now());
+    } catch (err) {
+      console.error('Failed to upload logo', err);
+    }
+  };
+
+  const handleWatermarkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/settings/watermark', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData
+      });
+      setWatermarkKey(Date.now());
+    } catch (err) {
+      console.error('Failed to upload watermark', err);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -132,6 +170,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               />
               <span>Arabic-Indic Digits (٠١٢٣)</span>
             </label>
+          </div>
+        </div>
+
+        {/* Logo and Watermark Section */}
+        <div>
+          <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary, #3b82f6)', margin: '0 0 10px 0' }}>
+            {t('settings.brandingSection', 'Invoice Logo & Watermark (الشعار والعلامة المائية)')}
+          </h4>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)', margin: '0 0 14px 0' }}>
+            {t('settings.brandingDesc', 'Upload custom workshop logo and watermark for invoices and reports without code modifications.')}
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div style={{ background: 'var(--bg-secondary, #1e293b)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border, #334155)' }}>
+              <label style={labelStyle}>Workshop Logo (شعار المركز)</label>
+              <div style={{ height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', borderRadius: '6px', marginBottom: '8px', overflow: 'hidden' }}>
+                <img src={`/api/settings/logo?t=${logoKey}`} alt="Logo" style={{ maxHeight: '60px', maxWidth: '100%', objectFit: 'contain' }} />
+              </div>
+              <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ fontSize: '11px', width: '100%', color: '#94a3b8' }} />
+            </div>
+
+            <div style={{ background: 'var(--bg-secondary, #1e293b)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border, #334155)' }}>
+              <label style={labelStyle}>Invoice Watermark (العلامة المائية)</label>
+              <div style={{ height: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', borderRadius: '6px', marginBottom: '8px', overflow: 'hidden' }}>
+                <img src={`/api/settings/watermark?t=${watermarkKey}`} alt="Watermark" style={{ maxHeight: '60px', maxWidth: '100%', objectFit: 'contain', opacity: 0.6 }} />
+              </div>
+              <input type="file" accept="image/*" onChange={handleWatermarkUpload} style={{ fontSize: '11px', width: '100%', color: '#94a3b8' }} />
+            </div>
           </div>
         </div>
 
