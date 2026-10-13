@@ -1,6 +1,7 @@
 using AutoFix.Data;
 using AutoFix.DTOs.Invoice;
 using AutoFix.DTOs.WorkOrder;
+using AutoFix.Helpers;
 using AutoFix.Models;
 using AutoFix.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -179,6 +180,31 @@ namespace AutoFix.Services
             return workOrder == null ? null : MapToDto(workOrder, isCustomer);
         }
 
+        private async Task<string> GenerateNextWorkOrderNumberAsync()
+        {
+            var cairoNow = InvoiceService.GetCairoNow();
+            var prefix = $"WO-{cairoNow:yyyyMM}-";
+            var existingNumbers = await _db.WorkOrders
+                .IgnoreQueryFilters()
+                .Where(w => w.OrderNumber.StartsWith(prefix))
+                .Select(w => w.OrderNumber)
+                .ToListAsync();
+
+            int maxSeq = 0;
+            foreach (var num in existingNumbers)
+            {
+                if (num != null && num.Length > prefix.Length)
+                {
+                    var suffix = num.Substring(prefix.Length);
+                    if (int.TryParse(suffix, out int parsed) && parsed > maxSeq)
+                    {
+                        maxSeq = parsed;
+                    }
+                }
+            }
+            return $"{prefix}{(maxSeq + 1):D4}";
+        }
+
         public async Task<WorkOrderResponseDto> CreateAsync(CreateWorkOrderDto dto)
         {
             // Verify Customer and Car exist
@@ -188,11 +214,9 @@ namespace AutoFix.Services
             var car = await _db.Cars.FindAsync(dto.CarId);
             if (car == null) throw new InvalidOperationException($"Car {dto.CarId} not found.");
 
-            var nextOrderNumber = $"WO-{DateTime.UtcNow:yyyyMM}-{(await _db.WorkOrders.CountAsync() + 1):D4}";
-
             var workOrder = new WorkOrder
             {
-                OrderNumber = nextOrderNumber,
+                OrderNumber = string.Empty,
                 CustomerId = dto.CustomerId,
                 CarId = dto.CarId,
                 AssignedTechnicianId = dto.AssignedTechnicianId,
@@ -300,7 +324,20 @@ namespace AutoFix.Services
                 car.CurrentOdometerKm = dto.OdometerInKm;
             }
 
-            await _db.SaveChangesAsync();
+            const int maxRetries = 5;
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                workOrder.OrderNumber = await GenerateNextWorkOrderNumberAsync();
+                try
+                {
+                    await _db.SaveChangesAsync();
+                    break;
+                }
+                catch (DbUpdateException ex) when (attempt < maxRetries && (ex.InnerException?.Message.Contains("UNIQUE") == true || ex.Message.Contains("UNIQUE")))
+                {
+                    continue;
+                }
+            }
             return (await GetByIdAsync(workOrder.Id))!;
         }
 
@@ -1006,10 +1043,22 @@ namespace AutoFix.Services
                     if (string.IsNullOrWhiteSpace(dto.CustomerPhone))
                         throw new InvalidOperationException("Customer phone is required.");
 
+                    var cleanPhone = ArabicSearchNormalizer.NormalizeDigits(dto.CustomerPhone.Trim());
+                    if (!dto.AllowDuplicatePhone)
+                    {
+                        var existingCust = await _db.Customers.AsNoTracking()
+                            .FirstOrDefaultAsync(c => !c.IsDeleted && (c.Phone == cleanPhone || c.ExtraPhone == cleanPhone));
+                        if (existingCust != null)
+                        {
+                            throw new InvalidOperationException(
+                                $"DuplicatePhoneWarning: Customer with phone '{dto.CustomerPhone}' already exists ({existingCust.FullName}, ID: {existingCust.Id}).");
+                        }
+                    }
+
                     customer = new Customer
                     {
                         FullName = dto.CustomerName.Trim(),
-                        Phone = dto.CustomerPhone.Trim(),
+                        Phone = cleanPhone,
                         Notes = dto.CustomerNotes?.Trim() ?? string.Empty,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -1024,9 +1073,25 @@ namespace AutoFix.Services
                     car = await _db.Cars.FindAsync(dto.CarId.Value)
                         ?? throw new KeyNotFoundException($"Car {dto.CarId.Value} not found.");
 
-                    if (dto.OdometerInKm.HasValue && dto.OdometerInKm.Value > 0)
+                    var oldKm = car.CurrentOdometerKm;
+                    var newKm = dto.OdometerInKm ?? 0;
+                    if (newKm > 0 && newKm < oldKm && !dto.AllowLowerOdometer)
                     {
-                        car.CurrentOdometerKm = dto.OdometerInKm.Value;
+                        throw new InvalidOperationException(
+                            $"LowerOdometerWarning: New reading ({newKm} km) is lower than previous reading ({oldKm} km). Confirmation required.");
+                    }
+
+                    if (newKm > 0 && newKm != oldKm)
+                    {
+                        _db.CarOdometerLogs.Add(new CarOdometerLog
+                        {
+                            CarId = car.Id,
+                            OdometerKm = newKm,
+                            Source = "WorkOrderBundle",
+                            Notes = "Odometer recorded at Reception bundle",
+                            IsLowerReadingWarning = newKm < oldKm
+                        });
+                        car.CurrentOdometerKm = newKm;
                     }
                 }
                 else
@@ -1038,29 +1103,56 @@ namespace AutoFix.Services
                     if (string.IsNullOrWhiteSpace(dto.LicensePlate))
                         throw new InvalidOperationException("Car license plate is required.");
 
+                    var cleanPlate = ArabicSearchNormalizer.NormalizeDigits(dto.LicensePlate.Trim());
+                    var cleanVin = !string.IsNullOrWhiteSpace(dto.VIN) ? dto.VIN.Trim().ToUpperInvariant() : null;
+
+                    if (!dto.AllowDuplicateCar)
+                    {
+                        var existingCar = await _db.Cars.AsNoTracking()
+                            .Include(c => c.Customer)
+                            .FirstOrDefaultAsync(c => !c.IsDeleted && (
+                                c.LicensePlate == cleanPlate || 
+                                (!string.IsNullOrEmpty(cleanVin) && !string.IsNullOrEmpty(c.VIN) && c.VIN == cleanVin)
+                            ));
+
+                        if (existingCar != null)
+                        {
+                            var matchReason = existingCar.LicensePlate == cleanPlate ? $"plate '{cleanPlate}'" : $"VIN '{cleanVin}'";
+                            throw new InvalidOperationException(
+                                $"DuplicateCarWarning: Car with {matchReason} already exists (Car ID: {existingCar.Id}, Owner: {existingCar.Customer?.FullName ?? "Unknown"}).");
+                        }
+                    }
+
                     car = new Car
                     {
                         CustomerId = customer.Id,
                         Make = dto.Make.Trim(),
                         Model = dto.Model.Trim(),
                         Year = dto.Year > 1900 ? dto.Year : DateTime.UtcNow.Year,
-                        LicensePlate = dto.LicensePlate.Trim(),
-                        VIN = dto.VIN?.Trim() ?? string.Empty,
+                        LicensePlate = cleanPlate,
+                        VIN = cleanVin ?? string.Empty,
                         CurrentOdometerKm = dto.OdometerInKm ?? 0
                     };
                     _db.Cars.Add(car);
                     await _db.SaveChangesAsync();
+
+                    if (car.CurrentOdometerKm > 0)
+                    {
+                        _db.CarOdometerLogs.Add(new CarOdometerLog
+                        {
+                            CarId = car.Id,
+                            OdometerKm = car.CurrentOdometerKm,
+                            Source = "Initial",
+                            Notes = "Initial odometer at bundle registration"
+                        });
+                        await _db.SaveChangesAsync();
+                    }
                 }
 
                 // 3. Work Order
-                var cairoNow = InvoiceService.GetCairoNow();
-                var prefix = $"WO-{cairoNow:yyyyMM}-";
-                var existingCount = await _db.WorkOrders.IgnoreQueryFilters().Where(w => w.OrderNumber.StartsWith(prefix)).CountAsync();
-                var nextOrderNumber = $"{prefix}{(existingCount + 1):D4}";
-
                 var workOrder = new WorkOrder
                 {
-                    OrderNumber = nextOrderNumber,
+                    OrderNumber = string.Empty,
                     CustomerId = customer.Id,
                     CarId = car.Id,
                     WorkType = string.IsNullOrWhiteSpace(dto.WorkType) ? "Maintenance" : dto.WorkType.Trim(),
@@ -1074,7 +1166,21 @@ namespace AutoFix.Services
                     ReceivedAt = DateTime.UtcNow
                 };
                 _db.WorkOrders.Add(workOrder);
-                await _db.SaveChangesAsync();
+
+                const int maxRetries = 5;
+                for (int attempt = 1; attempt <= maxRetries; attempt++)
+                {
+                    workOrder.OrderNumber = await GenerateNextWorkOrderNumberAsync();
+                    try
+                    {
+                        await _db.SaveChangesAsync();
+                        break;
+                    }
+                    catch (DbUpdateException ex) when (attempt < maxRetries && (ex.InnerException?.Message.Contains("UNIQUE") == true || ex.Message.Contains("UNIQUE")))
+                    {
+                        continue;
+                    }
+                }
 
                 // 4. Lines
                 if (dto.Lines != null && dto.Lines.Count > 0)
@@ -1209,8 +1315,12 @@ namespace AutoFix.Services
 
         private async Task SyncWorkOrderToActiveInvoiceAsync(WorkOrder workOrder)
         {
-            var invoice = await _db.Invoices.FirstOrDefaultAsync(i => i.WorkOrderId == workOrder.Id && !i.IsDeleted && i.Status != "Credited");
-            if (invoice != null && invoice.Status != "Paid")
+            var invoice = await _db.Invoices
+                .Include(i => i.Payments)
+                .FirstOrDefaultAsync(i => i.WorkOrderId == workOrder.Id && !i.IsDeleted && i.Status != "Credited");
+
+            // Restrict strictly to draft invoices only, with zero payments made
+            if (invoice != null && invoice.Status == "Draft" && invoice.PaidAmount == 0 && (invoice.Payments == null || !invoice.Payments.Any(p => !p.IsDeleted)))
             {
                 invoice.Subtotal = workOrder.TotalAmount;
                 var settings = Settings != null ? await Settings.GetSettingsAsync() : new AutoFix.DTOs.Settings.WorkshopSettingsDto();

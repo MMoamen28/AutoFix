@@ -29,5 +29,10 @@ namespace AutoFix.DTOs.WorkOrder
 
         // Requested Services & Parts Lines
         public List<CreateWorkOrderLineDto> Lines { get; set; } = new();
+
+        // Confirmation flags for warnings
+        public bool AllowLowerOdometer { get; set; } = false;
+        public bool AllowDuplicatePhone { get; set; } = false;
+        public bool AllowDuplicateCar { get; set; } = false;
     }
 }

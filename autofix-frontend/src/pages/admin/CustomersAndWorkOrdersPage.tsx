@@ -346,7 +346,7 @@ export const CustomersAndWorkOrdersPage: React.FC = () => {
     }
 
     setSubmitting(true);
-    try {
+    const sendBundle = async (overrides: { allowLowerOdometer?: boolean; allowDuplicatePhone?: boolean; allowDuplicateCar?: boolean } = {}) => {
       const payload = {
         customerId: formData.isNewCustomer ? null : formData.selectedCustomerId,
         customerName: formData.isNewCustomer ? formData.customerName.trim() : null,
@@ -368,6 +368,10 @@ export const CustomersAndWorkOrdersPage: React.FC = () => {
         workToBeDone: formData.workToBeDone.trim(),
         assignedTechnicianId: formData.assignedTechnicianId > 0 ? Number(formData.assignedTechnicianId) : null,
 
+        allowLowerOdometer: overrides.allowLowerOdometer ?? false,
+        allowDuplicatePhone: overrides.allowDuplicatePhone ?? false,
+        allowDuplicateCar: overrides.allowDuplicateCar ?? false,
+
         lines: formData.lines.map(l => ({
           lineType: l.lineType,
           description: l.description,
@@ -379,36 +383,64 @@ export const CustomersAndWorkOrdersPage: React.FC = () => {
         }))
       };
 
-      const res = await api.post('/work-orders/bundle', payload);
-      const createdOrder = res.data;
+      try {
+        const res = await api.post('/work-orders/bundle', payload);
+        const createdOrder = res.data;
 
-      // Clear draft & reset form
-      await clearDraft();
-      setFormData(initialFormState);
+        // Clear draft & reset form
+        await clearDraft();
+        setFormData(initialFormState);
 
-      // Reload lists
-      await loadData();
+        // Reload lists
+        await loadData();
 
-      // Offer immediate preview / print modal
-      if (createdOrder && createdOrder.id) {
-        if (formData.workType === 'Inspection') {
-          setPreviewInspectionId(undefined);
-          setPreviewWorkOrderId(createdOrder.id);
-          setPreviewWorkOrderInvoiceId(undefined);
-          setPreviewInvoiceId(undefined);
-          setPreviewTitle(`فحص سيارة شامل - ${createdOrder.orderNumber}`);
-        } else {
-          setPreviewWorkOrderInvoiceId(createdOrder.id);
-          setPreviewWorkOrderId(undefined);
-          setPreviewInspectionId(undefined);
-          setPreviewInvoiceId(undefined);
-          setPreviewTitle(`فاتورة صيانة - ${createdOrder.orderNumber}`);
+        // Offer immediate preview / print modal
+        if (createdOrder && createdOrder.id) {
+          if (formData.workType === 'Inspection') {
+            setPreviewInspectionId(undefined);
+            setPreviewWorkOrderId(createdOrder.id);
+            setPreviewWorkOrderInvoiceId(undefined);
+            setPreviewInvoiceId(undefined);
+            setPreviewTitle(`فحص سيارة شامل - ${createdOrder.orderNumber}`);
+          } else {
+            setPreviewWorkOrderInvoiceId(createdOrder.id);
+            setPreviewWorkOrderId(undefined);
+            setPreviewInspectionId(undefined);
+            setPreviewInvoiceId(undefined);
+            setPreviewTitle(`فاتورة صيانة - ${createdOrder.orderNumber}`);
+          }
+          setPreviewModalOpen(true);
         }
-        setPreviewModalOpen(true);
+      } catch (err: any) {
+        if (err.response?.status === 409) {
+          const data = err.response.data;
+          if (data?.isLowerOdometerWarning) {
+            const confirmLower = window.confirm(
+              (data.message || '') + 
+              (isArabic ? '\n\nهل تريد تأكيد قراءة العداد ومتابعة الحفظ؟' : '\n\nDo you want to confirm this odometer reading and proceed?')
+            );
+            if (confirmLower) {
+              await sendBundle({ ...overrides, allowLowerOdometer: true });
+              return;
+            }
+          } else if (data?.isDuplicateWarning) {
+            const confirmDup = window.confirm(
+              (data.message || '') + 
+              (isArabic ? '\n\nهل تريد المتابعة رغم وجود تشابه/تكرار؟' : '\n\nDo you want to proceed despite this duplicate warning?')
+            );
+            if (confirmDup) {
+              await sendBundle({ ...overrides, allowDuplicatePhone: true, allowDuplicateCar: true });
+              return;
+            }
+          }
+        }
+        console.error('Bundle creation failed:', err);
+        setFormError(err.response?.data?.message || (isArabic ? 'فشل حفظ أمر الشغل والبيانات' : 'Failed to create work order bundle'));
       }
-    } catch (err: any) {
-      console.error('Bundle creation failed:', err);
-      setFormError(err.response?.data?.message || (isArabic ? 'فشل حفظ أمر الشغل والبيانات' : 'Failed to create work order bundle'));
+    };
+
+    try {
+      await sendBundle();
     } finally {
       setSubmitting(false);
     }

@@ -203,6 +203,11 @@ namespace AutoFix.Data
                 .HasIndex(i => i.InvoiceNumber)
                 .IsUnique();
 
+            // 14b. Unique index on WorkOrder.OrderNumber (system-wide uniqueness)
+            modelBuilder.Entity<WorkOrder>()
+                .HasIndex(w => w.OrderNumber)
+                .IsUnique();
+
             // 15. InvoiceIdHistory configuration
             modelBuilder.Entity<InvoiceIdHistory>()
                 .HasOne(h => h.Invoice)

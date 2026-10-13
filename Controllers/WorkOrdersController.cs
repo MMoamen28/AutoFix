@@ -93,6 +93,14 @@ namespace AutoFix.Controllers
                 var created = await _service.CreateBundleAsync(dto, userName);
                 return Ok(created);
             }
+            catch (InvalidOperationException ex) when (ex.Message.StartsWith("LowerOdometerWarning"))
+            {
+                return Conflict(new { message = ex.Message, isLowerOdometerWarning = true });
+            }
+            catch (InvalidOperationException ex) when (ex.Message.StartsWith("DuplicatePhoneWarning") || ex.Message.StartsWith("DuplicateCarWarning"))
+            {
+                return Conflict(new { message = ex.Message, isDuplicateWarning = true });
+            }
             catch (Exception ex)
             {
                 return BadRequest(new { message = ex.Message });
