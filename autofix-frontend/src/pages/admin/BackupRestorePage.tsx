@@ -24,10 +24,14 @@ export const BackupRestorePage: React.FC = () => {
   const [verifying, setVerifying] = useState(false);
   const [integrityResult, setIntegrityResult] = useState<string | null>(null);
 
-  // Safe restore modal state
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [targetBackupFile, setTargetBackupFile] = useState<string>('');
   const [restoreConfirmText, setRestoreConfirmText] = useState('');
+  const [secondConfirmText, setSecondConfirmText] = useState('');
+  const [liveStats, setLiveStats] = useState<{ customersCount: number; workOrdersCount: number; invoicesCount: number; totalRecords: number } | null>(null);
+  const [backupStats, setBackupStats] = useState<{ customersCount: number; workOrdersCount: number; invoicesCount: number; totalRecords: number } | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState<string>('');
   const [restoreError, setRestoreError] = useState<string>('');
@@ -136,29 +140,57 @@ export const BackupRestorePage: React.FC = () => {
   const handleOpenRestore = (fileName: string) => {
     setTargetBackupFile(fileName);
     setRestoreConfirmText('');
+    setSecondConfirmText('');
     setRestoreProgress('');
     setRestoreError('');
     setRestoreSuccess('');
+    setLiveStats(null);
+    setBackupStats(null);
+    setLoadingStats(true);
     
     triggerSensitiveAction(() => {
       setRestoreModalOpen(true);
+      Promise.all([
+        axiosClient.get('/backup/stats'),
+        axiosClient.get(`/backup/stats?fileName=${encodeURIComponent(fileName)}`)
+      ]).then(([liveRes, backupRes]) => {
+        setLiveStats(liveRes.data);
+        setBackupStats(backupRes.data);
+      }).catch(err => {
+        console.error('Failed to load stats', err);
+      }).finally(() => {
+        setLoadingStats(false);
+      });
     });
   };
 
   const handleConfirmRestore = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (restoreConfirmText.trim() !== 'استعادة') {
-      setRestoreError('يرجى كتابة كلمة "استعادة" للتأكيد');
+    if (isSubmitting || restoring) return;
+
+    if (restoreConfirmText.trim() !== 'RESTORE') {
+      setRestoreError('يرجى كتابة كلمة "RESTORE" بأحرف كبيرة للتأكيد');
       return;
     }
 
+    const hasFewer = !!(backupStats && liveStats && backupStats.totalRecords < liveStats.totalRecords);
+    if (hasFewer && secondConfirmText.trim() !== 'CONFIRM') {
+      setRestoreError('النسخة الاحتياطية تحتوي على سجلات أقل من الحالي! اكتب "CONFIRM" للتأكيد الإضافي.');
+      return;
+    }
+
+    setIsSubmitting(true);
     setRestoring(true);
     setRestoreProgress('جاري أخذ نسخة أمان احتياطية قبل الاستعادة...');
     setRestoreError('');
 
     try {
       setRestoreProgress('جاري استبدال البيانات والتحقق من السلامة...');
-      const res = await axiosClient.post('/backup/restore', { fileName: targetBackupFile });
+      await axiosClient.post('/backup/restore', { 
+        fileName: targetBackupFile,
+        confirmationText: 'RESTORE',
+        confirmFewerRecords: hasFewer
+      });
       setRestoreProgress('تمت الاستعادة بنجاح والتحقق من سلامة قاعدة البيانات ✓');
       setRestoreSuccess('تمت استعادة البيانات بنجاح! يُنصح بإعادة تشغيل البرنامج.');
       await loadData();
@@ -166,6 +198,7 @@ export const BackupRestorePage: React.FC = () => {
       setRestoreError(err.response?.data?.message || 'فشلت الاستعادة. تم إيقاف العملية للحفاظ على البيانات الحالية.');
     } finally {
       setRestoring(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -572,22 +605,80 @@ export const BackupRestorePage: React.FC = () => {
 
             <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '12px', fontSize: '12px', color: '#fca5a5', lineHeight: 1.6, marginBottom: '16px' }}>
               <strong>تنبيه هام جداً:</strong> أنت على وشك استعادة البيانات من النسخة: <strong style={{ direction: 'ltr', display: 'inline-block' }}>{targetBackupFile}</strong>.
-              <br />
-              • سيتم أخذ نسخة أمان احتياطية كاملة لحالتك الحالية فوراً.
-              <br />
-              • سيتم التحقق من سلامة النسخة المستعادة قبل اعتمادها.
             </div>
+
+            {loadingStats ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                جاري قراءة إحصائيات السجلات ومقارنة النسخة بقاعدة البيانات الحالية...
+              </div>
+            ) : (
+              <div style={{ marginBottom: '16px', backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', marginBottom: '8px' }}>
+                  مقارنة السجلات الحية مع النسخة المراد استعادتها:
+                </div>
+                <table style={{ width: '100%', fontSize: '12px', textAlign: 'right', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8' }}>
+                      <th style={{ padding: '6px' }}>النوع</th>
+                      <th style={{ padding: '6px', textAlign: 'center' }}>الحالي (Live)</th>
+                      <th style={{ padding: '6px', textAlign: 'center' }}>النسخة (Backup)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.5)', color: '#f8fafc' }}>
+                      <td style={{ padding: '6px' }}>العملاء (Customers)</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700 }}>{liveStats?.customersCount ?? 0}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700 }}>{backupStats?.customersCount ?? 0}</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.5)', color: '#f8fafc' }}>
+                      <td style={{ padding: '6px' }}>أوامر الشغل (WorkOrders)</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700 }}>{liveStats?.workOrdersCount ?? 0}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700 }}>{backupStats?.workOrdersCount ?? 0}</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid rgba(51, 65, 85, 0.5)', color: '#f8fafc' }}>
+                      <td style={{ padding: '6px' }}>الفواتير (Invoices)</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700 }}>{liveStats?.invoicesCount ?? 0}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700 }}>{backupStats?.invoicesCount ?? 0}</td>
+                    </tr>
+                    <tr style={{ color: '#38bdf8', fontWeight: 800 }}>
+                      <td style={{ padding: '6px' }}>إجمالي السجلات الأساسية</td>
+                      <td style={{ padding: '6px', textAlign: 'center' }}>{liveStats?.totalRecords ?? 0}</td>
+                      <td style={{ padding: '6px', textAlign: 'center' }}>{backupStats?.totalRecords ?? 0}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {backupStats && liveStats && backupStats.totalRecords < liveStats.totalRecords && (
+              <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', borderRadius: '8px', padding: '10px', fontSize: '12px', color: '#fca5a5', marginBottom: '14px' }}>
+                <strong style={{ color: '#ef4444' }}>⚠️ تحذير:</strong> النسخة الاحتياطية تحتوي على سجلات أقل ({backupStats.totalRecords}) مقارنة بالنظام الحالي ({liveStats.totalRecords}). الاستعادة ستؤدي إلى فقدان السجلات الأحدث!
+                <div style={{ marginTop: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#f8fafc', marginBottom: '4px' }}>
+                    لتجاوز الحظر، اكتب كلمة "CONFIRM" بأحرف كبيرة:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="CONFIRM"
+                    value={secondConfirmText}
+                    onChange={e => setSecondConfirmText(e.target.value)}
+                    style={restoreInputStyle}
+                  />
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleConfirmRestore}>
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#ffffff', marginBottom: '6px' }}>
-                  اكتب كلمة "استعادة" في المربع أدناه لتأكيد الإجراء:
+                  اكتب كلمة "RESTORE" بأحرف كبيرة في المربع لتأكيد الاستعادة:
                 </label>
                 <input
                   type="text"
                   required
                   autoFocus
-                  placeholder="استعادة"
+                  placeholder="RESTORE"
                   value={restoreConfirmText}
                   onChange={e => setRestoreConfirmText(e.target.value)}
                   style={restoreInputStyle}
@@ -622,10 +713,22 @@ export const BackupRestorePage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={restoring || restoreConfirmText.trim() !== 'استعادة'}
+                  disabled={
+                    isSubmitting ||
+                    restoring ||
+                    loadingStats ||
+                    restoreConfirmText.trim() !== 'RESTORE' ||
+                    (!!(backupStats && liveStats && backupStats.totalRecords < liveStats.totalRecords) && secondConfirmText.trim() !== 'CONFIRM')
+                  }
                   style={{
                     ...modalSubmitBtnStyle,
-                    opacity: (restoring || restoreConfirmText.trim() !== 'استعادة') ? 0.5 : 1
+                    opacity: (
+                      isSubmitting ||
+                      restoring ||
+                      loadingStats ||
+                      restoreConfirmText.trim() !== 'RESTORE' ||
+                      (!!(backupStats && liveStats && backupStats.totalRecords < liveStats.totalRecords) && secondConfirmText.trim() !== 'CONFIRM')
+                    ) ? 0.5 : 1
                   }}
                 >
                   {restoring ? 'جاري الاستعادة...' : 'تأكيد الاستعادة الآن'}

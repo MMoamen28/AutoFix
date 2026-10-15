@@ -212,8 +212,13 @@ using (var scope = app.Services.CreateScope())
     var authService = scope.ServiceProvider.GetRequiredService<IAuthService>();
     await authService.EnsureDefaultAdminCreatedAsync();
 
-    // Seed initial workshop services & spare parts
     DbInitializer.Initialize(db);
+
+    var custCount = await db.Customers.CountAsync();
+    var woCount = await db.WorkOrders.CountAsync();
+    var invCount = await db.Invoices.CountAsync();
+    var appLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    appLogger.LogInformation("AutoFix Startup Data Directory: {DataDirectory} | Row counts: Customers={CustCount}, WorkOrders={WoCount}, Invoices={InvCount}", dataFolder.RootPath, custCount, woCount, invCount);
 
     // Emergency CLI tool: AutoFix.exe --reset-admin [optionalPassword]
     if (args.Any(a => a.Equals("--reset-admin", StringComparison.OrdinalIgnoreCase)))

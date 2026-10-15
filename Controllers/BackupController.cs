@@ -116,9 +116,18 @@ namespace AutoFix.Controllers
             return Ok(list);
         }
 
+        [HttpGet("stats")]
+        public async Task<IActionResult> GetDatabaseStats([FromQuery] string? fileName = null)
+        {
+            var stats = await _backupService.GetDatabaseStatsAsync(fileName);
+            return Ok(stats);
+        }
+
         public class RestoreRequest
         {
             public string FileName { get; set; } = string.Empty;
+            public string ConfirmationText { get; set; } = string.Empty;
+            public bool ConfirmFewerRecords { get; set; } = false;
         }
 
         [HttpPost("restore")]
@@ -127,6 +136,25 @@ namespace AutoFix.Controllers
             if (string.IsNullOrWhiteSpace(request.FileName))
             {
                 return BadRequest(new { message = "Backup file name is required." });
+            }
+
+            if (!string.Equals(request.ConfirmationText?.Trim(), "RESTORE", StringComparison.Ordinal))
+            {
+                return BadRequest(new { message = "Type RESTORE to proceed." });
+            }
+
+            var liveStats = await _backupService.GetDatabaseStatsAsync(null);
+            var backupStats = await _backupService.GetDatabaseStatsAsync(request.FileName);
+
+            if (backupStats.TotalRecords < liveStats.TotalRecords && !request.ConfirmFewerRecords)
+            {
+                return BadRequest(new
+                {
+                    message = "Warning: Backup has fewer records than current live database.",
+                    requiresSecondConfirmation = true,
+                    liveStats,
+                    backupStats
+                });
             }
 
             var success = await _backupService.RestoreBackupAsync(request.FileName);

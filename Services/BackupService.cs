@@ -110,7 +110,19 @@ namespace AutoFix.Services
                 });
                 await _db.SaveChangesAsync();
 
-                // Apply retention only if verified
+                try
+                {
+                    var externalDir = @"D:\AutoFixBackups";
+                    Directory.CreateDirectory(externalDir);
+                    var externalCopyPath = Path.Combine(externalDir, fileName);
+                    File.Copy(backupPath, externalCopyPath, true);
+                    _logger.LogInformation("Mirrored backup to external directory: {ExternalPath}", externalCopyPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to mirror backup to D:\\AutoFixBackups");
+                }
+
                 await PruneOldBackupsAsync();
 
                 var fi = new FileInfo(backupPath);
@@ -147,7 +159,7 @@ namespace AutoFix.Services
                     FullPath = fi.FullName,
                     SizeBytes = fi.Length,
                     CreatedAt = fi.CreationTimeUtc,
-                    IsVerified = true // All retained backups are verified at creation
+                    IsVerified = true
                 });
             }
 
@@ -156,8 +168,6 @@ namespace AutoFix.Services
 
         public async Task PruneOldBackupsAsync()
         {
-            // Condition 5: Backup retention must never delete the newest backups,
-            // and must never delete anything if the latest backup failed verification.
             try
             {
                 var files = Directory.GetFiles(_dataFolder.BackupsPath, "*.db")
@@ -167,7 +177,6 @@ namespace AutoFix.Services
 
                 if (!files.Any()) return;
 
-                // Condition 5: Check verification of latest backup before deleting anything
                 var latest = files.First();
                 var latestVerified = await VerifyDatabaseIntegrityAsync(latest.FullName);
                 if (!latestVerified)
@@ -176,23 +185,37 @@ namespace AutoFix.Services
                     return;
                 }
 
-                // Keep at least the 30 newest files untouched
-                if (files.Count <= 30) return;
+                var toKeep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                // Daily grouping for the last 30 days
-                var dailyKept = files.Take(30).ToList();
-                var remaining = files.Skip(30).ToList();
-
-                // Group remaining by Month and keep 1 per month for up to 12 months
-                var monthlyGroups = remaining.GroupBy(f => new { f.CreationTimeUtc.Year, f.CreationTimeUtc.Month });
-                var toKeep = new HashSet<string>(dailyKept.Select(f => f.FullName));
-
-                foreach (var group in monthlyGroups.Take(12))
+                foreach (var f in files.Take(10))
                 {
-                    toKeep.Add(group.First().FullName);
+                    toKeep.Add(f.FullName);
                 }
 
-                // Delete only files older than the retention quota
+                var dailyGroups = files
+                    .Where(f => f.CreationTimeUtc >= DateTime.UtcNow.AddDays(-30))
+                    .GroupBy(f => f.CreationTimeUtc.Date);
+
+                foreach (var group in dailyGroups)
+                {
+                    toKeep.Add(group.OrderByDescending(f => f.CreationTimeUtc).First().FullName);
+                }
+
+                FileInfo? newestWithData = null;
+                foreach (var f in files)
+                {
+                    if (await CheckBackupHasDataAsync(f.FullName))
+                    {
+                        newestWithData = f;
+                        break;
+                    }
+                }
+
+                if (newestWithData != null)
+                {
+                    toKeep.Add(newestWithData.FullName);
+                }
+
                 foreach (var file in files)
                 {
                     if (!toKeep.Contains(file.FullName))
@@ -213,6 +236,63 @@ namespace AutoFix.Services
             {
                 _logger.LogWarning(ex, "Error while applying backup retention policy");
             }
+        }
+
+        private async Task<bool> CheckBackupHasDataAsync(string path)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={path};Mode=ReadOnly;");
+                await conn.OpenAsync();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT (SELECT COUNT(1) FROM Customers WHERE IsDeleted = 0) + (SELECT COUNT(1) FROM WorkOrders WHERE IsDeleted = 0) + (SELECT COUNT(1) FROM Invoices WHERE IsDeleted = 0);";
+                var res = await cmd.ExecuteScalarAsync();
+                if (res != null && Convert.ToInt64(res) > 0)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+            return false;
+        }
+
+        public async Task<DatabaseStatsDto> GetDatabaseStatsAsync(string? backupFileName = null)
+        {
+            var dbPath = string.IsNullOrWhiteSpace(backupFileName)
+                ? _dataFolder.DatabasePath
+                : Path.Combine(_dataFolder.BackupsPath, backupFileName);
+
+            if (!File.Exists(dbPath))
+            {
+                return new DatabaseStatsDto();
+            }
+
+            var stats = new DatabaseStatsDto();
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly;");
+                await conn.OpenAsync();
+
+                using var cmdCust = conn.CreateCommand();
+                cmdCust.CommandText = "SELECT COUNT(1) FROM Customers WHERE IsDeleted = 0;";
+                stats.CustomersCount = Convert.ToInt32(await cmdCust.ExecuteScalarAsync() ?? 0);
+
+                using var cmdWo = conn.CreateCommand();
+                cmdWo.CommandText = "SELECT COUNT(1) FROM WorkOrders WHERE IsDeleted = 0;";
+                stats.WorkOrdersCount = Convert.ToInt32(await cmdWo.ExecuteScalarAsync() ?? 0);
+
+                using var cmdInv = conn.CreateCommand();
+                cmdInv.CommandText = "SELECT COUNT(1) FROM Invoices WHERE IsDeleted = 0;";
+                stats.InvoicesCount = Convert.ToInt32(await cmdInv.ExecuteScalarAsync() ?? 0);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to read database stats from {DbPath}", dbPath);
+            }
+
+            return stats;
         }
 
         public async Task<bool> RestoreBackupAsync(string backupFileName)

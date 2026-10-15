@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
-  LayoutDashboard, Package, Database, Settings, Car
+  LayoutDashboard, Package, Database, Settings, Car, Users
 } from 'lucide-react';
 import SettingsModal from '../shared/SettingsModal';
 
@@ -10,8 +10,8 @@ export const Sidebar: React.FC<{ isCollapsed?: boolean; onToggle?: () => void }>
 
   const menuItems = [
     { to: '/', label: 'الرئيسية', icon: LayoutDashboard },
+    { to: '/mechanics', label: 'طاقم العمل والفنيين', icon: Users },
     { to: '/spare-parts', label: 'المخزن', icon: Package },
-    { to: '/backup-restore', label: 'النسخ الاحتياطي وحماية البيانات', icon: Database },
   ];
 
   return (
