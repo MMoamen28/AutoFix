@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace AutoFix.Migrations
 {
-    /// <inheritdoc />
+    [Microsoft.EntityFrameworkCore.Infrastructure.DbContext(typeof(AutoFix.Data.AppDbContext))]
+    [Migration("20261013064800_StageB_07_WorkOrderLineAddedAt")]
     public partial class StageB_07_WorkOrderLineAddedAt : Migration
     {
         /// <inheritdoc />
@@ -17,6 +18,8 @@ namespace AutoFix.Migrations
                 type: "TEXT",
                 nullable: false,
                 defaultValue: new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+
+            migrationBuilder.Sql("UPDATE WorkOrderLines SET AddedAt = COALESCE((SELECT ReceivedAt FROM WorkOrders WHERE WorkOrders.Id = WorkOrderLines.WorkOrderId), AddedAt);");
         }
 
         /// <inheritdoc />

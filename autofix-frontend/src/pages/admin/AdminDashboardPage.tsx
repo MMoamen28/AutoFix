@@ -57,6 +57,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [manualLinePrice, setManualLinePrice] = useState<number>(300);
   const [manualLineDesc, setManualLineDesc] = useState<string>('مصنعية');
   const [servicesList, setServicesList] = useState<any[]>([]);
+  const [mechanicsList, setMechanicsList] = useState<any[]>([]);
 
   // Active Invoice Notes State & Autosave
   const [activeNotes, setActiveNotes] = useState<string>('');
@@ -185,10 +186,20 @@ export const AdminDashboardPage: React.FC = () => {
     } catch {}
   };
 
+  const loadMechanics = async () => {
+    try {
+      const res = await axiosClient.get('/mechanics');
+      if (Array.isArray(res.data)) {
+        setMechanicsList(res.data.filter((m: any) => m.isActive && !m.isDeleted));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     loadActiveOrders();
     loadParts();
     loadServices();
+    loadMechanics();
   }, []);
 
   // Sync active invoice notes with selected order
@@ -767,7 +778,7 @@ export const AdminDashboardPage: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '11px' }}>
                       <div style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Wrench size={12} color="#3b82f6" />
-                        <span>{order.technicianName || 'فني غير محدد'}</span>
+                        <span>{order.assignedTechnicianName || order.technicianName || 'فني غير محدد'}</span>
                         <span style={{ color: '#64748b' }}>•</span>
                         <span style={{ color: '#f59e0b', fontWeight: 700 }}>مفتوح منذ {daysOpen} يوم</span>
                       </div>
@@ -926,8 +937,7 @@ export const AdminDashboardPage: React.FC = () => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               
-              {/* Order Info Bar */}
-              <div style={{ padding: '10px 14px', background: '#11161d', borderBottom: '1px solid #212c3d', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+              <div style={{ padding: '10px 14px', background: '#11161d', borderBottom: '1px solid #212c3d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', fontSize: '12px' }}>
                 <div>
                   <span style={{ color: '#94a3b8' }}>العميل: </span>
                   <span style={{ color: '#ffffff', fontWeight: 700 }}><bdi dir="auto">{selectedOrder.customerName}</bdi></span>
@@ -937,6 +947,53 @@ export const AdminDashboardPage: React.FC = () => {
                   <span style={{ color: selectedOrder.workType === 'Inspection' ? '#3b82f6' : '#10b981', fontWeight: 700 }}>
                     {selectedOrder.workType === 'Inspection' ? 'فحص شامل' : 'صيانة وإصلاح'}
                   </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Wrench size={13} color="#f59e0b" />
+                  <span style={{ color: '#94a3b8' }}>الفني المسؤول: </span>
+                  <select
+                    value={selectedOrder.assignedTechnicianId || 0}
+                    onChange={async (e) => {
+                      const techId = Number(e.target.value);
+                      try {
+                        await axiosClient.post(`/work-orders/${selectedOrder.id}/assign-mechanics`, {
+                          mainMechanicId: techId > 0 ? techId : null,
+                          assignedBy: 'Admin'
+                        });
+                        const techObj = mechanicsList.find(m => m.id === techId);
+                        const techName = techObj ? (techObj.fullName || techObj.firstName) : null;
+                        setSelectedOrder((prev: any) => ({
+                          ...prev,
+                          assignedTechnicianId: techId > 0 ? techId : null,
+                          assignedTechnicianName: techName
+                        }));
+                        setActiveOrders((prev: any[]) =>
+                          prev.map(o => o.id === selectedOrder.id ? {
+                            ...o,
+                            assignedTechnicianId: techId > 0 ? techId : null,
+                            assignedTechnicianName: techName
+                          } : o)
+                        );
+                      } catch (err) {
+                        console.error('Failed to assign technician', err);
+                      }
+                    }}
+                    style={{
+                      background: '#0d1117',
+                      color: '#ffffff',
+                      border: '1px solid #334155',
+                      borderRadius: '6px',
+                      padding: '3px 8px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="0">-- بدون فني (تعيين لاحقاً) --</option>
+                    {mechanicsList.map((m: any) => (
+                      <option key={m.id} value={m.id}>{m.fullName || m.firstName}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

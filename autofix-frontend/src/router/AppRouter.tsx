@@ -49,6 +49,7 @@ const router = createBrowserRouter(
     <Route element={<Layout />}>
       {/* The THREE Main Pages */}
       <Route path="/" element={<HomeRoute />} />
+      <Route path="/mechanics" element={<MechanicsPage />} />
       <Route path="/spare-parts" element={<SparePartsPage />} />
       <Route path="/backup-restore" element={<BackupRestorePage />} />
 
@@ -64,7 +65,6 @@ const router = createBrowserRouter(
       <Route path="/expenses" element={<Navigate to="/" replace />} />
       <Route path="/inspections" element={<Navigate to="/" replace />} />
       <Route path="/inspections/*" element={<Navigate to="/" replace />} />
-      <Route path="/mechanics" element={<Navigate to="/" replace />} />
       <Route path="/repair-orders" element={<Navigate to="/" replace />} />
       <Route path="/services" element={<Navigate to="/" replace />} />
       <Route path="/workmanship-prices" element={<Navigate to="/" replace />} />
