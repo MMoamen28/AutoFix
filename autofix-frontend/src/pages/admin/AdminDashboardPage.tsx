@@ -77,6 +77,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelTargetOrder, setCancelTargetOrder] = useState<any | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentInvoiceId, setPaymentInvoiceId] = useState<number | null>(null);
   const [creditNoteModalOpen, setCreditNoteModalOpen] = useState(false);
   const [searchHistoryModalOpen, setSearchHistoryModalOpen] = useState(false);
   const [searchHistoryTarget, setSearchHistoryTarget] = useState<any>(null);
@@ -1140,6 +1141,7 @@ export const AdminDashboardPage: React.FC = () => {
                           await reloadSelectedOrder(selectedOrder.id);
                         } catch {}
                       }
+                      setPaymentInvoiceId(targetInvId || null);
                       setPaymentModalOpen(true);
                     }}
                     style={secondaryActionBtnStyle}
@@ -1209,11 +1211,14 @@ export const AdminDashboardPage: React.FC = () => {
 
       <InvoicePaymentModal
         isOpen={paymentModalOpen}
-        invoiceId={selectedOrder?.invoiceId || null}
+        invoiceId={paymentInvoiceId || selectedOrder?.invoiceId || null}
         invoiceNumber={selectedOrder?.invoiceNumber || selectedOrder?.orderNumber}
         totalAmount={activeInvoiceTotal}
         remainingAmount={selectedOrder?.remainingAmount !== undefined && selectedOrder?.remainingAmount !== null ? selectedOrder.remainingAmount : activeInvoiceTotal}
-        onClose={() => setPaymentModalOpen(false)}
+        onClose={() => {
+          setPaymentModalOpen(false);
+          setPaymentInvoiceId(null);
+        }}
         onSuccess={async () => {
           await loadActiveOrders();
           if (selectedOrderId) {
