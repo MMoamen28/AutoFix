@@ -128,5 +128,31 @@ namespace AutoFix.Helpers
             }
             return digits;
         }
+
+        public static string? NormalizePhoneForWhatsApp(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return null;
+            var digits = NormalizeDigits(phone);
+            digits = Regex.Replace(digits, @"\D", "");
+            if (digits.StartsWith("0020"))
+            {
+                digits = digits.Substring(2);
+            }
+            else if (digits.StartsWith("01") && digits.Length == 11)
+            {
+                digits = "2" + digits;
+            }
+            else if ((digits.StartsWith("10") || digits.StartsWith("11") || digits.StartsWith("12") || digits.StartsWith("15")) && digits.Length == 10)
+            {
+                digits = "20" + digits;
+            }
+
+            if (Regex.IsMatch(digits, @"^20(10|11|12|15)\d{8}$"))
+            {
+                return digits;
+            }
+
+            return null;
+        }
     }
 }

@@ -19,6 +19,13 @@ import CreditNoteModal from '../../components/dashboard/CreditNoteModal';
 import CustomerSearchHistoryModal from '../../components/dashboard/CustomerSearchHistoryModal';
 import { InvoicePreviewModal } from '../../components/shared/InvoicePreviewModal';
 import { CarServiceHistoryModal } from '../../components/shared/CarServiceHistoryModal';
+import { sendInvoiceViaWhatsApp } from '../../utils/whatsappInvoiceSender';
+
+const WhatsAppIcon: React.FC<{ size?: number; color?: string }> = ({ size = 16, color = '#25D366' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.04 14.69 2 12.04 2M12.04 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.16 12.04 20.16C10.56 20.16 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.04 3.67M9.53 7.64C9.36 7.64 9.08 7.7 8.84 7.96C8.6 8.22 7.93 8.84 7.93 10.11C7.93 11.38 8.86 12.61 8.99 12.78C9.12 12.95 10.82 15.58 13.42 16.7C15.58 17.63 16.02 17.44 16.49 17.4C16.96 17.36 18.01 16.78 18.23 16.16C18.45 15.54 18.45 15.01 18.38 14.9C18.31 14.79 18.14 14.73 17.88 14.6C17.62 14.47 16.34 13.84 16.1 13.75C15.86 13.66 15.69 13.62 15.52 13.88C15.35 14.14 14.86 14.73 14.71 14.9C14.56 15.07 14.41 15.09 14.15 14.96C13.89 14.83 12.79 14.47 11.48 13.3C10.46 12.39 9.77 11.27 9.64 11.05C9.51 10.83 9.63 10.71 9.76 10.58C9.88 10.46 10.03 10.27 10.16 10.12C10.29 9.97 10.33 9.86 10.42 9.69C10.51 9.52 10.47 9.37 10.4 9.24C10.33 9.11 9.73 7.64 9.53 7.64Z" />
+  </svg>
+);
 
 export const AdminDashboardPage: React.FC = () => {
   // Financial Summary State
@@ -418,6 +425,54 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const handleSendWhatsAppForOrder = async (order: any) => {
+    if (!order) return;
+    try {
+      let targetInvId = order.invoiceId;
+      let inv: any = null;
+      if (!targetInvId) {
+        try {
+          const convertRes = await axiosClient.post(`/work-orders/${order.id}/convert-to-invoice`, {});
+          targetInvId = convertRes.data?.id;
+          inv = convertRes.data;
+          await loadActiveOrders();
+          await reloadSelectedOrder(order.id);
+        } catch {}
+      } else {
+        try {
+          const invRes = await axiosClient.get(`/invoices/${targetInvId}`);
+          inv = invRes.data;
+        } catch {}
+      }
+
+      if (!targetInvId) {
+        alert('لا توجد فاتورة مصدرة بعد لهذا الطلب');
+        return;
+      }
+
+      await sendInvoiceViaWhatsApp({
+        invoiceId: targetInvId,
+        invoiceNumber: inv?.invoiceNumber || order.invoiceNumber || `INV-${order.id}`,
+        invoiceDate: inv?.issuedAt || order.receivedAt,
+        customerName: inv?.customerName || order.customerName,
+        customerPhone: inv?.customerPhone || order.customerPhone,
+        carMake: order.carMake,
+        carModel: order.carModel,
+        plate: order.carPlate,
+        total: inv?.totalAmount ?? order.totalAmount ?? 0,
+        paid: inv?.paidAmount ?? order.paidAmount ?? 0,
+        remaining: inv?.remainingAmount ?? order.remainingAmount ?? 0,
+        notes: inv?.notes ?? order.notes,
+        onEditPhone: () => {
+          setSearchHistoryTarget({ customerId: order.customerId });
+          setSearchHistoryModalOpen(true);
+        }
+      });
+    } catch (err: any) {
+      console.error('WhatsApp send error:', err);
+    }
+  };
+
   // Days open calculation helper
   const getDaysOpen = (createdAt: string) => {
     if (!createdAt) return 0;
@@ -668,6 +723,13 @@ export const AdminDashboardPage: React.FC = () => {
                 const isPartiallyPaid = order.status === 'PartiallyPaid' || (order.paidAmount > 0 && (remainingAmount ?? 0) > 0);
                 const isInvoiced = order.status === 'Invoiced' || (!isPartiallyPaid && (order.invoiceId || remainingAmount !== null) && order.status !== 'Paid');
 
+                const cardHasInvoice = !!order.invoiceId;
+                const cardHasPhone = !!order.customerPhone && order.customerPhone.trim().length > 0;
+                const cardCanSendWhatsApp = cardHasInvoice && cardHasPhone;
+                const cardWhatsAppTooltip = !cardHasInvoice
+                  ? 'لا توجد فاتورة مصدرة بعد'
+                  : (!cardHasPhone ? 'لا يوجد رقم هاتف مسجل للعميل' : 'إرسال الفاتورة عبر واتساب');
+
                 return (
                   <div
                     key={order.id}
@@ -698,58 +760,102 @@ export const AdminDashboardPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* 3-dots Menu Button */}
-                      <div style={{ position: 'relative' }}>
+                      {/* 3-dots Menu Button & WhatsApp Quick Action */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <button
                           type="button"
+                          disabled={!cardCanSendWhatsApp}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setActiveMenuOrderId(activeMenuOrderId === order.id ? null : order.id);
+                            handleSendWhatsAppForOrder(order);
                           }}
-                          style={menuDotsBtnStyle}
+                          title={cardWhatsAppTooltip}
+                          style={{
+                            background: cardCanSendWhatsApp ? 'rgba(37, 211, 102, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                            border: cardCanSendWhatsApp ? '1px solid rgba(37, 211, 102, 0.3)' : '1px solid transparent',
+                            borderRadius: '6px',
+                            padding: '4px 6px',
+                            cursor: cardCanSendWhatsApp ? 'pointer' : 'not-allowed',
+                            opacity: cardCanSendWhatsApp ? 1 : 0.4,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
                         >
-                          <MoreVertical size={16} color="#94a3b8" />
+                          <WhatsAppIcon size={14} color={cardCanSendWhatsApp ? '#25D366' : '#64748b'} />
                         </button>
 
-                        {/* Card 3-dots Popup Menu */}
-                        {activeMenuOrderId === order.id && (
-                          <div style={cardPopupMenuStyle}>
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMenuOrderId(null);
-                                setSelectedOrderId(order.id);
-                                setSelectedOrder(order);
-                              }}
-                              style={cardPopupItemStyle}
-                            >
-                              <Edit2 size={14} /> تعديل الكارت والبنود
-                            </div>
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuOrderId(activeMenuOrderId === order.id ? null : order.id);
+                            }}
+                            style={menuDotsBtnStyle}
+                          >
+                            <MoreVertical size={16} color="#94a3b8" />
+                          </button>
 
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMenuOrderId(null);
-                                setPreviewTarget({ workOrderInvoicePreviewId: order.id });
-                                setPreviewModalOpen(true);
-                              }}
-                              style={cardPopupItemStyle}
-                            >
-                              <Eye size={14} /> معاينة الفاتورة
-                            </div>
+                          {/* Card 3-dots Popup Menu */}
+                          {activeMenuOrderId === order.id && (
+                            <div style={cardPopupMenuStyle}>
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveMenuOrderId(null);
+                                  setSelectedOrderId(order.id);
+                                  setSelectedOrder(order);
+                                }}
+                                style={cardPopupItemStyle}
+                              >
+                                <Edit2 size={14} /> تعديل الكارت والبنود
+                              </div>
 
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMenuOrderId(null);
-                                setSelectedOrderId(order.id);
-                                setSelectedOrder(order);
-                                handleSaveAndPrintInvoice();
-                              }}
-                              style={cardPopupItemStyle}
-                            >
-                              <Printer size={14} /> طباعة الفاتورة
-                            </div>
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveMenuOrderId(null);
+                                  setPreviewTarget({ workOrderInvoicePreviewId: order.id });
+                                  setPreviewModalOpen(true);
+                                }}
+                                style={cardPopupItemStyle}
+                              >
+                                <Eye size={14} /> معاينة الفاتورة
+                              </div>
+
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveMenuOrderId(null);
+                                  setSelectedOrderId(order.id);
+                                  setSelectedOrder(order);
+                                  handleSaveAndPrintInvoice();
+                                }}
+                                style={cardPopupItemStyle}
+                              >
+                                <Printer size={14} /> طباعة الفاتورة
+                              </div>
+
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!cardCanSendWhatsApp) return;
+                                  setActiveMenuOrderId(null);
+                                  handleSendWhatsAppForOrder(order);
+                                }}
+                                title={cardWhatsAppTooltip}
+                                style={{
+                                  ...cardPopupItemStyle,
+                                  cursor: cardCanSendWhatsApp ? 'pointer' : 'not-allowed',
+                                  opacity: cardCanSendWhatsApp ? 1 : 0.45,
+                                  color: cardCanSendWhatsApp ? '#4ade80' : '#64748b'
+                                }}
+                              >
+                                <WhatsAppIcon size={14} color={cardCanSendWhatsApp ? '#4ade80' : '#64748b'} />
+                                <span>إرسال عبر واتساب</span>
+                              </div>
 
                             <div
                               onClick={(e) => {
@@ -778,6 +884,7 @@ export const AdminDashboardPage: React.FC = () => {
                         )}
                       </div>
                     </div>
+                  </div>
 
                     {(isInvoiced || isPartiallyPaid) && (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', padding: '5px 10px', borderRadius: '6px', backgroundColor: isPartiallyPaid ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)', border: isPartiallyPaid ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)' }}>
@@ -1117,15 +1224,52 @@ export const AdminDashboardPage: React.FC = () => {
                   </span>
                 </div>
 
-                {/* Primary Action Button: طباعة وحفظ الفاتورة */}
-                <button
-                  type="button"
-                  onClick={handleSaveAndPrintInvoice}
-                  style={saveAndPrintInvoiceBtnStyle}
-                >
-                  <Printer size={18} strokeWidth={2.5} />
-                  <span>طباعة وحفظ الفاتورة</span>
-                </button>
+                {(() => {
+                  const selectedHasInvoice = !!selectedOrder.invoiceId;
+                  const selectedHasPhone = !!selectedOrder.customerPhone && selectedOrder.customerPhone.trim().length > 0;
+                  const selectedCanSendWhatsApp = selectedHasInvoice && selectedHasPhone;
+                  const selectedWhatsAppTooltip = !selectedHasInvoice
+                    ? 'لا توجد فاتورة مصدرة بعد'
+                    : (!selectedHasPhone ? 'لا يوجد رقم هاتف مسجل للعميل' : 'إرسال الفاتورة عبر واتساب');
+
+                  return (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleSaveAndPrintInvoice}
+                        style={{ ...saveAndPrintInvoiceBtnStyle, flex: 1 }}
+                      >
+                        <Printer size={18} strokeWidth={2.5} />
+                        <span>طباعة وحفظ الفاتورة</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!selectedCanSendWhatsApp}
+                        onClick={() => handleSendWhatsAppForOrder(selectedOrder)}
+                        title={selectedWhatsAppTooltip}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          padding: '0 16px',
+                          borderRadius: '8px',
+                          background: selectedCanSendWhatsApp ? '#16a34a' : 'rgba(255,255,255,0.06)',
+                          border: selectedCanSendWhatsApp ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
+                          color: selectedCanSendWhatsApp ? '#ffffff' : '#64748b',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: selectedCanSendWhatsApp ? 'pointer' : 'not-allowed',
+                          opacity: selectedCanSendWhatsApp ? 1 : 0.5
+                        }}
+                      >
+                        <WhatsAppIcon size={18} color={selectedCanSendWhatsApp ? '#ffffff' : '#64748b'} />
+                        <span>واتساب</span>
+                      </button>
+                    </div>
+                  );
+                })()}
 
                 <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button

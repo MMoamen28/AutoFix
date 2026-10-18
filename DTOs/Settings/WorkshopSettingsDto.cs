@@ -15,8 +15,9 @@ namespace AutoFix.DTOs.Settings
         public bool ShowVat { get; set; } = false;
         public bool PrintNotesOnInvoice { get; set; } = false;
         public string WorkshopName { get; set; } = "AP AUTO SERVICE CENTER";
-        public string WorkshopPhone { get; set; } = "";
+        public string WorkshopPhone { get; set; } = "01277252262";
         public string WorkshopAddress { get; set; } = "";
+        public string WhatsAppMessageTemplate { get; set; } = "";
 
         // Part 3 & 4: Security PIN & Network Access
         public bool RequirePin { get; set; } = false;

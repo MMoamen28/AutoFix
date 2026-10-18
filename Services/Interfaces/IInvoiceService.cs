@@ -19,5 +19,6 @@ namespace AutoFix.Services.Interfaces
         Task<InvoiceResponseDto> UpdateInvoiceDateAsync(int id, UpdateInvoiceDateDto dto, string changedBy, bool isAdmin);
         Task<InvoiceResponseDto> CreditInvoiceAsync(int invoiceId, string reason, string? issuedBy = null, string? concurrencyToken = null);
         Task<List<CreditNoteResponseDto>> GetAllCreditNotesAsync(int? customerId = null);
+        Task<DateTime> LogWhatsAppShareAsync(int invoiceId, LogWhatsAppShareDto dto, string? userId, string? userName);
     }
 }

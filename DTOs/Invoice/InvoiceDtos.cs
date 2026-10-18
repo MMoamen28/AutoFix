@@ -72,6 +72,7 @@ namespace AutoFix.DTOs.Invoice
         public string ConcurrencyToken { get; set; } = string.Empty;
         public List<PaymentResponseDto> Payments { get; set; } = new();
         public List<InvoiceIdHistoryResponseDto> IdHistories { get; set; } = new();
+        public DateTime? LastWhatsAppSentAt { get; set; }
     }
 
     public class UpdateInvoiceNumberDto

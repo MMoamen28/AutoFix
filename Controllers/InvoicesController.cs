@@ -274,5 +274,21 @@ namespace AutoFix.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpPost("{id:int}/whatsapp-log")]
+        public async Task<IActionResult> LogWhatsAppShare(int id, [FromBody] LogWhatsAppShareDto dto)
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userName = User.Identity?.Name;
+                var timestamp = await _service.LogWhatsAppShareAsync(id, dto, userId, userName);
+                return Ok(new { success = true, timestamp });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+        }
     }
 }

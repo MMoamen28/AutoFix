@@ -24,22 +24,56 @@ namespace AutoFix.Services
             _settingsFilePath = Path.Combine(_dataFolder.RootPath, "Files", "Settings", "workshop_settings.json");
         }
 
+        public const string DefaultWhatsAppTemplate =
+@"السلام عليكم {customerName} 🌟
+
+شكرًا لاختياركم *{workshopName}*
+
+📄 *فاتورة رقم:* {invoiceNumber}
+📅 *التاريخ:* {invoiceDate}
+🚗 *السيارة:* {carMake} {carModel} - {plate}
+
+💰 *الإجمالي:* {total} ج.م
+✅ *المدفوع:* {paid} ج.م
+{remainingLine}
+
+{notesLine}
+📞 للاستفسار: {workshopPhone}
+
+نتمنى لكم رحلة آمنة 🌹";
+
         public async Task<WorkshopSettingsDto> GetSettingsAsync()
         {
             if (!File.Exists(_settingsFilePath))
             {
-                return new WorkshopSettingsDto();
+                var s = new WorkshopSettingsDto();
+                s.WhatsAppMessageTemplate = DefaultWhatsAppTemplate;
+                return s;
             }
 
             try
             {
                 var json = await File.ReadAllTextAsync(_settingsFilePath, System.Text.Encoding.UTF8);
                 var settings = JsonSerializer.Deserialize<WorkshopSettingsDto>(json, _jsonOptions);
-                return settings ?? new WorkshopSettingsDto();
+                if (settings == null)
+                {
+                    settings = new WorkshopSettingsDto();
+                }
+                if (string.IsNullOrWhiteSpace(settings.WorkshopPhone))
+                {
+                    settings.WorkshopPhone = "01277252262";
+                }
+                if (string.IsNullOrWhiteSpace(settings.WhatsAppMessageTemplate))
+                {
+                    settings.WhatsAppMessageTemplate = DefaultWhatsAppTemplate;
+                }
+                return settings;
             }
             catch
             {
-                return new WorkshopSettingsDto();
+                var s = new WorkshopSettingsDto();
+                s.WhatsAppMessageTemplate = DefaultWhatsAppTemplate;
+                return s;
             }
         }
 
@@ -49,6 +83,19 @@ namespace AutoFix.Services
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.WorkshopPhone))
+            {
+                dto.WorkshopPhone = "01277252262";
+            }
+            if (string.IsNullOrWhiteSpace(dto.WorkshopName))
+            {
+                dto.WorkshopName = "AP AUTO SERVICE CENTER";
+            }
+            if (string.IsNullOrWhiteSpace(dto.WhatsAppMessageTemplate))
+            {
+                dto.WhatsAppMessageTemplate = DefaultWhatsAppTemplate;
             }
 
             var json = JsonSerializer.Serialize(dto, _jsonOptions);

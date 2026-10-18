@@ -218,13 +218,36 @@ namespace AutoFix.Services
             }
 
             var list = await query.OrderByDescending(i => i.IssuedAt).ToListAsync();
-            return list.Select(i => MapToDto(i, isCustomer)).ToList();
+            var dtos = list.Select(i => MapToDto(i, isCustomer)).ToList();
+            var sentLogs = await _db.AuditLogs
+                .AsNoTracking()
+                .Where(a => a.Action == "WhatsAppShare" && a.Details != null && a.Details.Contains("\"opened\""))
+                .GroupBy(a => a.EntityId)
+                .Select(g => new { InvoiceId = g.Key, MaxTimestamp = g.Max(x => x.Timestamp) })
+                .ToListAsync();
+            var dict = sentLogs.Where(x => int.TryParse(x.InvoiceId, out _)).ToDictionary(x => int.Parse(x.InvoiceId!), x => x.MaxTimestamp);
+            foreach (var item in dtos)
+            {
+                if (dict.TryGetValue(item.Id, out var ts))
+                {
+                    item.LastWhatsAppSentAt = ts;
+                }
+            }
+            return dtos;
         }
 
         public async Task<InvoiceResponseDto?> GetByIdAsync(int id, bool isCustomer = false)
         {
             var invoice = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(i => i.Id == id);
-            return invoice == null ? null : MapToDto(invoice, isCustomer);
+            if (invoice == null) return null;
+            var dto = MapToDto(invoice, isCustomer);
+            dto.LastWhatsAppSentAt = await _db.AuditLogs
+                .AsNoTracking()
+                .Where(a => a.Action == "WhatsAppShare" && a.EntityId == id.ToString() && a.Details != null && a.Details.Contains("\"opened\""))
+                .OrderByDescending(a => a.Timestamp)
+                .Select(a => (DateTime?)a.Timestamp)
+                .FirstOrDefaultAsync();
+            return dto;
         }
 
         public async Task<InvoiceResponseDto?> GetByInvoiceNumberAsync(string invoiceNumber, bool isCustomer = false)
@@ -235,7 +258,14 @@ namespace AutoFix.Services
             var invoice = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(i => i.InvoiceNumber == trimmed);
             if (invoice != null)
             {
-                return MapToDto(invoice, isCustomer);
+                var dto = MapToDto(invoice, isCustomer);
+                dto.LastWhatsAppSentAt = await _db.AuditLogs
+                    .AsNoTracking()
+                    .Where(a => a.Action == "WhatsAppShare" && a.EntityId == invoice.Id.ToString() && a.Details != null && a.Details.Contains("\"opened\""))
+                    .OrderByDescending(a => a.Timestamp)
+                    .Select(a => (DateTime?)a.Timestamp)
+                    .FirstOrDefaultAsync();
+                return dto;
             }
 
             var history = await _db.InvoiceIdHistories
@@ -1533,6 +1563,40 @@ namespace AutoFix.Services
             }
 
             return result;
+        }
+
+        public async Task<DateTime> LogWhatsAppShareAsync(int invoiceId, LogWhatsAppShareDto dto, string? userId, string? userName)
+        {
+            var invoice = await _db.Invoices.FindAsync(invoiceId);
+            if (invoice == null)
+            {
+                throw new KeyNotFoundException($"Invoice {invoiceId} not found");
+            }
+
+            var timestamp = DateTime.UtcNow;
+            var detailsObj = new
+            {
+                attempt = dto.Attempt,
+                deviceName = dto.DeviceName,
+                errorMessage = dto.ErrorMessage,
+                timestamp = timestamp
+            };
+
+            var auditLog = new AuditLog
+            {
+                UserId = userId,
+                UserName = !string.IsNullOrWhiteSpace(userName) ? userName : (dto.DeviceName ?? "User"),
+                Action = "WhatsAppShare",
+                EntityName = "Invoice",
+                EntityId = invoiceId.ToString(),
+                Details = JsonSerializer.Serialize(detailsObj),
+                Timestamp = timestamp
+            };
+
+            _db.AuditLogs.Add(auditLog);
+            await _db.SaveChangesAsync();
+
+            return timestamp;
         }
     }
 }

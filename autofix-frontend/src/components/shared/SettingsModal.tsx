@@ -17,6 +17,13 @@ import {
   DEFAULT_CURRENCY_LABEL_EN,
   DEFAULT_CURRENCY_LABEL_AR 
 } from '../../i18n/formatters';
+import { DEFAULT_WHATSAPP_TEMPLATE, buildWhatsAppMessage, WhatsAppTemplateData } from '../../utils/whatsappTemplateHelper';
+
+const WhatsAppIcon: React.FC<{ size?: number; color?: string }> = ({ size = 16, color = '#25D366' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.04 14.69 2 12.04 2M12.04 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.16 12.04 20.16C10.56 20.16 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.04 3.67M9.53 7.64C9.36 7.64 9.08 7.7 8.84 7.96C8.6 8.22 7.93 8.84 7.93 10.11C7.93 11.38 8.86 12.61 8.99 12.78C9.12 12.95 10.82 15.58 13.42 16.7C15.58 17.63 16.02 17.44 16.49 17.4C16.96 17.36 18.01 16.78 18.23 16.16C18.45 15.54 18.45 15.01 18.38 14.9C18.31 14.79 18.14 14.73 17.88 14.6C17.62 14.47 16.34 13.84 16.1 13.75C15.86 13.66 15.69 13.62 15.52 13.88C15.35 14.14 14.86 14.73 14.71 14.9C14.56 15.07 14.41 15.09 14.15 14.96C13.89 14.83 12.79 14.47 11.48 13.3C10.46 12.39 9.77 11.27 9.64 11.05C9.51 10.83 9.63 10.71 9.76 10.58C9.88 10.46 10.03 10.27 10.16 10.12C10.29 9.97 10.33 9.86 10.42 9.69C10.51 9.52 10.47 9.37 10.4 9.24C10.33 9.11 9.73 7.64 9.53 7.64Z" />
+  </svg>
+);
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -38,6 +45,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [requirePin, setRequirePin] = useState(false);
   const [hasPinSet, setHasPinSet] = useState(false);
   const [allowNetworkAccess, setAllowNetworkAccess] = useState(false);
+  const [workshopName, setWorkshopName] = useState('AP AUTO SERVICE CENTER');
+  const [workshopPhone, setWorkshopPhone] = useState('01277252262');
+  const [whatsAppMessageTemplate, setWhatsAppMessageTemplate] = useState(DEFAULT_WHATSAPP_TEMPLATE);
   const [networkInfo, setNetworkInfo] = useState<{
     allowNetworkAccess: boolean;
     serverPort: number;
@@ -74,6 +84,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         setHasPinSet(!!d.hasPinSet);
         setAllowNetworkAccess(!!d.allowNetworkAccess);
         setFixedIpAddress(d.fixedIpAddress || '');
+        if (d.workshopName) setWorkshopName(d.workshopName);
+        if (d.workshopPhone) setWorkshopPhone(d.workshopPhone);
+        if (d.whatsAppMessageTemplate) setWhatsAppMessageTemplate(d.whatsAppMessageTemplate);
       }
 
       if (netRes.status === 'fulfilled' && netRes.value.data) {
@@ -151,7 +164,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         printNotesOnInvoice,
         requirePin,
         allowNetworkAccess,
-        fixedIpAddress: fixedIpAddress.trim() || null
+        fixedIpAddress: fixedIpAddress.trim() || null,
+        workshopName: workshopName.trim() || 'AP AUTO SERVICE CENTER',
+        workshopPhone: workshopPhone.trim() || '01277252262',
+        whatsAppMessageTemplate: whatsAppMessageTemplate || DEFAULT_WHATSAPP_TEMPLATE
       });
       window.dispatchEvent(new CustomEvent('settings-updated'));
     } catch (err: any) {
@@ -583,6 +599,160 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
                 <img src={`/api/settings/watermark?t=${watermarkKey}`} alt="Watermark" style={{ maxHeight: '55px', maxWidth: '100%', objectFit: 'contain', opacity: 0.6 }} />
               </div>
               <input type="file" accept="image/*" onChange={handleWatermarkUpload} style={{ fontSize: '11px', width: '100%', color: '#94a3b8' }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 6: WhatsApp Template Settings */}
+        <div style={sectionBoxStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <WhatsAppIcon size={18} color="#25D366" />
+              <span style={{ fontSize: '14px', fontWeight: 800, color: '#ffffff' }}>
+                قالب رسالة الواتساب للفواتير
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWhatsAppMessageTemplate(DEFAULT_WHATSAPP_TEMPLATE)}
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: '#f87171',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              <RotateCcw size={12} />
+              استعادة القالب الافتراضي
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+            <div>
+              <label style={labelStyle}>اسم المركز في الرسالة</label>
+              <input
+                type="text"
+                value={workshopName}
+                onChange={e => setWorkshopName(e.target.value)}
+                style={inputStyle}
+                placeholder="AP AUTO SERVICE CENTER"
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>رقم هاتف المركز للاستفسار</label>
+              <input
+                type="text"
+                value={workshopPhone}
+                onChange={e => setWorkshopPhone(e.target.value)}
+                style={inputStyle}
+                placeholder="01277252262"
+              />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '6px' }}>
+              العناصر المتاحة في القالب (اضغط للإضافة):
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {[
+                { tag: '{customerName}', desc: 'اسم العميل' },
+                { tag: '{workshopName}', desc: 'اسم المركز' },
+                { tag: '{invoiceNumber}', desc: 'رقم الفاتورة' },
+                { tag: '{invoiceDate}', desc: 'التاريخ' },
+                { tag: '{carMake}', desc: 'الماركة' },
+                { tag: '{carModel}', desc: 'الموديل' },
+                { tag: '{plate}', desc: 'اللوحة' },
+                { tag: '{total}', desc: 'الإجمالي' },
+                { tag: '{paid}', desc: 'المدفوع' },
+                { tag: '{remainingLine}', desc: 'سطر المتبقي' },
+                { tag: '{notesLine}', desc: 'سطر الملاحظات' },
+                { tag: '{workshopPhone}', desc: 'هاتف المركز' }
+              ].map(p => (
+                <button
+                  key={p.tag}
+                  type="button"
+                  onClick={() => setWhatsAppMessageTemplate(prev => prev + ' ' + p.tag)}
+                  style={{
+                    background: '#0d1117',
+                    border: '1px solid #30363d',
+                    color: '#58a6ff',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    cursor: 'pointer'
+                  }}
+                  title={p.desc}
+                >
+                  <code>{p.tag}</code> ({p.desc})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div>
+              <label style={labelStyle}>نص القالب (يمكنك التعديل بحرية)</label>
+              <textarea
+                value={whatsAppMessageTemplate}
+                onChange={e => setWhatsAppMessageTemplate(e.target.value)}
+                rows={11}
+                style={{
+                  ...inputStyle,
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  lineHeight: '1.5',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>معاينة حية للرسالة (Live Preview - فاتورة تجريبية)</label>
+              <div style={{
+                background: '#0b141a',
+                border: '1px solid #1f2c34',
+                borderRadius: '8px',
+                padding: '12px',
+                minHeight: '220px',
+                maxHeight: '260px',
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                fontSize: '12px',
+                color: '#e9edef',
+                lineHeight: '1.6',
+                fontFamily: 'Cairo, sans-serif'
+              }}>
+                <div style={{
+                  background: '#005c4b',
+                  borderRadius: '8px 8px 0 8px',
+                  padding: '10px 12px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                  border: '1px solid #025144'
+                }}>
+                  {buildWhatsAppMessage(whatsAppMessageTemplate, {
+                    customerName: 'طارق سليم',
+                    workshopName: workshopName || 'AP AUTO SERVICE CENTER',
+                    invoiceNumber: 'INV-202610-0007',
+                    invoiceDate: '2026-10-18',
+                    carMake: 'Kia',
+                    carModel: 'Sportage',
+                    plate: 'ط ر ق 1000',
+                    total: 650.00,
+                    paid: 300.00,
+                    remaining: 350.00,
+                    notes: 'صيانة دورية وتغيير زيت وفلتر',
+                    workshopPhone: workshopPhone || '01277252262'
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
