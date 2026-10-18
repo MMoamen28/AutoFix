@@ -181,6 +181,7 @@ namespace AutoFix.Services
                 DueDate = i.DueDate,
                 Notes = i.Notes,
                 SnapshotDetailsJson = snapshotJson,
+                ConcurrencyToken = i.ConcurrencyToken ?? string.Empty,
                 Payments = i.Payments.Where(p => !p.IsDeleted).OrderByDescending(p => p.PaidAt).Select(p => new PaymentResponseDto
                 {
                     Id = p.Id,
@@ -324,6 +325,11 @@ namespace AutoFix.Services
             var invoice = await _db.Invoices.Include(i => i.Payments).Include(i => i.IdHistories).FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) throw new KeyNotFoundException($"Invoice {id} not found.");
 
+            if (!string.IsNullOrEmpty(dto.ConcurrencyToken) && !string.IsNullOrEmpty(invoice.ConcurrencyToken) && invoice.ConcurrencyToken != dto.ConcurrencyToken)
+            {
+                throw new DbUpdateConcurrencyException("تم تعديل هذا السجل من جهاز آخر، أعد التحميل");
+            }
+
             if (string.IsNullOrWhiteSpace(dto.NewInvoiceNumber))
             {
                 throw new InvalidOperationException("Invoice ID cannot be empty.");
@@ -383,7 +389,9 @@ namespace AutoFix.Services
             });
 
             invoice.InvoiceNumber = newId;
+            invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
             await _db.SaveChangesAsync();
+            AutoFix.Controllers.SyncController.NotifyInvoicesChanged();
 
             return (await GetByIdAsync(id))!;
         }
@@ -403,8 +411,14 @@ namespace AutoFix.Services
                 throw new InvalidOperationException("Invoice date can only be edited before the invoice is issued.");
             }
 
+            if (!string.IsNullOrEmpty(dto.ConcurrencyToken) && !string.IsNullOrEmpty(invoice.ConcurrencyToken) && invoice.ConcurrencyToken != dto.ConcurrencyToken)
+            {
+                throw new DbUpdateConcurrencyException("تم تعديل هذا السجل من جهاز آخر، أعد التحميل");
+            }
+
             var oldDate = invoice.IssuedAt;
             invoice.IssuedAt = dto.NewIssuedAt;
+            invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
 
             _db.AuditLogs.Add(new AuditLog
             {
@@ -416,13 +430,24 @@ namespace AutoFix.Services
             });
 
             await _db.SaveChangesAsync();
+            AutoFix.Controllers.SyncController.NotifyInvoicesChanged();
             return (await GetByIdAsync(id))!;
         }
 
         public async Task<PaymentResponseDto> RecordPaymentAsync(int invoiceId, RecordPaymentDto dto, string? receivedBy = null)
         {
-            var invoice = await _db.Invoices.Include(i => i.Payments).FirstOrDefaultAsync(i => i.Id == invoiceId);
+            var invoice = await _db.Invoices.Include(i => i.Payments).Include(i => i.Customer).FirstOrDefaultAsync(i => i.Id == invoiceId);
             if (invoice == null) throw new KeyNotFoundException($"Invoice {invoiceId} not found.");
+
+            if (invoice.Status == "Cancelled" || invoice.Status == "Credited")
+            {
+                throw new InvalidOperationException("لا يمكن تسجيل دفعة على فاتورة ملغاة أو تم عمل إشعار دائن لها.");
+            }
+
+            if (invoice.Status == "Paid" || invoice.RemainingAmount <= 0)
+            {
+                throw new InvalidOperationException("الفاتورة مدفوعة بالكامل بالفعل.");
+            }
 
             if (dto.Amount > invoice.RemainingAmount)
             {
@@ -451,6 +476,17 @@ namespace AutoFix.Services
             {
                 invoice.Status = "PartiallyPaid";
             }
+
+            _db.TreasuryTransactions.Add(new TreasuryTransaction
+            {
+                TransactionType = "Income",
+                Amount = dto.Amount,
+                Category = "InvoicePayment",
+                ReferenceNumber = invoice.InvoiceNumber,
+                Description = $"تحصيل دفعة للفاتورة {invoice.InvoiceNumber} بمبلغ {dto.Amount:N2} ج.م ({dto.PaymentMethod})",
+                TransactionDate = DateTime.UtcNow,
+                PerformedByUserId = receivedBy ?? "Admin"
+            });
 
             _db.AuditLogs.Add(new AuditLog
             {

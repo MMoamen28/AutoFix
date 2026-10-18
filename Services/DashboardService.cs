@@ -189,57 +189,64 @@ namespace AutoFix.Services
 
             switch (period?.ToLowerInvariant())
             {
+                case "all":
+                    currentStart = new DateTime(2000, 1, 1);
+                    currentEnd = cairoNow.Date.AddDays(1).AddTicks(-1);
+                    prevStart = new DateTime(2000, 1, 1);
+                    prevEnd = new DateTime(2000, 1, 1);
+                    break;
                 case "today":
                     currentStart = cairoNow.Date;
+                    currentEnd = cairoNow.Date.AddDays(1).AddTicks(-1);
                     prevStart = currentStart.AddDays(-1);
-                    prevEnd = currentStart.AddSeconds(-1);
+                    prevEnd = currentStart.AddTicks(-1);
                     break;
                 case "week":
                     currentStart = cairoNow.Date.AddDays(-6);
+                    currentEnd = cairoNow.Date.AddDays(1).AddTicks(-1);
                     prevStart = currentStart.AddDays(-7);
-                    prevEnd = currentStart.AddSeconds(-1);
+                    prevEnd = currentStart.AddTicks(-1);
                     break;
                 case "year":
                     currentStart = new DateTime(cairoNow.Year, 1, 1);
+                    currentEnd = currentStart.AddYears(1).AddTicks(-1);
                     prevStart = new DateTime(cairoNow.Year - 1, 1, 1);
-                    prevEnd = new DateTime(cairoNow.Year - 1, cairoNow.Month, cairoNow.Day);
+                    prevEnd = prevStart.AddYears(1).AddTicks(-1);
                     break;
                 case "custom":
                     currentStart = startDate ?? cairoNow.Date.AddDays(-30);
-                    currentEnd = endDate ?? cairoNow;
+                    currentEnd = (endDate ?? cairoNow).Date.AddDays(1).AddTicks(-1);
                     var duration = currentEnd - currentStart;
                     prevStart = currentStart - duration;
-                    prevEnd = currentStart.AddSeconds(-1);
+                    prevEnd = currentStart.AddTicks(-1);
                     break;
                 case "month":
                 default:
                     currentStart = new DateTime(cairoNow.Year, cairoNow.Month, 1);
+                    currentEnd = currentStart.AddMonths(1).AddTicks(-1);
                     var prevMonth = cairoNow.AddMonths(-1);
                     prevStart = new DateTime(prevMonth.Year, prevMonth.Month, 1);
-                    prevEnd = new DateTime(prevMonth.Year, prevMonth.Month, Math.Min(cairoNow.Day, DateTime.DaysInMonth(prevMonth.Year, prevMonth.Month)));
+                    prevEnd = prevStart.AddMonths(1).AddTicks(-1);
                     break;
             }
 
-            // Convert to UTC for database comparison
             var currentStartUtc = currentStart.AddHours(-2);
             var currentEndUtc = currentEnd.AddHours(-2);
             var prevStartUtc = prevStart.AddHours(-2);
             var prevEndUtc = prevEnd.AddHours(-2);
 
-            // 1. Current period revenues (excluding Credited invoices)
             var currentPayments = await _db.InvoicePayments
                 .Include(p => p.Invoice)
                 .AsNoTracking()
-                .Where(p => !p.IsDeleted && p.PaidAt >= currentStartUtc && p.PaidAt <= currentEndUtc && (p.Invoice == null || p.Invoice.Status != "Credited"))
+                .Where(p => !p.IsDeleted && p.PaidAt >= currentStartUtc && p.PaidAt <= currentEndUtc && (p.Invoice == null || (p.Invoice.Status != "Credited" && p.Invoice.Status != "Cancelled")))
                 .ToListAsync();
 
             decimal currentRevenue = currentPayments.Sum(p => p.Amount);
 
-            // Previous period revenues
             var prevPayments = await _db.InvoicePayments
                 .Include(p => p.Invoice)
                 .AsNoTracking()
-                .Where(p => !p.IsDeleted && p.PaidAt >= prevStartUtc && p.PaidAt <= prevEndUtc && (p.Invoice == null || p.Invoice.Status != "Credited"))
+                .Where(p => !p.IsDeleted && p.PaidAt >= prevStartUtc && p.PaidAt <= prevEndUtc && (p.Invoice == null || (p.Invoice.Status != "Credited" && p.Invoice.Status != "Cancelled")))
                 .ToListAsync();
 
             decimal prevRevenue = prevPayments.Sum(p => p.Amount);

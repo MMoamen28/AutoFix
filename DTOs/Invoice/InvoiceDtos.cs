@@ -21,12 +21,14 @@ namespace AutoFix.DTOs.Invoice
 
     public class RecordPaymentDto
     {
+        public int? InvoiceId { get; set; }
+
         [Required]
         [Range(0.01, 10000000, ErrorMessage = "Payment amount must be greater than zero.")]
         public decimal Amount { get; set; }
 
         [Required]
-        public string PaymentMethod { get; set; } = "Cash"; // Cash, Card, BankTransfer, Cheque
+        public string PaymentMethod { get; set; } = "Cash";
 
         public string? ReferenceNumber { get; set; }
         public string? Notes { get; set; }
@@ -65,6 +67,7 @@ namespace AutoFix.DTOs.Invoice
         public string Notes { get; set; } = string.Empty;
 
         public string SnapshotDetailsJson { get; set; } = "[]";
+        public string ConcurrencyToken { get; set; } = string.Empty;
         public List<PaymentResponseDto> Payments { get; set; } = new();
         public List<InvoiceIdHistoryResponseDto> IdHistories { get; set; } = new();
     }
@@ -75,6 +78,7 @@ namespace AutoFix.DTOs.Invoice
         public string NewInvoiceNumber { get; set; } = string.Empty;
 
         public string? Reason { get; set; }
+        public string? ConcurrencyToken { get; set; }
     }
 
     public class UpdateInvoiceDateDto
@@ -83,6 +87,7 @@ namespace AutoFix.DTOs.Invoice
         public DateTime NewIssuedAt { get; set; }
 
         public string? Reason { get; set; }
+        public string? ConcurrencyToken { get; set; }
     }
 
     public class InvoiceIdHistoryResponseDto

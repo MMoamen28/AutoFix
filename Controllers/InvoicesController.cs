@@ -2,6 +2,7 @@ using AutoFix.DTOs.Invoice;
 using AutoFix.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
@@ -137,6 +138,10 @@ namespace AutoFix.Controllers
             {
                 return NotFound();
             }
+            catch (DbUpdateConcurrencyException)
+            {
+                return StatusCode(409, new { message = "تم تعديل هذا السجل من جهاز آخر، أعد التحميل", isConcurrencyConflict = true });
+            }
             catch (UnauthorizedAccessException ex)
             {
                 return Forbid(ex.Message);
@@ -161,6 +166,10 @@ namespace AutoFix.Controllers
             catch (KeyNotFoundException)
             {
                 return NotFound();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return StatusCode(409, new { message = "تم تعديل هذا السجل من جهاز آخر، أعد التحميل", isConcurrencyConflict = true });
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -205,6 +214,17 @@ namespace AutoFix.Controllers
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        [HttpPost("payments")]
+        [Authorize(Roles = "Admin,Owner,Receptionist,Reception,Accountant")]
+        public async Task<ActionResult<PaymentResponseDto>> RecordPaymentFromBody([FromBody] RecordPaymentDto dto)
+        {
+            if (!dto.InvoiceId.HasValue || dto.InvoiceId.Value <= 0)
+            {
+                return BadRequest(new { message = "رقم الفاتورة مطلوب لتسجيل الدفعة" });
+            }
+            return await RecordPayment(dto.InvoiceId.Value, dto);
         }
 
         [HttpPost("{id:int}/credit")]
