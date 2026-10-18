@@ -12,10 +12,12 @@ namespace AutoFix.Controllers
     public class SparePartsController : ControllerBase
     {
         private readonly ISparePartService _service;
+        private readonly IReportExportService _reportService;
         
-        public SparePartsController(ISparePartService service)
+        public SparePartsController(ISparePartService service, IReportExportService reportService)
         {
             _service = service;
+            _reportService = reportService;
         }
 
         [HttpGet]
@@ -87,6 +89,12 @@ namespace AutoFix.Controllers
             return success ? NoContent() : NotFound();
         }
 
-
+        [HttpGet("export")]
+        [Authorize(Roles = "Admin,Owner,Mechanic")]
+        public async Task<IActionResult> Export([FromQuery] string? filter = null, [FromQuery] string format = "xlsx")
+        {
+            var (content, contentType, fileName) = await _reportService.ExportSparePartsAsync(filter, format);
+            return File(content, contentType, fileName);
+        }
     }
 }

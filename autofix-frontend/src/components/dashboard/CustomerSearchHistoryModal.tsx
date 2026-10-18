@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Car, FileText, Wrench, DollarSign, Calendar, 
-  Clock, ShieldAlert, CheckCircle, RefreshCw 
+  Clock, ShieldAlert, CheckCircle, RefreshCw, FileSpreadsheet, Download 
 } from 'lucide-react';
 import Modal from '../shared/Modal';
 import axiosClient from '../../services/axiosClient';
 import Money from '../shared/Money';
+import toast from 'react-hot-toast';
 
 interface CustomerSearchHistoryModalProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export const CustomerSearchHistoryModal: React.FC<CustomerSearchHistoryModalProp
   const [cars, setCars] = useState<any[]>([]);
   const [workOrders, setWorkOrders] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [isExportingRecord, setIsExportingRecord] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -76,6 +78,40 @@ export const CustomerSearchHistoryModal: React.FC<CustomerSearchHistoryModalProp
   const totalPaid = invoices.reduce((sum, inv) => sum + (inv.paidAmount || 0), 0);
   const totalDebt = totalInvoiced - totalPaid;
 
+  const handleExportCustomerRecord = async () => {
+    if (!customer?.id) return;
+    setIsExportingRecord(true);
+    try {
+      const res = await axiosClient.get(`/reports/customer/${customer.id}`, {
+        responseType: 'blob'
+      });
+      let fileName = `AP_Customer_${customer.phone || customer.id}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const disposition = res.headers['content-disposition'];
+      if (disposition) {
+        const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (match && match[1]) {
+          fileName = match[1].replace(/['"]/g, '').trim();
+        }
+      }
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      toast.success('تم تصدير سجل العميل بالكامل بنجاح');
+    } catch (err) {
+      toast.error('حدث خطأ أثناء تصدير سجل العميل');
+    } finally {
+      setIsExportingRecord(false);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -103,6 +139,29 @@ export const CustomerSearchHistoryModal: React.FC<CustomerSearchHistoryModalProp
                   <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '2px' }}>
                     الهاتف: <bdi dir="auto">{customer.phone || 'غير مسجل'}</bdi>
                   </div>
+                  <button
+                    onClick={handleExportCustomerRecord}
+                    disabled={isExportingRecord}
+                    style={{
+                      marginTop: '8px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '5px 12px',
+                      backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      borderRadius: '6px',
+                      color: '#10b981',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: isExportingRecord ? 'not-allowed' : 'pointer',
+                      opacity: isExportingRecord ? 0.7 : 1
+                    }}
+                    title="تصدير سجل العميل والسيارات والزيارات والقطع المستخدمة إلى ملف Excel"
+                  >
+                    <FileSpreadsheet size={14} color="#10b981" />
+                    <span>{isExportingRecord ? 'جاري التصدير...' : 'تصدير سجل العميل (Excel)'}</span>
+                  </button>
                 </div>
 
                 <div style={{ display: 'flex', gap: '16px' }}>

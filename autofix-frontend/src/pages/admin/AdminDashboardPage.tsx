@@ -20,6 +20,8 @@ import CustomerSearchHistoryModal from '../../components/dashboard/CustomerSearc
 import { InvoicePreviewModal } from '../../components/shared/InvoicePreviewModal';
 import { CarServiceHistoryModal } from '../../components/shared/CarServiceHistoryModal';
 import { sendInvoiceViaWhatsApp } from '../../utils/whatsappInvoiceSender';
+import { BusinessReportExportModal } from '../../components/dashboard/BusinessReportExportModal';
+import { FileSpreadsheet } from 'lucide-react';
 
 const WhatsAppIcon: React.FC<{ size?: number; color?: string }> = ({ size = 16, color = '#25D366' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
@@ -96,6 +98,7 @@ export const AdminDashboardPage: React.FC = () => {
   }>({});
   const [carHistoryModalOpen, setCarHistoryModalOpen] = useState(false);
   const [carHistoryTarget, setCarHistoryTarget] = useState<{ carId?: number; carInfo?: string }>({});
+  const [businessReportModalOpen, setBusinessReportModalOpen] = useState(false);
 
   // 3-dots Card Menu dropdown state
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<number | null>(null);
@@ -549,27 +552,50 @@ export const AdminDashboardPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Period Selector Tabs */}
-          <div style={periodTabsContainerStyle}>
-            {[
-              { id: 'today', label: 'اليوم' },
-              { id: 'week', label: 'الأسبوع' },
-              { id: 'month', label: 'الشهر' },
-              { id: 'year', label: 'السنة' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setPeriod(tab.id)}
-                style={{
-                  ...periodTabBtnStyle,
-                  backgroundColor: period === tab.id ? '#e52535' : 'transparent',
-                  color: period === tab.id ? '#ffffff' : '#94a3b8',
-                  fontWeight: period === tab.id ? 800 : 600
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={periodTabsContainerStyle}>
+              {[
+                { id: 'today', label: 'اليوم' },
+                { id: 'week', label: 'الأسبوع' },
+                { id: 'month', label: 'الشهر' },
+                { id: 'year', label: 'السنة' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setPeriod(tab.id)}
+                  style={{
+                    ...periodTabBtnStyle,
+                    backgroundColor: period === tab.id ? '#e52535' : 'transparent',
+                    color: period === tab.id ? '#ffffff' : '#94a3b8',
+                    fontWeight: period === tab.id ? 800 : 600
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setBusinessReportModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 14px',
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                borderRadius: '8px',
+                color: '#10b981',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="تصدير تقرير نشاط وأرباح الورشة بصيغة Excel"
+            >
+              <FileSpreadsheet size={16} color="#10b981" />
+              <span>تصدير تقرير Excel</span>
+            </button>
           </div>
         </div>
 
@@ -1405,6 +1431,11 @@ export const AdminDashboardPage: React.FC = () => {
         onClose={() => setCarHistoryModalOpen(false)}
         carId={carHistoryTarget.carId}
         carInfo={carHistoryTarget.carInfo}
+      />
+
+      <BusinessReportExportModal
+        isOpen={businessReportModalOpen}
+        onClose={() => setBusinessReportModalOpen(false)}
       />
     </div>
   );

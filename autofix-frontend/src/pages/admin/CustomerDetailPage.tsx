@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { customerService } from '../../services/customerService';
 import LoadingSpinner from '../../components/shared/LoadingSpinner';
+import axiosClient from '../../services/axiosClient';
+import toast from 'react-hot-toast';
+import { FileSpreadsheet } from 'lucide-react';
 
 const CustomerDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +24,7 @@ const CustomerDetailPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -41,6 +45,36 @@ const CustomerDetailPage: React.FC = () => {
       setError(err.response?.status === 404 ? 'Customer not found' : (err.response?.data?.message ?? 'Failed to load customer'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExportReport = async () => {
+    if (!id) return;
+    setExporting(true);
+    try {
+      const res = await axiosClient.get(`/reports/customer/${id}`, { responseType: 'blob' });
+      let fileName = `AP_Customer_${customer?.phone || id}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const disposition = res.headers['content-disposition'];
+      if (disposition) {
+        const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (match && match[1]) {
+          fileName = match[1].replace(/['"]/g, '').trim();
+        }
+      }
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      toast.success('تم تصدير سجل العميل بنجاح');
+    } catch {
+      toast.error('حدث خطأ أثناء تصدير سجل العميل');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -79,12 +113,22 @@ const CustomerDetailPage: React.FC = () => {
             <p><strong>Phone:</strong> {customer.phone || 'N/A'}</p>
             <p><strong>Keycloak User ID:</strong> {customer.keycloakUserId}</p>
             <p><strong>Created At:</strong> {new Date(customer.createdAt).toLocaleString()}</p>
-            <button 
-              onClick={() => setIsEditing(true)}
-              style={{ marginTop: '1rem', backgroundColor: 'var(--primary)', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '4px', cursor: 'pointer' }}
-            >
-              Edit Customer
-            </button>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '1rem' }}>
+              <button 
+                onClick={() => setIsEditing(true)}
+                style={{ backgroundColor: 'var(--primary)', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Edit Customer
+              </button>
+              <button 
+                onClick={handleExportReport}
+                disabled={exporting}
+                style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.4)', padding: '0.5rem 1.5rem', borderRadius: '4px', cursor: exporting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+              >
+                <FileSpreadsheet size={16} />
+                <span>{exporting ? 'جاري التصدير...' : 'تصدير سجل العميل (Excel)'}</span>
+              </button>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '400px' }}>

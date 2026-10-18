@@ -9,6 +9,7 @@ import { sparePartService } from '../../services/sparePartService';
 import { sparePartCategoryService } from '../../services/sparePartCategoryService';
 import Money from '../../components/shared/Money';
 import axiosClient from '../../services/axiosClient';
+import toast from 'react-hot-toast';
 
 export const SparePartsPage: React.FC = () => {
   const [parts, setParts] = useState<any[]>([]);
@@ -19,6 +20,8 @@ export const SparePartsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'low' | 'out' | 'archived'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Modals & Forms
   const [showFormModal, setShowFormModal] = useState(false);
@@ -190,8 +193,35 @@ export const SparePartsPage: React.FC = () => {
     }
   };
 
-  const handleExportCsv = () => {
-    window.open('/api/backup/export-csv?table=SpareParts', '_blank');
+  const handleExport = async (format: 'xlsx' | 'csv') => {
+    setIsExporting(true);
+    setShowExportMenu(false);
+    try {
+      const filterParam = activeTab === 'all' ? '' : activeTab;
+      const res = await axiosClient.get(`/spareparts/export?format=${format}&filter=${filterParam}`, {
+        responseType: 'blob'
+      });
+      const today = new Date().toISOString().split('T')[0];
+      const fileName = `AP_Spareparts_${today}.${format}`;
+      const blob = new Blob([res.data], {
+        type: format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv; charset=utf-8'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      toast.success(format === 'xlsx' ? 'تم تصدير ملف Excel بنجاح' : 'تم تصدير ملف CSV بنجاح');
+    } catch (err) {
+      toast.error('حدث خطأ أثناء تصدير قطع الغيار');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Filtered Parts
@@ -243,15 +273,81 @@ export const SparePartsPage: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={handleExportCsv}
-            style={actionBtnStyle}
-            title="تصدير بيانات المخزن إلى ملف Excel/CSV"
-          >
-            <FileSpreadsheet size={16} color="#3b82f6" />
-            <span>تصدير Excel/CSV</span>
-          </button>
+        <div style={{ display: 'flex', gap: '10px', position: 'relative' }}>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowExportMenu(prev => !prev)}
+              disabled={isExporting}
+              style={{ ...actionBtnStyle, opacity: isExporting ? 0.7 : 1 }}
+              title="تصدير بيانات المخزن إلى ملف Excel أو CSV"
+            >
+              <FileSpreadsheet size={16} color="#3b82f6" />
+              <span>{isExporting ? 'جاري التصدير...' : 'تصدير Excel/CSV'}</span>
+              <ChevronDown size={14} color="#94a3b8" />
+            </button>
+
+            {showExportMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '6px',
+                  backgroundColor: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: '8px',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                  zIndex: 50,
+                  minWidth: '180px',
+                  overflow: 'hidden'
+                }}
+              >
+                <button
+                  onClick={() => handleExport('xlsx')}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    textAlign: 'right',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '13px',
+                    color: '#f8fafc',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.15)'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <FileSpreadsheet size={15} color="#10b981" />
+                  <span>تصدير Excel (.xlsx)</span>
+                </button>
+                <button
+                  onClick={() => handleExport('csv')}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    textAlign: 'right',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '13px',
+                    color: '#f8fafc',
+                    background: 'transparent',
+                    border: 'none',
+                    borderTop: '1px solid #334155',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.15)'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <FileSpreadsheet size={15} color="#3b82f6" />
+                  <span>تصدير CSV (.csv)</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <button
             onClick={handleOpenAdd}

@@ -186,7 +186,10 @@ namespace AutoFix.Controllers
 
             if (!string.IsNullOrWhiteSpace(table))
             {
-                var matchingKey = System.Linq.Enumerable.FirstOrDefault(files.Keys, k => k.StartsWith(table, System.StringComparison.OrdinalIgnoreCase) || k.Replace(".csv", "").Equals(table, System.StringComparison.OrdinalIgnoreCase));
+                var matchingKey = System.Linq.Enumerable.FirstOrDefault(files.Keys, k =>
+                    k.StartsWith(table, System.StringComparison.OrdinalIgnoreCase) ||
+                    k.Replace(".csv", "").Equals(table, System.StringComparison.OrdinalIgnoreCase) ||
+                    k.Replace("_", "").Replace(".csv", "").Equals(table.Replace("_", ""), System.StringComparison.OrdinalIgnoreCase));
                 if (matchingKey != null)
                 {
                     var bytes = Encoding.UTF8.GetBytes(files[matchingKey]);
