@@ -32,6 +32,8 @@ namespace AutoFix.DTOs.Invoice
 
         public string? ReferenceNumber { get; set; }
         public string? Notes { get; set; }
+        public string? ConcurrencyToken { get; set; }
+        public string? IdempotencyKey { get; set; }
     }
 
     public class InvoiceResponseDto
@@ -120,6 +122,11 @@ namespace AutoFix.DTOs.Invoice
     {
         [Required(ErrorMessage = "Reason for credit note is required.")]
         public string Reason { get; set; } = string.Empty;
+        public string? ConcurrencyToken { get; set; }
+    }
+
+    public class CreditInvoiceDto : CreditInvoiceRequestDto
+    {
     }
 
     public class CreateCreditNoteDto

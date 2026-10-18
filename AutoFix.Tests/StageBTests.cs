@@ -2,6 +2,7 @@ using AutoFix.DTOs.Car;
 using AutoFix.DTOs.Customer;
 using AutoFix.DTOs.Inspection;
 using AutoFix.DTOs.WorkOrder;
+using AutoFix.Exceptions;
 using AutoFix.Services;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -22,7 +23,6 @@ namespace AutoFix.Tests
             {
                 var custService = new CustomerService(db);
 
-                // Create first customer
                 var c1 = await custService.CreateAsync(new CreateCustomerDto
                 {
                     FullName = "Tarek Mansour",
@@ -31,8 +31,7 @@ namespace AutoFix.Tests
                 });
                 Assert.NotNull(c1);
 
-                // Attempt to create second customer with duplicate phone without allow flag -> throws DuplicatePhoneWarning
-                var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                var ex = await Assert.ThrowsAsync<ValidationWarningException>(() =>
                     custService.CreateAsync(new CreateCustomerDto
                     {
                         FullName = "Tarek Mansour Duplicate",
@@ -41,7 +40,7 @@ namespace AutoFix.Tests
                         AllowDuplicate = false
                     }));
 
-                Assert.Contains("DuplicatePhoneWarning", ex.Message);
+                Assert.Equal("DuplicatePhone", ex.Code);
 
                 // Attempt with AllowDuplicate = true -> succeeds
                 var c2 = await custService.CreateAsync(new CreateCustomerDto

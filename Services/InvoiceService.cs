@@ -439,6 +439,33 @@ namespace AutoFix.Services
             var invoice = await _db.Invoices.Include(i => i.Payments).Include(i => i.Customer).FirstOrDefaultAsync(i => i.Id == invoiceId);
             if (invoice == null) throw new KeyNotFoundException($"Invoice {invoiceId} not found.");
 
+            var idempotencyRef = !string.IsNullOrWhiteSpace(dto.ReferenceNumber) ? dto.ReferenceNumber : dto.IdempotencyKey;
+            if (!string.IsNullOrWhiteSpace(idempotencyRef))
+            {
+                var existingPayment = invoice.Payments.FirstOrDefault(p => !p.IsDeleted && p.ReferenceNumber == idempotencyRef && p.Amount == dto.Amount);
+                if (existingPayment != null)
+                {
+                    return new PaymentResponseDto
+                    {
+                        Id = existingPayment.Id,
+                        Amount = existingPayment.Amount,
+                        PaymentMethod = existingPayment.PaymentMethod,
+                        ReferenceNumber = existingPayment.ReferenceNumber,
+                        PaidAt = existingPayment.PaidAt,
+                        ReceivedBy = existingPayment.ReceivedByUserId,
+                        Notes = existingPayment.Notes,
+                        TotalAmount = invoice.TotalAmount,
+                        PaidAmount = invoice.PaidAmount,
+                        RemainingAmount = invoice.RemainingAmount
+                    };
+                }
+            }
+
+            if (!string.IsNullOrEmpty(dto.ConcurrencyToken) && !string.IsNullOrEmpty(invoice.ConcurrencyToken) && invoice.ConcurrencyToken != dto.ConcurrencyToken)
+            {
+                throw new DbUpdateConcurrencyException("تم تعديل هذا السجل من جهاز آخر، أعد التحميل");
+            }
+
             if (invoice.Status == "Cancelled" || invoice.Status == "Credited")
             {
                 throw new InvalidOperationException("لا يمكن تسجيل دفعة على فاتورة ملغاة أو تم عمل إشعار دائن لها.");
@@ -459,7 +486,7 @@ namespace AutoFix.Services
                 InvoiceId = invoiceId,
                 Amount = dto.Amount,
                 PaymentMethod = dto.PaymentMethod,
-                ReferenceNumber = dto.ReferenceNumber,
+                ReferenceNumber = !string.IsNullOrWhiteSpace(dto.ReferenceNumber) ? dto.ReferenceNumber : idempotencyRef,
                 PaidAt = DateTime.UtcNow,
                 ReceivedByUserId = receivedBy ?? "Admin",
                 Notes = dto.Notes
@@ -467,6 +494,7 @@ namespace AutoFix.Services
 
             invoice.Payments.Add(payment);
             invoice.PaidAmount += dto.Amount;
+            invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
 
             if (invoice.RemainingAmount <= 0)
             {
@@ -1291,7 +1319,7 @@ namespace AutoFix.Services
             return html;
         }
 
-        public async Task<InvoiceResponseDto> CreditInvoiceAsync(int invoiceId, string reason, string? issuedBy = null)
+        public async Task<InvoiceResponseDto> CreditInvoiceAsync(int invoiceId, string reason, string? issuedBy = null, string? concurrencyToken = null)
         {
             var invoice = await _db.Invoices
                 .Include(i => i.Payments)
@@ -1301,6 +1329,11 @@ namespace AutoFix.Services
                 .FirstOrDefaultAsync(i => i.Id == invoiceId);
 
             if (invoice == null) throw new KeyNotFoundException($"Invoice {invoiceId} not found.");
+
+            if (!string.IsNullOrEmpty(concurrencyToken) && !string.IsNullOrEmpty(invoice.ConcurrencyToken) && invoice.ConcurrencyToken != concurrencyToken)
+            {
+                throw new DbUpdateConcurrencyException("تم تعديل هذا السجل من جهاز آخر، أعد التحميل");
+            }
 
             if (string.IsNullOrWhiteSpace(reason))
             {
@@ -1395,6 +1428,7 @@ namespace AutoFix.Services
                 UserName = issuedBy ?? "Admin"
             });
 
+            invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
             await _db.SaveChangesAsync();
 
             return (await GetByIdAsync(invoice.Id))!;

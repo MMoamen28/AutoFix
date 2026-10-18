@@ -93,13 +93,20 @@ namespace AutoFix.Controllers
                 var created = await _service.CreateBundleAsync(dto, userName);
                 return Ok(created);
             }
-            catch (InvalidOperationException ex) when (ex.Message.StartsWith("LowerOdometerWarning"))
+            catch (AutoFix.Exceptions.ValidationWarningException ex)
             {
-                return Conflict(new { message = ex.Message, isLowerOdometerWarning = true });
+                return StatusCode(409, new
+                {
+                    requiresConfirmation = true,
+                    code = ex.Code,
+                    message = ex.Message,
+                    existingRecordId = ex.ExistingRecordId,
+                    existingRecordName = ex.ExistingRecordName
+                });
             }
-            catch (InvalidOperationException ex) when (ex.Message.StartsWith("DuplicatePhoneWarning") || ex.Message.StartsWith("DuplicateCarWarning"))
+            catch (InvalidOperationException ex)
             {
-                return Conflict(new { message = ex.Message, isDuplicateWarning = true });
+                return BadRequest(new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -123,6 +130,10 @@ namespace AutoFix.Controllers
             {
                 var updated = await _service.UpdateAsync(id, dto);
                 return updated == null ? NotFound() : Ok(updated);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return StatusCode(409, new { message = "تم تعديل هذا السجل من جهاز آخر، أعد التحميل", isConcurrencyConflict = true });
             }
             catch (InvalidOperationException ex)
             {
@@ -463,5 +474,6 @@ namespace AutoFix.Controllers
     public class CreditInvoiceRequestDto
     {
         public string? Reason { get; set; }
+        public string? ConcurrencyToken { get; set; }
     }
 }

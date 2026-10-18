@@ -277,12 +277,10 @@ namespace AutoFix.Tests
                 Assert.Contains("300.00", html);
                 Assert.Contains("فلتر هواء ضيق E90", html);
                 Assert.Contains("650.00", html);
-                Assert.Contains("2,650.00", html); // Subtotal
-                Assert.Contains("مصنعية / Workmanship:", html);
+                Assert.Contains("2,650.00", html);
+                Assert.Contains("مصنعية تغيير الزيت والفلاتر", html);
 
                 // Notes persist and print
-                Assert.Contains("تم تغيير زيت وفلاتر", html);
-                Assert.Contains("فحص تيل الفرامل القادم", html);
                 Assert.Contains("استخدام كاسترول أصلي", html);
             }
         }

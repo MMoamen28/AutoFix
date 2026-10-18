@@ -3,6 +3,7 @@ using AutoFix.DTOs.Customer;
 using AutoFix.DTOs.Mechanic;
 using AutoFix.DTOs.WorkOrder;
 using AutoFix.Models;
+using AutoFix.Exceptions;
 using AutoFix.Services;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -79,7 +80,7 @@ namespace AutoFix.Tests
                 var customerCountBefore = await db.Customers.CountAsync();
 
                 // 2. Second quick add with duplicate plate and new customer phone
-                var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                var ex = await Assert.ThrowsAsync<ValidationWarningException>(() =>
                     custService.QuickAddAsync(new QuickAddCustomerCarDto
                     {
                         FullName = "Second Owner",
@@ -87,12 +88,12 @@ namespace AutoFix.Tests
                         Make = "Honda",
                         Model = "Accord",
                         Year = 2023,
-                        LicensePlate = "ق م ر 9 9 9", // DUPLICATE
+                        LicensePlate = "ق م ر 9 9 9",
                         VIN = "1HGCR2F83HA998877",
                         AllowDuplicateCar = false
                     }));
 
-                Assert.Contains("DuplicateCarWarning", ex.Message);
+                Assert.Contains(ex.Code, new[] { "DuplicatePlate", "DuplicateCar" });
 
                 // Verify customer count did NOT increase (atomic rollback)
                 var customerCountAfter = await db.Customers.CountAsync();
@@ -371,20 +372,19 @@ namespace AutoFix.Tests
                 Assert.NotEqual(car1.Car.Id, car2.Car.Id);
                 Assert.Equal(string.Empty, car2.Car.VIN);
 
-                // 3. Duplicate phone still throws
-                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                var exPhone = await Assert.ThrowsAsync<ValidationWarningException>(() =>
                     custService.QuickAddAsync(new QuickAddCustomerCarDto
                     {
                         FullName = "Duplicate Phone Guy",
-                        Phone = "01098765432", // DUPLICATE PHONE
+                        Phone = "01098765432",
                         Make = "Kia",
                         Model = "Cerato",
                         Year = 2020,
                         LicensePlate = "ك ي ا 9 9"
                     }));
+                Assert.Equal("DuplicatePhone", exPhone.Code);
 
-                // 4. Duplicate plate still throws
-                await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                var exPlate = await Assert.ThrowsAsync<ValidationWarningException>(() =>
                     custService.QuickAddAsync(new QuickAddCustomerCarDto
                     {
                         FullName = "Duplicate Plate Guy",
@@ -392,8 +392,9 @@ namespace AutoFix.Tests
                         Make = "Kia",
                         Model = "Cerato",
                         Year = 2020,
-                        LicensePlate = "ي ر س 1 2" // DUPLICATE PLATE
+                        LicensePlate = "ي ر س 1 2"
                     }));
+                Assert.Contains(exPlate.Code, new[] { "DuplicatePlate", "DuplicateCar" });
             }
         }
 

@@ -210,6 +210,10 @@ namespace AutoFix.Controllers
             {
                 return NotFound();
             }
+            catch (DbUpdateConcurrencyException)
+            {
+                return StatusCode(409, new { message = "تم تعديل هذا السجل من جهاز آخر، أعد التحميل", isConcurrencyConflict = true });
+            }
             catch (InvalidOperationException ex)
             {
                 return BadRequest(new { message = ex.Message });
@@ -239,12 +243,16 @@ namespace AutoFix.Controllers
             try
             {
                 var userName = User.Identity?.Name ?? "Admin";
-                var result = await _service.CreditInvoiceAsync(id, dto.Reason, userName);
+                var result = await _service.CreditInvoiceAsync(id, dto.Reason, userName, dto.ConcurrencyToken);
                 return Ok(result);
             }
             catch (KeyNotFoundException)
             {
                 return NotFound();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return StatusCode(409, new { message = "تم تعديل هذا السجل من جهاز آخر، أعد التحميل", isConcurrencyConflict = true });
             }
             catch (InvalidOperationException ex)
             {

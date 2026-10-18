@@ -32,6 +32,9 @@
     <Compile Remove="QA\**" />
     <EmbeddedResource Remove="QA\**" />
     <None Remove="QA\**" />
+    <Compile Remove="Launcher\**" />
+    <EmbeddedResource Remove="Launcher\**" />
+    <None Remove="Launcher\**" />
   </ItemGroup>
 
 </Project>
