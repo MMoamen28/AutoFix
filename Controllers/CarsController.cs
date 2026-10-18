@@ -28,14 +28,40 @@ namespace AutoFix.Controllers
         [HttpGet]
         public async Task<ActionResult<List<CarResponseDto>>> GetAll(
             [FromQuery] string? search,
+            [FromQuery] int? customerId,
             [FromQuery] int? mechanicId,
             [FromQuery] bool includeArchived = false)
         {
+            if (User.IsInRole("Admin") || User.IsInRole("Owner") || User.IsInRole("Receptionist") || User.IsInRole("Reception"))
+            {
+                if (customerId.HasValue && customerId.Value > 0)
+                {
+                    return Ok(await _service.GetByCustomerIdAsync(customerId.Value, includeArchived));
+                }
+
+                if (mechanicId.HasValue && mechanicId.Value > 0)
+                {
+                    return Ok(await _service.GetCarsByMechanicAsync(mechanicId.Value));
+                }
+
+                if (!string.IsNullOrWhiteSpace(search))
+                {
+                    return Ok(await _service.SearchCarsAsync(search, includeArchived));
+                }
+
+                return Ok(await _service.GetAllAsync(includeArchived));
+            }
+
             if (User.IsInRole("Customer"))
             {
-                var customerId = await GetCurrentCustomerId();
-                if (customerId == 0) return Ok(new List<CarResponseDto>());
-                return Ok(await _service.GetByCustomerIdAsync(customerId, includeArchived));
+                var clientCustomerId = await GetCurrentCustomerId();
+                if (clientCustomerId == 0) return Ok(new List<CarResponseDto>());
+                return Ok(await _service.GetByCustomerIdAsync(clientCustomerId, includeArchived));
+            }
+
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                return Ok(await _service.GetByCustomerIdAsync(customerId.Value, includeArchived));
             }
 
             if (mechanicId.HasValue && mechanicId.Value > 0)

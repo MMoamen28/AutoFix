@@ -25,16 +25,15 @@ namespace AutoFix.Services
         private IInvoiceService? Invoices => _serviceProvider != null ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IInvoiceService>(_serviceProvider) : null;
         private IInspectionService? Inspections => _serviceProvider != null ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<IInspectionService>(_serviceProvider) : null;
 
-        // Strict lifecycle transitions map
         private static readonly Dictionary<string, HashSet<string>> AllowedTransitions = new(StringComparer.OrdinalIgnoreCase)
         {
             ["Pending"] = new(StringComparer.OrdinalIgnoreCase) { "InProgress", "Cancelled" },
             ["InProgress"] = new(StringComparer.OrdinalIgnoreCase) { "WaitingForParts", "Completed", "Cancelled" },
             ["WaitingForParts"] = new(StringComparer.OrdinalIgnoreCase) { "InProgress", "Cancelled" },
             ["Completed"] = new(StringComparer.OrdinalIgnoreCase) { "Delivered", "Invoiced", "Cancelled" },
-            ["Delivered"] = new(StringComparer.OrdinalIgnoreCase) { "Invoiced", "Cancelled" },
-            ["Invoiced"] = new(StringComparer.OrdinalIgnoreCase) { }, // Terminal final state
-            ["Cancelled"] = new(StringComparer.OrdinalIgnoreCase) { } // Terminal final state (no transitions out)
+            ["Delivered"] = new(StringComparer.OrdinalIgnoreCase) { "Invoiced" },
+            ["Invoiced"] = new(StringComparer.OrdinalIgnoreCase) { },
+            ["Cancelled"] = new(StringComparer.OrdinalIgnoreCase) { }
         };
 
         public WorkOrderService(AppDbContext db, IDataFolderService dataFolder, IRealtimeService? realtime = null, IServiceProvider? serviceProvider = null)
@@ -173,13 +172,49 @@ namespace AutoFix.Services
             }
 
             var results = await query.OrderByDescending(w => w.ReceivedAt).ToListAsync();
-            return results.Select(w => MapToDto(w, isCustomer)).ToList();
+            var dtos = results.Select(w => MapToDto(w, isCustomer)).ToList();
+            var orderIds = dtos.Select(d => d.Id).ToList();
+            if (orderIds.Count > 0)
+            {
+                var invoices = await _db.Invoices.AsNoTracking()
+                    .Where(i => i.WorkOrderId.HasValue && orderIds.Contains(i.WorkOrderId.Value) && !i.IsDeleted)
+                    .ToListAsync();
+                var invLookup = invoices
+                    .GroupBy(i => i.WorkOrderId!.Value)
+                    .ToDictionary(g => g.Key, g => g.OrderByDescending(i => i.Id).First());
+                foreach (var dto in dtos)
+                {
+                    if (invLookup.TryGetValue(dto.Id, out var inv))
+                    {
+                        dto.InvoiceId = inv.Id;
+                        dto.InvoiceNumber = inv.InvoiceNumber;
+                        dto.InvoiceStatus = inv.Status;
+                        dto.PaidAmount = inv.PaidAmount;
+                        dto.RemainingAmount = inv.RemainingAmount;
+                    }
+                }
+            }
+            return dtos;
         }
 
         public async Task<WorkOrderResponseDto?> GetByIdAsync(int id, bool isCustomer = false)
         {
             var workOrder = await BaseQuery().AsNoTracking().FirstOrDefaultAsync(w => w.Id == id);
-            return workOrder == null ? null : MapToDto(workOrder, isCustomer);
+            if (workOrder == null) return null;
+            var dto = MapToDto(workOrder, isCustomer);
+            var inv = await _db.Invoices.AsNoTracking()
+                .Where(i => i.WorkOrderId == id && !i.IsDeleted)
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync();
+            if (inv != null)
+            {
+                dto.InvoiceId = inv.Id;
+                dto.InvoiceNumber = inv.InvoiceNumber;
+                dto.InvoiceStatus = inv.Status;
+                dto.PaidAmount = inv.PaidAmount;
+                dto.RemainingAmount = inv.RemainingAmount;
+            }
+            return dto;
         }
 
         private async Task<string> GenerateNextWorkOrderNumberAsync()
@@ -1693,91 +1728,99 @@ namespace AutoFix.Services
                 return MapInvoiceToDto(invoice);
             }
 
-            var creditNoteNumber = $"CN-{invoice.InvoiceNumber}";
-            var previousPaidAmount = invoice.PaidAmount;
-
-            invoice.Status = "Credited";
-            invoice.Notes = (invoice.Notes ?? string.Empty) + $" [Credit Note: {creditNoteNumber}. Reason: {reason ?? "Customer credit note issued"}]";
-
-            // If payments were previously made, issue an automatic customer refund and record in Treasury
-            if (previousPaidAmount > 0)
+            using var transaction = await _db.Database.BeginTransactionAsync();
+            try
             {
-                // Reversing refund payment record
-                _db.InvoicePayments.Add(new InvoicePayment
+                var creditNoteNumber = $"CN-{invoice.InvoiceNumber}";
+                var previousPaidAmount = invoice.PaidAmount;
+
+                invoice.Status = "Credited";
+                invoice.Notes = (invoice.Notes ?? string.Empty) + $" [Credit Note: {creditNoteNumber}. Reason: {reason ?? "Customer credit note issued"}]";
+
+                if (previousPaidAmount > 0)
                 {
-                    InvoiceId = invoice.Id,
-                    Amount = -previousPaidAmount,
-                    PaymentMethod = "Refund",
-                    ReferenceNumber = creditNoteNumber,
-                    Notes = $"Automatic refund for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
-                    PaidAt = DateTime.UtcNow
-                });
-                invoice.PaidAmount = 0;
-
-                // Treasury transaction record for cash/bank refund
-                _db.TreasuryTransactions.Add(new TreasuryTransaction
-                {
-                    TransactionType = "CustomerRefund",
-                    Amount = -previousPaidAmount,
-                    Category = "Refund",
-                    ReferenceNumber = creditNoteNumber,
-                    Description = $"Refund to customer {invoice.Customer?.FullName} for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
-                    TransactionDate = DateTime.UtcNow
-                });
-            }
-
-            // Restore stock if parts were issued
-            var issuedMovements = await _db.PartMovements
-                .Where(pm => pm.ReferenceNumber == workOrder.OrderNumber && pm.MovementType == "WorkOrderIssue")
-                .ToListAsync();
-
-            var restoredCount = await _db.PartMovements
-                .CountAsync(pm => pm.ReferenceNumber == workOrder.OrderNumber && pm.MovementType == "WorkOrderRestore");
-
-            if (issuedMovements.Count > 0 && restoredCount == 0)
-            {
-                foreach (var movement in issuedMovements)
-                {
-                    var part = await _db.SpareParts.FindAsync(movement.SparePartId);
-                    if (part != null)
+                    _db.InvoicePayments.Add(new InvoicePayment
                     {
-                        var restoreQty = Math.Abs(movement.QuantityChanged);
-                        part.StockQuantity += (int)restoreQty;
+                        InvoiceId = invoice.Id,
+                        Amount = -previousPaidAmount,
+                        PaymentMethod = "Refund",
+                        ReferenceNumber = creditNoteNumber,
+                        Notes = $"Automatic refund for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
+                        PaidAt = DateTime.UtcNow
+                    });
+                    invoice.PaidAmount = 0;
 
-                        _db.PartMovements.Add(new PartMovement
+                    _db.TreasuryTransactions.Add(new TreasuryTransaction
+                    {
+                        TransactionType = "CustomerRefund",
+                        Amount = -previousPaidAmount,
+                        Category = "Refund",
+                        ReferenceNumber = creditNoteNumber,
+                        Description = $"Refund to customer {invoice.Customer?.FullName} for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
+                        TransactionDate = DateTime.UtcNow
+                    });
+                }
+
+                workOrder.Status = invoice.PaidAmount > 0 ? "PartiallyPaid" : "Invoiced";
+
+                var issuedMovements = await _db.PartMovements
+                    .Where(pm => pm.ReferenceNumber == workOrder.OrderNumber && pm.MovementType == "WorkOrderIssue")
+                    .ToListAsync();
+
+                var restoredCount = await _db.PartMovements
+                    .CountAsync(pm => pm.ReferenceNumber == workOrder.OrderNumber && pm.MovementType == "WorkOrderRestore");
+
+                if (issuedMovements.Count > 0 && restoredCount == 0)
+                {
+                    foreach (var movement in issuedMovements)
+                    {
+                        var part = await _db.SpareParts.FindAsync(movement.SparePartId);
+                        if (part != null)
                         {
-                            SparePartId = part.Id,
-                            WarehouseId = movement.WarehouseId,
-                            MovementType = "WorkOrderRestore",
-                            QuantityChanged = restoreQty,
-                            BalanceAfter = part.StockQuantity,
-                            UnitCost = movement.UnitCost,
-                            ReferenceNumber = workOrder.OrderNumber,
-                            Notes = $"Stock restored upon credit note {creditNoteNumber} for WorkOrder {workOrder.OrderNumber}",
-                            CreatedAt = DateTime.UtcNow
-                        });
+                            var restoreQty = Math.Abs(movement.QuantityChanged);
+                            part.StockQuantity += (int)restoreQty;
+
+                            _db.PartMovements.Add(new PartMovement
+                            {
+                                SparePartId = part.Id,
+                                WarehouseId = movement.WarehouseId,
+                                MovementType = "WorkOrderRestore",
+                                QuantityChanged = restoreQty,
+                                BalanceAfter = part.StockQuantity,
+                                UnitCost = movement.UnitCost,
+                                ReferenceNumber = workOrder.OrderNumber,
+                                Notes = $"Stock restored upon credit note {creditNoteNumber} for WorkOrder {workOrder.OrderNumber}",
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
                     }
                 }
+
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "IssueCreditNote",
+                    EntityName = "Invoice",
+                    EntityId = invoice.InvoiceNumber,
+                    Details = $"Credit Note {creditNoteNumber} issued for WorkOrder {workOrder.OrderNumber} (Invoice: {invoice.InvoiceNumber}, Total: {invoice.TotalAmount:F2} L.E). Paid amount of {previousPaidAmount:F2} L.E was refunded to customer and logged in Treasury. Stock restored. Reason: {reason ?? "N/A"}",
+                    Timestamp = DateTime.UtcNow
+                });
+
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                if (_realtime != null)
+                {
+                    await _realtime.NotifyAsync("workorder-updated", new { OrderId = workOrder.Id, Status = workOrder.Status, OrderNumber = workOrder.OrderNumber });
+                    await _realtime.NotifyAsync("repair-updated", new { OrderId = workOrder.Id });
+                }
+
+                return MapInvoiceToDto(invoice);
             }
-
-            _db.AuditLogs.Add(new AuditLog
+            catch
             {
-                Action = "IssueCreditNote",
-                EntityName = "Invoice",
-                EntityId = invoice.InvoiceNumber,
-                Details = $"Credit Note {creditNoteNumber} issued for WorkOrder {workOrder.OrderNumber} (Invoice: {invoice.InvoiceNumber}, Total: {invoice.TotalAmount:F2} L.E). Paid amount of {previousPaidAmount:F2} L.E was refunded to customer and logged in Treasury. Stock restored. Reason: {reason ?? "N/A"}",
-                Timestamp = DateTime.UtcNow
-            });
-
-            await _db.SaveChangesAsync();
-
-            if (_realtime != null)
-            {
-                await _realtime.NotifyAsync("workorder-updated", new { OrderId = workOrder.Id, Status = workOrder.Status, OrderNumber = workOrder.OrderNumber });
-                await _realtime.NotifyAsync("repair-updated", new { OrderId = workOrder.Id });
+                await transaction.RollbackAsync();
+                throw;
             }
-
-            return MapInvoiceToDto(invoice);
         }
 
         public async Task<bool> DeleteAsync(int id)
@@ -1785,9 +1828,11 @@ namespace AutoFix.Services
             var workOrder = await _db.WorkOrders.FindAsync(id);
             if (workOrder == null) return false;
 
-            if (workOrder.Status == "Invoiced")
+            workOrder.Status = "Cancelled";
+            var inv = await _db.Invoices.FirstOrDefaultAsync(i => i.WorkOrderId == id && !i.IsDeleted);
+            if (inv != null)
             {
-                throw new InvalidOperationException("Cannot delete an invoiced work order.");
+                inv.Status = "Cancelled";
             }
 
             _db.WorkOrders.Remove(workOrder);

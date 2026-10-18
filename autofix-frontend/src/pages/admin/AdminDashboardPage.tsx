@@ -118,9 +118,8 @@ export const AdminDashboardPage: React.FC = () => {
     try {
       const res = await axiosClient.get('/work-orders');
       if (Array.isArray(res.data)) {
-        // Filter: active jobs where invoice is not issued/printed and not soft-deleted
         const filtered = res.data.filter(
-          (o: any) => !o.isDeleted && o.status !== 'Invoiced' && o.status !== 'Cancelled'
+          (o: any) => !o.isDeleted && o.status !== 'Paid' && o.status !== 'Cancelled'
         );
         setActiveOrders(filtered);
 
@@ -395,25 +394,23 @@ export const AdminDashboardPage: React.FC = () => {
     } catch {}
   };
 
-  // "طباعة وحفظ الفاتورة" flow:
-  // Opens in-app preview modal first (no new tab), converts to invoice, removes from active list!
   const handleSaveAndPrintInvoice = async () => {
     if (!selectedOrder) return;
+    const currentOrderId = selectedOrder.id;
 
     try {
-      // 1. Convert to invoice in backend (if not already converted)
-      const invRes = await axiosClient.post(`/work-orders/${selectedOrder.id}/convert-to-invoice`, {});
+      const invRes = await axiosClient.post(`/work-orders/${currentOrderId}/convert-to-invoice`, {});
       
-      // 2. Open Preview modal
       if (selectedOrder.workType === 'Inspection') {
-        setPreviewTarget({ workOrderInvoicePreviewId: selectedOrder.id, inspectionId: selectedOrder.inspectionId || selectedOrder.id });
+        setPreviewTarget({ workOrderInvoicePreviewId: currentOrderId, inspectionId: selectedOrder.inspectionId || currentOrderId });
       } else {
-        setPreviewTarget({ workOrderInvoicePreviewId: selectedOrder.id });
+        setPreviewTarget({ workOrderInvoicePreviewId: currentOrderId });
       }
       setPreviewModalOpen(true);
 
-      // 3. Refresh list (car will be removed from active cars)
+      setSelectedOrderId(currentOrderId);
       await loadActiveOrders();
+      await reloadSelectedOrder(currentOrderId);
       await loadFinancial();
     } catch (err: any) {
       alert(err.response?.data?.message || 'فشل إصدار الفاتورة للطباعة');
@@ -662,6 +659,13 @@ export const AdminDashboardPage: React.FC = () => {
               filteredActiveOrders.map(order => {
                 const isSelected = selectedOrderId === order.id;
                 const daysOpen = getDaysOpen(order.createdAt);
+                const remainingAmount = order.remainingAmount !== undefined && order.remainingAmount !== null
+                  ? order.remainingAmount
+                  : (order.invoiceRemainingAmount !== undefined && order.invoiceRemainingAmount !== null
+                      ? order.invoiceRemainingAmount
+                      : (order.status === 'Invoiced' ? (order.totalAmount || 0) : null));
+                const isPartiallyPaid = order.status === 'PartiallyPaid' || (order.paidAmount > 0 && (remainingAmount ?? 0) > 0);
+                const isInvoiced = order.status === 'Invoiced' || (!isPartiallyPaid && (order.invoiceId || remainingAmount !== null) && order.status !== 'Paid');
 
                 return (
                   <div
@@ -774,7 +778,17 @@ export const AdminDashboardPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Card Footer: Technician & Days Open & Total */}
+                    {(isInvoiced || isPartiallyPaid) && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px', padding: '5px 10px', borderRadius: '6px', backgroundColor: isPartiallyPaid ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)', border: isPartiallyPaid ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: isPartiallyPaid ? '#fbbf24' : '#60a5fa' }}>
+                          {isPartiallyPaid ? 'مدفوع جزئياً' : 'بانتظار الدفع'}
+                        </span>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#f8fafc' }}>
+                          المتبقي: <Money value={remainingAmount ?? order.totalAmount} />
+                        </span>
+                      </div>
+                    )}
+
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '11px' }}>
                       <div style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Wrench size={12} color="#3b82f6" />
@@ -1112,12 +1126,20 @@ export const AdminDashboardPage: React.FC = () => {
                   <span>طباعة وحفظ الفاتورة</span>
                 </button>
 
-                {/* Secondary Action Row */}
                 <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button
                     type="button"
-                    onClick={() => {
-                      setPreviewTarget({ workOrderInvoicePreviewId: selectedOrder.id });
+                    onClick={async () => {
+                      if (!selectedOrder) return;
+                      let targetInvId = selectedOrder.invoiceId;
+                      if (!targetInvId) {
+                        try {
+                          const invRes = await axiosClient.post(`/work-orders/${selectedOrder.id}/convert-to-invoice`, {});
+                          targetInvId = invRes.data.id;
+                          await loadActiveOrders();
+                          await reloadSelectedOrder(selectedOrder.id);
+                        } catch {}
+                      }
                       setPaymentModalOpen(true);
                     }}
                     style={secondaryActionBtnStyle}
@@ -1153,7 +1175,6 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* MODALS */}
       <NewWorkOrderModal
         isOpen={newOrderModalOpen}
         onClose={() => setNewOrderModalOpen(false)}
@@ -1188,14 +1209,17 @@ export const AdminDashboardPage: React.FC = () => {
 
       <InvoicePaymentModal
         isOpen={paymentModalOpen}
-        invoiceId={selectedOrder?.invoiceId || selectedOrder?.id || null}
-        invoiceNumber={selectedOrder?.orderNumber}
+        invoiceId={selectedOrder?.invoiceId || null}
+        invoiceNumber={selectedOrder?.invoiceNumber || selectedOrder?.orderNumber}
         totalAmount={activeInvoiceTotal}
-        remainingAmount={activeInvoiceTotal}
+        remainingAmount={selectedOrder?.remainingAmount !== undefined && selectedOrder?.remainingAmount !== null ? selectedOrder.remainingAmount : activeInvoiceTotal}
         onClose={() => setPaymentModalOpen(false)}
-        onSuccess={() => {
-          loadActiveOrders();
-          loadFinancial();
+        onSuccess={async () => {
+          await loadActiveOrders();
+          if (selectedOrderId) {
+            await reloadSelectedOrder(selectedOrderId);
+          }
+          await loadFinancial();
         }}
       />
 

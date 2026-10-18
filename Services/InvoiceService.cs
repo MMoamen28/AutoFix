@@ -436,7 +436,7 @@ namespace AutoFix.Services
 
         public async Task<PaymentResponseDto> RecordPaymentAsync(int invoiceId, RecordPaymentDto dto, string? receivedBy = null)
         {
-            var invoice = await _db.Invoices.Include(i => i.Payments).Include(i => i.Customer).FirstOrDefaultAsync(i => i.Id == invoiceId);
+            var invoice = await _db.Invoices.Include(i => i.Payments).Include(i => i.Customer).Include(i => i.WorkOrder).FirstOrDefaultAsync(i => i.Id == invoiceId);
             if (invoice == null) throw new KeyNotFoundException($"Invoice {invoiceId} not found.");
 
             var idempotencyRef = !string.IsNullOrWhiteSpace(dto.ReferenceNumber) ? dto.ReferenceNumber : dto.IdempotencyKey;
@@ -481,65 +481,83 @@ namespace AutoFix.Services
                 throw new InvalidOperationException($"Payment amount ({dto.Amount:F2}) cannot exceed remaining invoice balance ({invoice.RemainingAmount:F2}).");
             }
 
-            var payment = new InvoicePayment
+            using var transaction = await _db.Database.BeginTransactionAsync();
+            try
             {
-                InvoiceId = invoiceId,
-                Amount = dto.Amount,
-                PaymentMethod = dto.PaymentMethod,
-                ReferenceNumber = !string.IsNullOrWhiteSpace(dto.ReferenceNumber) ? dto.ReferenceNumber : idempotencyRef,
-                PaidAt = DateTime.UtcNow,
-                ReceivedByUserId = receivedBy ?? "Admin",
-                Notes = dto.Notes
-            };
+                var payment = new InvoicePayment
+                {
+                    InvoiceId = invoiceId,
+                    Amount = dto.Amount,
+                    PaymentMethod = dto.PaymentMethod,
+                    ReferenceNumber = !string.IsNullOrWhiteSpace(dto.ReferenceNumber) ? dto.ReferenceNumber : idempotencyRef,
+                    PaidAt = DateTime.UtcNow,
+                    ReceivedByUserId = receivedBy ?? "Admin",
+                    Notes = dto.Notes
+                };
 
-            invoice.Payments.Add(payment);
-            invoice.PaidAmount += dto.Amount;
-            invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
+                invoice.Payments.Add(payment);
+                invoice.PaidAmount += dto.Amount;
+                invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
 
-            if (invoice.RemainingAmount <= 0)
-            {
-                invoice.Status = "Paid";
+                if (invoice.RemainingAmount <= 0)
+                {
+                    invoice.Status = "Paid";
+                    if (invoice.WorkOrder != null)
+                    {
+                        invoice.WorkOrder.Status = "Paid";
+                    }
+                }
+                else
+                {
+                    invoice.Status = "PartiallyPaid";
+                    if (invoice.WorkOrder != null)
+                    {
+                        invoice.WorkOrder.Status = "PartiallyPaid";
+                    }
+                }
+
+                _db.TreasuryTransactions.Add(new TreasuryTransaction
+                {
+                    TransactionType = "Income",
+                    Amount = dto.Amount,
+                    Category = "InvoicePayment",
+                    ReferenceNumber = invoice.InvoiceNumber,
+                    Description = $"تحصيل دفعة للفاتورة {invoice.InvoiceNumber} بمبلغ {dto.Amount:N2} ج.م ({dto.PaymentMethod})",
+                    TransactionDate = DateTime.UtcNow,
+                    PerformedByUserId = receivedBy ?? "Admin"
+                });
+
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "RecordInvoicePayment",
+                    EntityName = "InvoicePayment",
+                    EntityId = invoice.InvoiceNumber,
+                    Details = $"Recorded payment of {dto.Amount:F2} L.E ({dto.PaymentMethod}) on Invoice {invoice.InvoiceNumber}.",
+                    Timestamp = DateTime.UtcNow
+                });
+
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return new PaymentResponseDto
+                {
+                    Id = payment.Id,
+                    Amount = payment.Amount,
+                    PaymentMethod = payment.PaymentMethod,
+                    ReferenceNumber = payment.ReferenceNumber,
+                    PaidAt = payment.PaidAt,
+                    ReceivedBy = payment.ReceivedByUserId,
+                    Notes = payment.Notes,
+                    TotalAmount = invoice.TotalAmount,
+                    PaidAmount = invoice.PaidAmount,
+                    RemainingAmount = invoice.RemainingAmount
+                };
             }
-            else
+            catch
             {
-                invoice.Status = "PartiallyPaid";
+                await transaction.RollbackAsync();
+                throw;
             }
-
-            _db.TreasuryTransactions.Add(new TreasuryTransaction
-            {
-                TransactionType = "Income",
-                Amount = dto.Amount,
-                Category = "InvoicePayment",
-                ReferenceNumber = invoice.InvoiceNumber,
-                Description = $"تحصيل دفعة للفاتورة {invoice.InvoiceNumber} بمبلغ {dto.Amount:N2} ج.م ({dto.PaymentMethod})",
-                TransactionDate = DateTime.UtcNow,
-                PerformedByUserId = receivedBy ?? "Admin"
-            });
-
-            _db.AuditLogs.Add(new AuditLog
-            {
-                Action = "RecordInvoicePayment",
-                EntityName = "InvoicePayment",
-                EntityId = invoice.InvoiceNumber,
-                Details = $"Recorded payment of {dto.Amount:F2} L.E ({dto.PaymentMethod}) on Invoice {invoice.InvoiceNumber}.",
-                Timestamp = DateTime.UtcNow
-            });
-
-            await _db.SaveChangesAsync();
-
-            return new PaymentResponseDto
-            {
-                Id = payment.Id,
-                Amount = payment.Amount,
-                PaymentMethod = payment.PaymentMethod,
-                ReferenceNumber = payment.ReferenceNumber,
-                PaidAt = payment.PaidAt,
-                ReceivedBy = payment.ReceivedByUserId,
-                Notes = payment.Notes,
-                TotalAmount = invoice.TotalAmount,
-                PaidAmount = invoice.PaidAmount,
-                RemainingAmount = invoice.RemainingAmount
-            };
         }
 
         public async Task<bool> DeleteAsync(int id)
@@ -1345,93 +1363,103 @@ namespace AutoFix.Services
                 return (await GetByIdAsync(invoice.Id))!;
             }
 
-            var creditNoteNumber = $"CN-{invoice.InvoiceNumber}";
-            var previousPaidAmount = invoice.PaidAmount;
-
-            invoice.Status = "Credited";
-            invoice.Notes = (invoice.Notes ?? string.Empty) + $" [Credit Note: {creditNoteNumber}. Reason: {reason}]";
-
-            if (invoice.WorkOrder != null)
+            using var transaction = await _db.Database.BeginTransactionAsync();
+            try
             {
-                invoice.WorkOrder.Status = "Credited";
-            }
+                var creditNoteNumber = $"CN-{invoice.InvoiceNumber}";
+                var previousPaidAmount = invoice.PaidAmount;
 
-            if (previousPaidAmount > 0)
-            {
-                _db.InvoicePayments.Add(new InvoicePayment
+                invoice.Status = "Credited";
+                invoice.Notes = (invoice.Notes ?? string.Empty) + $" [Credit Note: {creditNoteNumber}. Reason: {reason}]";
+
+                if (previousPaidAmount > 0)
                 {
-                    InvoiceId = invoice.Id,
-                    Amount = -previousPaidAmount,
-                    PaymentMethod = "Refund",
-                    ReferenceNumber = creditNoteNumber,
-                    Notes = $"Automatic refund for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
-                    PaidAt = DateTime.UtcNow,
-                    ReceivedByUserId = issuedBy ?? "Admin"
-                });
-                invoice.PaidAmount = 0;
-
-                _db.TreasuryTransactions.Add(new TreasuryTransaction
-                {
-                    TransactionType = "CustomerRefund",
-                    Amount = -previousPaidAmount,
-                    Category = "Refund",
-                    ReferenceNumber = creditNoteNumber,
-                    Description = $"Refund to customer {invoice.Customer?.FullName} for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
-                    TransactionDate = DateTime.UtcNow
-                });
-            }
-
-            if (invoice.WorkOrder != null)
-            {
-                var issuedMovements = await _db.PartMovements
-                    .Where(pm => pm.ReferenceNumber == invoice.WorkOrder.OrderNumber && pm.MovementType == "WorkOrderIssue")
-                    .ToListAsync();
-
-                var restoredCount = await _db.PartMovements
-                    .CountAsync(pm => pm.ReferenceNumber == invoice.WorkOrder.OrderNumber && pm.MovementType == "WorkOrderRestore");
-
-                if (issuedMovements.Count > 0 && restoredCount == 0)
-                {
-                    var defaultWh = await _db.Warehouses.FirstOrDefaultAsync();
-                    foreach (var movement in issuedMovements)
+                    _db.InvoicePayments.Add(new InvoicePayment
                     {
-                        var part = await _db.SpareParts.FindAsync(movement.SparePartId);
-                        if (part != null)
-                        {
-                            var restoreQty = Math.Abs(movement.QuantityChanged);
-                            part.StockQuantity += (int)restoreQty;
+                        InvoiceId = invoice.Id,
+                        Amount = -previousPaidAmount,
+                        PaymentMethod = "Refund",
+                        ReferenceNumber = creditNoteNumber,
+                        Notes = $"Automatic refund for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
+                        PaidAt = DateTime.UtcNow,
+                        ReceivedByUserId = issuedBy ?? "Admin"
+                    });
+                    invoice.PaidAmount = 0;
 
-                            _db.PartMovements.Add(new PartMovement
+                    _db.TreasuryTransactions.Add(new TreasuryTransaction
+                    {
+                        TransactionType = "CustomerRefund",
+                        Amount = -previousPaidAmount,
+                        Category = "Refund",
+                        ReferenceNumber = creditNoteNumber,
+                        Description = $"Refund to customer {invoice.Customer?.FullName} for credited invoice {invoice.InvoiceNumber} (Credit Note: {creditNoteNumber})",
+                        TransactionDate = DateTime.UtcNow
+                    });
+                }
+
+                if (invoice.WorkOrder != null)
+                {
+                    invoice.WorkOrder.Status = invoice.PaidAmount > 0 ? "PartiallyPaid" : "Invoiced";
+                }
+
+                if (invoice.WorkOrder != null)
+                {
+                    var issuedMovements = await _db.PartMovements
+                        .Where(pm => pm.ReferenceNumber == invoice.WorkOrder.OrderNumber && pm.MovementType == "WorkOrderIssue")
+                        .ToListAsync();
+
+                    var restoredCount = await _db.PartMovements
+                        .CountAsync(pm => pm.ReferenceNumber == invoice.WorkOrder.OrderNumber && pm.MovementType == "WorkOrderRestore");
+
+                    if (issuedMovements.Count > 0 && restoredCount == 0)
+                    {
+                        var defaultWh = await _db.Warehouses.FirstOrDefaultAsync();
+                        foreach (var movement in issuedMovements)
+                        {
+                            var part = await _db.SpareParts.FindAsync(movement.SparePartId);
+                            if (part != null)
                             {
-                                SparePartId = part.Id,
-                                WarehouseId = movement.WarehouseId > 0 ? movement.WarehouseId : (defaultWh?.Id ?? 1),
-                                MovementType = "WorkOrderRestore",
-                                QuantityChanged = restoreQty,
-                                BalanceAfter = part.StockQuantity,
-                                UnitCost = movement.UnitCost,
-                                ReferenceNumber = invoice.WorkOrder.OrderNumber,
-                                Notes = $"Stock restored upon credit note {creditNoteNumber} for WorkOrder {invoice.WorkOrder.OrderNumber}",
-                                CreatedAt = DateTime.UtcNow
-                            });
+                                var restoreQty = Math.Abs(movement.QuantityChanged);
+                                part.StockQuantity += (int)restoreQty;
+
+                                _db.PartMovements.Add(new PartMovement
+                                {
+                                    SparePartId = part.Id,
+                                    WarehouseId = movement.WarehouseId > 0 ? movement.WarehouseId : (defaultWh?.Id ?? 1),
+                                    MovementType = "WorkOrderRestore",
+                                    QuantityChanged = restoreQty,
+                                    BalanceAfter = part.StockQuantity,
+                                    UnitCost = movement.UnitCost,
+                                    ReferenceNumber = invoice.WorkOrder.OrderNumber,
+                                    Notes = $"Stock restored upon credit note {creditNoteNumber} for WorkOrder {invoice.WorkOrder.OrderNumber}",
+                                    CreatedAt = DateTime.UtcNow
+                                });
+                            }
                         }
                     }
                 }
+
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "IssueCreditNote",
+                    EntityName = "Invoice",
+                    EntityId = invoice.InvoiceNumber,
+                    Details = $"Credit Note {creditNoteNumber} issued for Invoice {invoice.InvoiceNumber} (Total: {invoice.TotalAmount:F2} L.E). Refunded: {previousPaidAmount:F2} L.E. Reason: {reason}",
+                    Timestamp = DateTime.UtcNow,
+                    UserName = issuedBy ?? "Admin"
+                });
+
+                invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return (await GetByIdAsync(invoice.Id))!;
             }
-
-            _db.AuditLogs.Add(new AuditLog
+            catch
             {
-                Action = "IssueCreditNote",
-                EntityName = "Invoice",
-                EntityId = invoice.InvoiceNumber,
-                Details = $"Credit Note {creditNoteNumber} issued for Invoice {invoice.InvoiceNumber} (Total: {invoice.TotalAmount:F2} L.E). Refunded: {previousPaidAmount:F2} L.E. Reason: {reason}",
-                Timestamp = DateTime.UtcNow,
-                UserName = issuedBy ?? "Admin"
-            });
-
-            invoice.ConcurrencyToken = Guid.NewGuid().ToString("N");
-            await _db.SaveChangesAsync();
-
-            return (await GetByIdAsync(invoice.Id))!;
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
         public async Task<List<CreditNoteResponseDto>> GetAllCreditNotesAsync(int? customerId = null)

@@ -165,6 +165,12 @@ namespace AutoFix.DTOs.WorkOrder
         public DateTime? CompletedAt { get; set; }
         public DateTime? DeliveredAt { get; set; }
 
+        public int? InvoiceId { get; set; }
+        public string? InvoiceNumber { get; set; }
+        public string? InvoiceStatus { get; set; }
+        public decimal? PaidAmount { get; set; }
+        public decimal? RemainingAmount { get; set; }
+
         public List<WorkOrderLineResponseDto> Lines { get; set; } = new();
         public List<WorkOrderPhotoResponseDto> Photos { get; set; } = new();
         public List<WorkOrderMechanicHistoryDto> MechanicHistories { get; set; } = new();
