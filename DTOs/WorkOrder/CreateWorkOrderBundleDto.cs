@@ -34,5 +34,7 @@ namespace AutoFix.DTOs.WorkOrder
         public bool AllowLowerOdometer { get; set; } = false;
         public bool AllowDuplicatePhone { get; set; } = false;
         public bool AllowDuplicateCar { get; set; } = false;
+        public bool UpdateCustomerProfile { get; set; } = false;
+        public bool UpdateCarProfile { get; set; } = false;
     }
 }

@@ -3,7 +3,7 @@ import { useLocation, Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
-import { Database, AlertTriangle, ShieldCheck, LayoutDashboard, Package, Wifi, WifiOff, AlertOctagon } from 'lucide-react';
+import { Database, AlertTriangle, ShieldCheck, LayoutDashboard, Package, Wifi, WifiOff, AlertOctagon, X } from 'lucide-react';
 import { UnsavedChangesProvider } from '../../context/UnsavedChangesContext';
 import DevicePromptModal from '../shared/DevicePromptModal';
 import axiosClient from '../../services/axiosClient';
@@ -17,6 +17,16 @@ export const Layout: React.FC = () => {
   const [isServerOffline, setIsServerOffline] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [networkWarning, setNetworkWarning] = useState(false);
+  const [bannerExpanded, setBannerExpanded] = useState(true);
+  const [concurrencyConflictMsg, setConcurrencyConflictMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleConflict = (e: any) => {
+      setConcurrencyConflictMsg(e.detail?.message || 'تم تعديل هذا السجل من جهاز آخر، أعد التحميل');
+    };
+    window.addEventListener('autofix-concurrency-conflict', handleConflict);
+    return () => window.removeEventListener('autofix-concurrency-conflict', handleConflict);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -30,23 +40,49 @@ export const Layout: React.FC = () => {
     return () => window.removeEventListener('toggle-sidebar', handleToggle);
   }, []);
 
-  // Periodic health check for phone / offline notification
   useEffect(() => {
+    const handleConn = (e: any) => {
+      const isConn = e.detail?.connected ?? true;
+      setIsServerOffline(!isConn);
+      (window as any).__autofix_is_offline = !isConn;
+    };
+    window.addEventListener('server-connection-changed', handleConn);
+
+    import('../../services/pollingService').then(m => m.pollingService.start());
+
     const checkHealth = async () => {
       try {
-        await axiosClient.get('/health', { timeout: 4000 });
+        await axiosClient.get('/health', { timeout: 3000 });
         setIsServerOffline(false);
+        (window as any).__autofix_is_offline = false;
       } catch {
         setIsServerOffline(true);
+        (window as any).__autofix_is_offline = true;
       }
     };
 
     checkHealth();
-    const interval = setInterval(checkHealth, 15000);
-    return () => clearInterval(interval);
+    const interval = setInterval(checkHealth, 8000);
+    return () => {
+      window.removeEventListener('server-connection-changed', handleConn);
+      clearInterval(interval);
+      import('../../services/pollingService').then(m => m.pollingService.stop());
+    };
   }, []);
 
-  // Check network security warning: PIN off and network access on
+  useEffect(() => {
+    let timer: any;
+    if (networkWarning) {
+      setBannerExpanded(true);
+      timer = setTimeout(() => {
+        setBannerExpanded(false);
+      }, 5000);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [networkWarning]);
+
   useEffect(() => {
     const checkSecurity = async () => {
       try {
@@ -59,6 +95,9 @@ export const Layout: React.FC = () => {
       } catch {}
     };
     checkSecurity();
+    const handleSettingsUpdated = () => checkSecurity();
+    window.addEventListener('settings-updated', handleSettingsUpdated);
+    return () => window.removeEventListener('settings-updated', handleSettingsUpdated);
   }, [location.pathname]);
 
   const sidebarWidth = isMobile ? 0 : (sidebarCollapsed ? 68 : 250);
@@ -69,11 +108,38 @@ export const Layout: React.FC = () => {
         {/* Device Name Setup Modal on first open */}
         <DevicePromptModal />
 
-        {/* Global Network/Security Warning Banner */}
-        {networkWarning && (
-          <div style={securityWarningBannerStyle}>
-            <AlertOctagon size={18} />
-            <span>تنبيه أمني: مشاركة الشبكة مفعّلة بدون رقم سري — أي جهاز على شبكة الورشة يمكنه فتح وتعديل البيانات!</span>
+
+
+        {concurrencyConflictMsg && (
+          <div style={{
+            backgroundColor: '#fee2e2',
+            color: '#991b1b',
+            borderBottom: '2px solid #ef4444',
+            padding: '12px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontWeight: 'bold',
+            zIndex: 10001
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertOctagon size={20} />
+              <span>{concurrencyConflictMsg}</span>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                backgroundColor: '#dc2626',
+                color: '#fff',
+                border: 'none',
+                padding: '6px 14px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              إعادة التحميل
+            </button>
           </div>
         )}
 
@@ -111,8 +177,37 @@ export const Layout: React.FC = () => {
           paddingBottom: isMobile ? '70px' : '0px',
           transition: 'margin-right 0.2s ease'
         }}>
+          {networkWarning && bannerExpanded && (
+            <div style={securityBannerStyle} id="security-warning-banner">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+                <AlertOctagon size={18} style={{ flexShrink: 0 }} />
+                <span>تنبيه أمني: مشاركة الشبكة مفعّلة بدون رقم سري — أي جهاز على شبكة الورشة يمكنه فتح وتعديل البيانات</span>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('open-settings'))}
+                  style={bannerPinBtnStyle}
+                  id="banner-enable-pin-btn"
+                >
+                  تفعيل الرقم السري
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBannerExpanded(false)}
+                style={bannerCloseBtnStyle}
+                title="إغلاق التنبيه"
+                id="banner-close-btn"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          )}
+
           {/* Topbar */}
-          <Topbar />
+          <Topbar
+            showSecurityShield={networkWarning && !bannerExpanded}
+            onOpenSecurityBanner={() => setBannerExpanded(true)}
+          />
 
           {/* Page Content */}
           <main style={{ ...contentAreaStyle, padding: isMobile ? '16px 12px' : '24px' }}>
@@ -271,22 +366,46 @@ const mobileBottomTabStyle: React.CSSProperties = {
   justifyContent: 'center'
 };
 
-const securityWarningBannerStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
+const securityBannerStyle: React.CSSProperties = {
+  position: 'relative',
+  width: '100%',
   backgroundColor: '#b91c1c',
   color: '#ffffff',
-  padding: '8px 16px',
+  padding: '10px 16px',
   fontSize: '13px',
   fontWeight: 700,
   display: 'flex',
   alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '12px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+  zIndex: 1001,
+  direction: 'rtl'
+};
+
+const bannerPinBtnStyle: React.CSSProperties = {
+  backgroundColor: '#ffffff',
+  color: '#b91c1c',
+  border: 'none',
+  borderRadius: '6px',
+  padding: '4px 12px',
+  fontSize: '12px',
+  fontWeight: 800,
+  cursor: 'pointer',
+  fontFamily: 'Cairo, sans-serif',
+  marginRight: '8px'
+};
+
+const bannerCloseBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: '#ffffff',
+  cursor: 'pointer',
+  padding: '4px',
+  display: 'flex',
+  alignItems: 'center',
   justifyContent: 'center',
-  gap: '10px',
-  zIndex: 9999,
-  boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
+  flexShrink: 0
 };
 
 const serverOfflineBannerStyle: React.CSSProperties = {

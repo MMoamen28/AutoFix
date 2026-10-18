@@ -120,6 +120,17 @@ namespace AutoFix.Controllers
                 var result = await _service.CreateAsync(dto, customerId);
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
+            catch (AutoFix.Exceptions.ValidationWarningException ex)
+            {
+                return StatusCode(409, new
+                {
+                    requiresConfirmation = true,
+                    code = ex.Code,
+                    message = ex.Message,
+                    existingRecordId = ex.ExistingRecordId,
+                    existingRecordName = ex.ExistingRecordName
+                });
+            }
             catch (System.InvalidOperationException ex) when (ex.Message.StartsWith("DuplicateCarWarning"))
             {
                 return Conflict(new { message = ex.Message, isDuplicateWarning = true });

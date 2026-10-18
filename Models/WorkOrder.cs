@@ -53,6 +53,9 @@ namespace AutoFix.Models
         public ICollection<WorkOrderPhoto> Photos { get; set; } = new List<WorkOrderPhoto>();
         public ICollection<WorkOrderMechanicHistory> MechanicHistories { get; set; } = new List<WorkOrderMechanicHistory>();
 
+        [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
+        public string ConcurrencyToken { get; set; } = Guid.NewGuid().ToString("N");
+
         // Soft delete
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }

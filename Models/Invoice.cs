@@ -44,6 +44,9 @@ namespace AutoFix.Models
         public ICollection<InvoicePayment> Payments { get; set; } = new List<InvoicePayment>();
         public ICollection<InvoiceIdHistory> IdHistories { get; set; } = new List<InvoiceIdHistory>();
 
+        [System.ComponentModel.DataAnnotations.ConcurrencyCheck]
+        public string ConcurrencyToken { get; set; } = Guid.NewGuid().ToString("N");
+
         // Soft delete
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }

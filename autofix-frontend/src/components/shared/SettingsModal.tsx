@@ -53,12 +53,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [pinChangeError, setPinChangeError] = useState('');
   const [pinChangeSuccess, setPinChangeSuccess] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [fixedIpAddress, setFixedIpAddress] = useState('');
+  const [fixedIpError, setFixedIpError] = useState('');
+  const [networkInfoData, setNetworkInfoData] = useState<any>(null);
+  const [showAddressChangedNotice, setShowAddressChangedNotice] = useState(false);
 
   const fetchSettings = async () => {
     try {
-      const [settingsRes, netRes] = await Promise.allSettled([
+      const [settingsRes, netRes, netInfoRes] = await Promise.allSettled([
         axiosClient.get('/settings'),
-        axiosClient.get('/settings/network')
+        axiosClient.get('/settings/network'),
+        axiosClient.get('/network/info')
       ]);
 
       if (settingsRes.status === 'fulfilled' && settingsRes.value.data) {
@@ -68,10 +73,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         setRequirePin(!!d.requirePin);
         setHasPinSet(!!d.hasPinSet);
         setAllowNetworkAccess(!!d.allowNetworkAccess);
+        setFixedIpAddress(d.fixedIpAddress || '');
       }
 
       if (netRes.status === 'fulfilled' && netRes.value.data) {
         setNetworkInfo(netRes.value.data);
+      }
+
+      if (netInfoRes.status === 'fulfilled' && netInfoRes.value.data) {
+        const nData = netInfoRes.value.data;
+        setNetworkInfoData(nData);
+        if (nData.addressChanged) {
+          setShowAddressChangedNotice(true);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch settings', err);
@@ -120,6 +134,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (fixedIpAddress.trim()) {
+      if (!isPrivateIPv4(fixedIpAddress.trim())) {
+        setFixedIpError('يرجى إدخال عنوان IPv4 خاص صحيح (مثل 192.168.1.50 أو 10.0.0.50)');
+        return;
+      }
+    }
+    setFixedIpError('');
     setCurrencyLabel('en', labelEn);
     setCurrencyLabel('ar', labelAr);
     setDigitMode(digitMode);
@@ -129,9 +150,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         showVat, 
         printNotesOnInvoice,
         requirePin,
-        allowNetworkAccess
+        allowNetworkAccess,
+        fixedIpAddress: fixedIpAddress.trim() || null
       });
-    } catch (err) {
+      window.dispatchEvent(new CustomEvent('settings-updated'));
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        setFixedIpError(err.response.data.message);
+        return;
+      }
       console.error('Failed to update workshop settings', err);
     }
 
@@ -188,6 +215,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       setPinChangeSuccess(true);
       setNewPinInput('');
       setPinChangeError('');
+      window.dispatchEvent(new CustomEvent('settings-updated'));
       setTimeout(() => {
         setPinChangeSuccess(false);
         setShowSetPinDialog(false);
@@ -197,10 +225,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     }
   };
 
-  const primaryIp = networkInfo?.localIpAddresses?.[0] || '192.168.1.xxx';
-  const lanUrl = `http://${primaryIp}:5000`;
+  const chosenIp = networkInfoData?.chosenAddress;
+  const lanUrl = chosenIp ? `http://${chosenIp}:5000` : null;
 
   const handleCopyLink = () => {
+    if (!lanUrl) return;
     navigator.clipboard.writeText(lanUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -216,6 +245,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
     >
       <div dir="rtl" style={{ display: 'flex', flexDirection: 'column', gap: '22px', fontFamily: 'Cairo, sans-serif' }}>
         
+        {showAddressChangedNotice && (
+          <div style={{
+            backgroundColor: '#1e3a8a',
+            border: '1px solid #3b82f6',
+            color: '#bfdbfe',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            fontSize: '13px',
+            fontWeight: 700
+          }}>
+            <div>
+              تغيّر عنوان اللابتوب — الرابط الجديد هو: <span style={{ direction: 'ltr', display: 'inline-block', color: '#ffffff' }}>{lanUrl || chosenIp}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddressChangedNotice(false)}
+              style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', padding: '2px 6px', fontSize: '14px' }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Security Alert: Network on and PIN off */}
         {allowNetworkAccess && !requirePin && (
           <div style={redWarningBannerStyle}>
@@ -248,32 +304,76 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
           {allowNetworkAccess && (
             <div style={networkDetailsBoxStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
-                <div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>رابط الدخول من الموبايل:</div>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: '#38bdf8', direction: 'ltr', textAlign: 'right' }}>
-                    {lanUrl}
+              {lanUrl ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>رابط الدخول من الموبايل:</div>
+                      <a
+                        href={lanUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: '15px', fontWeight: 800, color: '#38bdf8', direction: 'ltr', textAlign: 'right', display: 'inline-block', textDecoration: 'underline' }}
+                        id="mobile-lan-link"
+                      >
+                        {lanUrl}
+                      </a>
+                      <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px' }}>
+                        اكتب العنوان بـ http وليس https
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyLink}
+                      style={actionBtnStyle}
+                      id="copy-lan-link-btn"
+                    >
+                      <Copy size={14} />
+                      <span>{copiedLink ? 'تم النسخ ✓' : 'نسخ الرابط'}</span>
+                    </button>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  style={actionBtnStyle}
-                >
-                  <Copy size={14} />
-                  <span>{copiedLink ? 'تم النسخ ✓' : 'نسخ الرابط'}</span>
-                </button>
-              </div>
 
-              {/* QR Code */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#0d1117', padding: '12px', borderRadius: '10px', border: '1px solid #212c3d' }}>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(lanUrl)}`}
-                  alt="QR Code"
-                  style={{ width: '90px', height: '90px', borderRadius: '6px', background: '#ffffff', padding: '4px' }}
+                  {/* QR Code */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#0d1117', padding: '12px', borderRadius: '10px', border: '1px solid #212c3d' }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(lanUrl)}`}
+                      alt="QR Code"
+                      style={{ width: '90px', height: '90px', borderRadius: '6px', background: '#ffffff', padding: '4px' }}
+                    />
+                    <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.6 }}>
+                      امسح رمز الاستجابة السريعة (QR) بكاميرا الموبايل لفتح لوحة التحكم فوراً من هاتفك دون الحاجة لكتابة الرابط.
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '12px', background: '#1c1917', border: '1px solid #78350f', borderRadius: '8px', color: '#fde047', fontSize: '12px', lineHeight: 1.6 }}>
+                  تعذر تحديد عنوان الشبكة المحلية — تأكد من اتصال اللابتوب بالراوتر أو اضبط عنواناً ثابتاً أدناه
+                </div>
+              )}
+
+              <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid #212c3d' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#e2e8f0', marginBottom: '6px' }}>
+                  عنوان ثابت (اختياري):
+                </label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={fixedIpAddress}
+                  onChange={(e) => {
+                    setFixedIpAddress(e.target.value);
+                    if (fixedIpError) setFixedIpError('');
+                  }}
+                  placeholder="مثال: 192.168.1.50"
+                  style={inputStyle}
+                  id="fixed-ip-address-input"
                 />
-                <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.6 }}>
-                  امسح رمز الاستجابة السريعة (QR) بكاميرا الموبايل لفتح لوحة التحكم فوراً من هاتفك دون الحاجة لكتابة الرابط.
+                {fixedIpError && (
+                  <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>
+                    {fixedIpError}
+                  </div>
+                )}
+                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '6px', lineHeight: 1.5 }}>
+                  لثبات الرابط، احجز العنوان لهذا اللابتوب من الراوتر أو ثبّته من إعدادات الشبكة
                 </div>
               </div>
 
@@ -645,6 +745,21 @@ const inputStyle: React.CSSProperties = {
   fontWeight: 600,
   outline: 'none',
   fontFamily: 'Cairo, sans-serif'
+};
+
+const isPrivateIPv4 = (ip: string): boolean => {
+  const parts = ip.trim().split('.');
+  if (parts.length !== 4) return false;
+  const nums = parts.map(p => Number(p));
+  for (let i = 0; i < 4; i++) {
+    if (isNaN(nums[i]) || nums[i] < 0 || nums[i] > 255 || parts[i] === '' || (parts[i].length > 1 && parts[i].startsWith('0'))) {
+      return false;
+    }
+  }
+  if (nums[0] === 10) return true;
+  if (nums[0] === 172 && nums[1] >= 16 && nums[1] <= 31) return true;
+  if (nums[0] === 192 && nums[1] === 168) return true;
+  return false;
 };
 
 export default SettingsModal;

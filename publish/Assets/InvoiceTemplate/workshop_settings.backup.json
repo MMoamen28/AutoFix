@@ -1,0 +1,13 @@
+﻿{
+  "ShowVat": false,
+  "PrintNotesOnInvoice": true,
+  "WorkshopName": "AP AUTO SERVICE CENTER",
+  "WorkshopPhone": "",
+  "WorkshopAddress": "",
+  "RequirePin": false,
+  "PinHash": "",
+  "PinRememberDays": 30,
+  "AllowNetworkAccess": false,
+  "DigitMode": "western",
+  "ConnectedDevices": []
+}

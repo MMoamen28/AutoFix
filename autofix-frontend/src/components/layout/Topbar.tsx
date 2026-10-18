@@ -2,14 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, Plus, Bell, MessageSquare, User, 
-  Menu, Settings, LogOut, Car, FileText, CheckCircle2, Wrench, X
+  Menu, Settings, LogOut, Car, FileText, CheckCircle2, Wrench, X, Laptop, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import SettingsModal from '../shared/SettingsModal';
 import axiosClient from '../../services/axiosClient';
 import { toWesternDigits } from '../../i18n/formatters';
 
-export const Topbar: React.FC = () => {
+interface TopbarProps {
+  showSecurityShield?: boolean;
+  onOpenSecurityBanner?: () => void;
+}
+
+export const Topbar: React.FC<TopbarProps> = ({ showSecurityShield, onOpenSecurityBanner }) => {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -17,6 +22,21 @@ export const Topbar: React.FC = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [currentDeviceName, setCurrentDeviceName] = useState(localStorage.getItem('autofix_device_name') || 'جهاز الورشة');
+
+  useEffect(() => {
+    const handleNameChange = (e: any) => {
+      if (e.detail?.deviceName) setCurrentDeviceName(e.detail.deviceName);
+    };
+    window.addEventListener('device-name-changed', handleNameChange);
+    return () => window.removeEventListener('device-name-changed', handleNameChange);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenSettings = () => setSettingsOpen(true);
+    window.addEventListener('open-settings', handleOpenSettings);
+    return () => window.removeEventListener('open-settings', handleOpenSettings);
+  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -245,8 +265,26 @@ export const Topbar: React.FC = () => {
       </div>
 
       {/* Left side: Red CTA Button & Gear Settings */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {/* Red CTA Button: + كارت عمل جديد */}
+      <div style={leftActionsWrapperStyle}>
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('open-device-prompt'))}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            backgroundColor: '#1c2430',
+            border: '1px solid #2a3749',
+            borderRadius: '8px',
+            padding: '6px 10px',
+            cursor: 'pointer',
+            fontFamily: 'Cairo, sans-serif'
+          }}
+          title="تغيير اسم هذا الجهاز"
+        >
+          <Laptop size={14} color="#94a3b8" />
+          <span style={{ fontSize: '12px', color: '#cbd5e1', fontWeight: 600 }}>{currentDeviceName}</span>
+        </button>
+
         <button
           onClick={handleNewWorkOrderClick}
           style={redCtaButtonStyle}
@@ -256,7 +294,17 @@ export const Topbar: React.FC = () => {
           <span>كارت عمل جديد</span>
         </button>
 
-        {/* Gear Settings Button */}
+        {showSecurityShield && (
+          <button
+            onClick={onOpenSecurityBanner}
+            style={securityShieldBtnStyle}
+            title="تنبيه أمني: مشاركة الشبكة مفعّلة بدون رقم سري"
+            id="topbar-security-shield-btn"
+          >
+            <ShieldAlert size={18} color="#ef4444" />
+          </button>
+        )}
+
         <button
           onClick={() => setSettingsOpen(true)}
           style={circleIconBtnStyle}
@@ -271,6 +319,17 @@ export const Topbar: React.FC = () => {
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </header>
   );
+};
+
+const securityShieldBtnStyle: React.CSSProperties = {
+  backgroundColor: '#fee2e2',
+  border: '1px solid #ef4444',
+  borderRadius: '8px',
+  padding: '6px 8px',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center'
 };
 
 const headerStyle: React.CSSProperties = {
@@ -450,6 +509,12 @@ const dropdownItemStyle: React.CSSProperties = {
   cursor: 'pointer',
   textAlign: 'right',
   fontFamily: 'Cairo, sans-serif'
+};
+
+const leftActionsWrapperStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '12px'
 };
 
 export default Topbar;

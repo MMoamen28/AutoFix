@@ -25,5 +25,7 @@ namespace AutoFix.DTOs.Settings
         public bool AllowNetworkAccess { get; set; } = false;
         public string DigitMode { get; set; } = "western";
         public List<ConnectedDeviceDto> ConnectedDevices { get; set; } = new();
+        public string? FixedIpAddress { get; set; }
+        public string? LastDetectedIpAddress { get; set; }
     }
 }

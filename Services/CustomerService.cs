@@ -14,7 +14,13 @@ namespace AutoFix.Services
     public class CustomerService : ICustomerService
     {
         private readonly AppDbContext _db;
-        public CustomerService(AppDbContext db) => _db = db;
+        private readonly IRealtimeService? _realtime;
+
+        public CustomerService(AppDbContext db, IRealtimeService? realtime = null)
+        {
+            _db = db;
+            _realtime = realtime;
+        }
 
         public async Task<List<CustomerResponseDto>> GetAllAsync(bool includeArchived = false)
         {
@@ -40,7 +46,6 @@ namespace AutoFix.Services
 
             var carQuery = includeArchived ? _db.Cars.IgnoreQueryFilters().AsNoTracking() : _db.Cars.AsNoTracking();
 
-            // Load candidate cars first to avoid SQLite correlated subquery / APPLY limitations
             var matchingCarCustomerIds = await carQuery
                 .Where(car => 
                     EF.Functions.Like(car.LicensePlate, $"%{rawTrimmed}%") ||
@@ -79,9 +84,8 @@ namespace AutoFix.Services
         {
             if (string.IsNullOrWhiteSpace(phone)) return null;
 
-            var rawClean = phone.Trim();
-            var digitsNorm = ArabicSearchNormalizer.NormalizeDigits(rawClean);
-            var phoneNorm = ArabicSearchNormalizer.NormalizeEgyptianPhone(rawClean);
+            var normInput = ArabicSearchNormalizer.NormalizePhoneForComparison(phone);
+            if (string.IsNullOrEmpty(normInput)) return null;
 
             var query = _db.Customers.AsNoTracking().Where(c => !c.IsDeleted);
             if (excludeId.HasValue)
@@ -89,17 +93,19 @@ namespace AutoFix.Services
                 query = query.Where(c => c.Id != excludeId.Value);
             }
 
-            var duplicate = await query.FirstOrDefaultAsync(c =>
-                c.Phone == rawClean ||
-                c.Phone == digitsNorm ||
-                (!string.IsNullOrEmpty(phoneNorm) && c.Phone.EndsWith(phoneNorm)) ||
-                c.ExtraPhone == rawClean ||
-                c.ExtraPhone == digitsNorm ||
-                (!string.IsNullOrEmpty(phoneNorm) && c.ExtraPhone != null && c.ExtraPhone.EndsWith(phoneNorm)));
+            var candidates = await query
+                .Where(c => c.Phone != null && c.Phone != "")
+                .Select(c => new { c.Id, c.FullName, c.Phone, c.ExtraPhone })
+                .ToListAsync();
 
-            if (duplicate == null) return null;
+            var match = candidates.FirstOrDefault(c => 
+                ArabicSearchNormalizer.NormalizePhoneForComparison(c.Phone) == normInput ||
+                (!string.IsNullOrEmpty(c.ExtraPhone) && ArabicSearchNormalizer.NormalizePhoneForComparison(c.ExtraPhone) == normInput));
 
-            return MapToCustomerResponseDto(duplicate);
+            if (match == null) return null;
+
+            var fullCustomer = await _db.Customers.AsNoTracking().Include(c => c.Cars).FirstOrDefaultAsync(c => c.Id == match.Id);
+            return fullCustomer == null ? null : MapToCustomerResponseDto(fullCustomer);
         }
 
         public async Task<CustomerResponseDto?> GetByIdAsync(int id)
@@ -119,8 +125,11 @@ namespace AutoFix.Services
                 var existing = await CheckDuplicatePhoneAsync(dto.Phone);
                 if (existing != null)
                 {
-                    throw new InvalidOperationException(
-                        $"DuplicatePhoneWarning: A customer with phone '{dto.Phone}' already exists ({existing.FullName}, ID: {existing.Id}).");
+                    throw new AutoFix.Exceptions.ValidationWarningException(
+                        "DuplicatePhone",
+                        $"رقم الهاتف '{dto.Phone}' مسجل بالفعل باسم عميل آخر ({existing.FullName})",
+                        existing.Id,
+                        existing.FullName);
                 }
             }
 
@@ -128,14 +137,32 @@ namespace AutoFix.Services
             {
                 FullName = dto.FullName.Trim(),
                 Email = dto.Email?.Trim() ?? string.Empty,
-                Phone = ArabicSearchNormalizer.NormalizeDigits(dto.Phone.Trim()),
-                ExtraPhone = !string.IsNullOrWhiteSpace(dto.ExtraPhone) ? ArabicSearchNormalizer.NormalizeDigits(dto.ExtraPhone.Trim()) : null,
+                Phone = ArabicSearchNormalizer.FormatPhoneForStorage(dto.Phone),
+                ExtraPhone = !string.IsNullOrWhiteSpace(dto.ExtraPhone) ? ArabicSearchNormalizer.FormatPhoneForStorage(dto.ExtraPhone) : null,
                 Address = dto.Address?.Trim(),
-                Notes = dto.Notes?.Trim()
+                Notes = dto.Notes?.Trim(),
+                CreatedAt = DateTime.UtcNow
             };
 
             _db.Customers.Add(customer);
             await _db.SaveChangesAsync();
+
+            _db.AuditLogs.Add(new AuditLog
+            {
+                Action = "Create",
+                EntityName = "Customer",
+                EntityId = customer.Id.ToString(),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new { customer.FullName, customer.Phone }),
+                Details = "Customer created directly",
+                Timestamp = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+
+            if (_realtime != null)
+            {
+                await _realtime.NotifyAsync("customer-created", new { CustomerId = customer.Id });
+            }
+            AutoFix.Controllers.SyncController.NotifyCustomersChanged();
 
             return MapToCustomerResponseDto(customer);
         }
@@ -145,18 +172,19 @@ namespace AutoFix.Services
             using var tx = await _db.Database.BeginTransactionAsync();
             try
             {
-                // 1. Phone duplicate check
                 if (!dto.AllowDuplicatePhone)
                 {
                     var existingPhone = await CheckDuplicatePhoneAsync(dto.Phone);
                     if (existingPhone != null)
                     {
-                        throw new InvalidOperationException(
-                            $"DuplicatePhoneWarning: Customer with phone '{dto.Phone}' already exists ({existingPhone.FullName}, ID: {existingPhone.Id}).");
+                        throw new AutoFix.Exceptions.ValidationWarningException(
+                            "DuplicatePhone",
+                            $"رقم الهاتف '{dto.Phone}' مسجل بالفعل باسم عميل آخر ({existingPhone.FullName})",
+                            existingPhone.Id,
+                            existingPhone.FullName);
                     }
                 }
 
-                // 2. Car duplicate check
                 var cleanPlate = ArabicSearchNormalizer.NormalizeDigits(dto.LicensePlate.Trim());
                 var cleanVin = !string.IsNullOrWhiteSpace(dto.VIN) ? dto.VIN.Trim().ToUpperInvariant() : null;
 
@@ -171,27 +199,29 @@ namespace AutoFix.Services
 
                     if (existingCar != null)
                     {
-                        var matchReason = existingCar.LicensePlate == cleanPlate ? $"plate '{cleanPlate}'" : $"VIN '{cleanVin}'";
-                        throw new InvalidOperationException(
-                            $"DuplicateCarWarning: Car with {matchReason} already exists (Car ID: {existingCar.Id}, Owner: {existingCar.Customer?.FullName ?? "Unknown"}).");
+                        var matchReason = existingCar.LicensePlate == cleanPlate ? $"لوحة '{cleanPlate}'" : $"شاسيه '{cleanVin}'";
+                        throw new AutoFix.Exceptions.ValidationWarningException(
+                            "DuplicateCar",
+                            $"السيارة ذات {matchReason} مسجلة بالفعل باسم ({existingCar.Customer?.FullName ?? "غير معروف"})",
+                            existingCar.Id,
+                            existingCar.Customer?.FullName);
                     }
                 }
 
-                // 3. Create customer
                 var customer = new Customer
                 {
                     FullName = dto.FullName.Trim(),
-                    Phone = ArabicSearchNormalizer.NormalizeDigits(dto.Phone.Trim()),
-                    ExtraPhone = !string.IsNullOrWhiteSpace(dto.ExtraPhone) ? ArabicSearchNormalizer.NormalizeDigits(dto.ExtraPhone.Trim()) : null,
+                    Phone = ArabicSearchNormalizer.FormatPhoneForStorage(dto.Phone),
+                    ExtraPhone = !string.IsNullOrWhiteSpace(dto.ExtraPhone) ? ArabicSearchNormalizer.FormatPhoneForStorage(dto.ExtraPhone) : null,
                     Email = dto.Email?.Trim() ?? string.Empty,
                     Address = dto.Address?.Trim(),
-                    Notes = dto.CustomerNotes?.Trim()
+                    Notes = dto.CustomerNotes?.Trim(),
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _db.Customers.Add(customer);
                 await _db.SaveChangesAsync();
 
-                // 4. Create car
                 var car = new Car
                 {
                     CustomerId = customer.Id,
@@ -208,7 +238,6 @@ namespace AutoFix.Services
                 _db.Cars.Add(car);
                 await _db.SaveChangesAsync();
 
-                // 5. Initial odometer log if > 0
                 if (car.CurrentOdometerKm > 0)
                 {
                     _db.CarOdometerLogs.Add(new CarOdometerLog
@@ -221,9 +250,34 @@ namespace AutoFix.Services
                     await _db.SaveChangesAsync();
                 }
 
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "Create",
+                    EntityName = "Customer",
+                    EntityId = customer.Id.ToString(),
+                    NewValues = System.Text.Json.JsonSerializer.Serialize(new { customer.FullName, customer.Phone }),
+                    Details = "Customer created via QuickAdd",
+                    Timestamp = DateTime.UtcNow
+                });
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    Action = "Create",
+                    EntityName = "Car",
+                    EntityId = car.Id.ToString(),
+                    NewValues = System.Text.Json.JsonSerializer.Serialize(new { car.Make, car.Model, car.LicensePlate }),
+                    Details = "Car created via QuickAdd",
+                    Timestamp = DateTime.UtcNow
+                });
+                await _db.SaveChangesAsync();
+
                 await tx.CommitAsync();
 
-                // Reload to return full DTOs
+                if (_realtime != null)
+                {
+                    await _realtime.NotifyAsync("customer-created", new { CustomerId = customer.Id });
+                }
+                AutoFix.Controllers.SyncController.NotifyCustomersChanged();
+
                 var createdCustomer = await GetByIdAsync(customer.Id);
                 var createdCar = createdCustomer!.Cars.First(c => c.Id == car.Id);
 
@@ -245,14 +299,49 @@ namespace AutoFix.Services
             var customer = await _db.Customers.Include(c => c.Cars).FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
             if (customer == null) return null;
 
+            var cleanPhone = ArabicSearchNormalizer.FormatPhoneForStorage(dto.Phone);
+            if (cleanPhone != customer.Phone)
+            {
+                var collision = await CheckDuplicatePhoneAsync(dto.Phone, id);
+                if (collision != null)
+                {
+                    throw new AutoFix.Exceptions.ValidationWarningException(
+                        "DuplicatePhone",
+                        $"رقم الهاتف '{dto.Phone}' مسجل بالفعل باسم عميل آخر ({collision.FullName})",
+                        collision.Id,
+                        collision.FullName);
+                }
+            }
+
+            var oldValues = new { customer.FullName, customer.Phone, customer.ExtraPhone, customer.Email, customer.Address, customer.Notes };
+
             customer.FullName = dto.FullName.Trim();
             customer.Email = dto.Email?.Trim() ?? string.Empty;
-            customer.Phone = ArabicSearchNormalizer.NormalizeDigits(dto.Phone.Trim());
-            customer.ExtraPhone = !string.IsNullOrWhiteSpace(dto.ExtraPhone) ? ArabicSearchNormalizer.NormalizeDigits(dto.ExtraPhone.Trim()) : null;
+            customer.Phone = cleanPhone;
+            customer.ExtraPhone = !string.IsNullOrWhiteSpace(dto.ExtraPhone) ? ArabicSearchNormalizer.FormatPhoneForStorage(dto.ExtraPhone) : null;
             customer.Address = dto.Address?.Trim();
             customer.Notes = dto.Notes?.Trim();
 
             await _db.SaveChangesAsync();
+
+            var newValues = new { customer.FullName, customer.Phone, customer.ExtraPhone, customer.Email, customer.Address, customer.Notes };
+            _db.AuditLogs.Add(new AuditLog
+            {
+                Action = "Update",
+                EntityName = "Customer",
+                EntityId = customer.Id.ToString(),
+                OldValues = System.Text.Json.JsonSerializer.Serialize(oldValues),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(newValues),
+                Details = "Customer updated directly",
+                Timestamp = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+
+            if (_realtime != null)
+            {
+                await _realtime.NotifyAsync("customer-updated", new { CustomerId = customer.Id });
+            }
+            AutoFix.Controllers.SyncController.NotifyCustomersChanged();
 
             return MapToCustomerResponseDto(customer);
         }

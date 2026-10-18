@@ -47,9 +47,20 @@ namespace AutoFix.Controllers
                 var result = await _service.CreateAsync(dto);
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
-            catch (System.InvalidOperationException ex) when (ex.Message.StartsWith("DuplicatePhoneWarning"))
+            catch (AutoFix.Exceptions.ValidationWarningException ex)
             {
-                return Conflict(new { message = ex.Message, isDuplicateWarning = true });
+                return StatusCode(409, new
+                {
+                    requiresConfirmation = true,
+                    code = ex.Code,
+                    message = ex.Message,
+                    existingRecordId = ex.ExistingRecordId,
+                    existingRecordName = ex.ExistingRecordName
+                });
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
         }
 
@@ -61,9 +72,16 @@ namespace AutoFix.Controllers
                 var result = await _service.QuickAddAsync(dto);
                 return Ok(result);
             }
-            catch (System.InvalidOperationException ex) when (ex.Message.StartsWith("DuplicatePhoneWarning") || ex.Message.StartsWith("DuplicateCarWarning"))
+            catch (AutoFix.Exceptions.ValidationWarningException ex)
             {
-                return Conflict(new { message = ex.Message, isDuplicateWarning = true });
+                return StatusCode(409, new
+                {
+                    requiresConfirmation = true,
+                    code = ex.Code,
+                    message = ex.Message,
+                    existingRecordId = ex.ExistingRecordId,
+                    existingRecordName = ex.ExistingRecordName
+                });
             }
             catch (System.Exception ex)
             {
@@ -74,8 +92,26 @@ namespace AutoFix.Controllers
         [HttpPut("{id}")]
         public async Task<ActionResult<CustomerResponseDto>> Update(int id, [FromBody] UpdateCustomerDto dto)
         {
-            var result = await _service.UpdateAsync(id, dto);
-            return result == null ? NotFound() : Ok(result);
+            try
+            {
+                var result = await _service.UpdateAsync(id, dto);
+                return result == null ? NotFound() : Ok(result);
+            }
+            catch (AutoFix.Exceptions.ValidationWarningException ex)
+            {
+                return StatusCode(409, new
+                {
+                    requiresConfirmation = true,
+                    code = ex.Code,
+                    message = ex.Message,
+                    existingRecordId = ex.ExistingRecordId,
+                    existingRecordName = ex.ExistingRecordName
+                });
+            }
+            catch (System.Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [HttpDelete("{id}")]

@@ -71,6 +71,7 @@ namespace AutoFix.Services
             {
                 Id = w.Id,
                 OrderNumber = w.OrderNumber,
+                ConcurrencyToken = w.ConcurrencyToken,
                 CustomerId = w.CustomerId,
                 CustomerName = w.Customer?.FullName ?? string.Empty,
                 CustomerPhone = w.Customer?.Phone ?? string.Empty,
@@ -356,6 +357,12 @@ namespace AutoFix.Services
                 throw new InvalidOperationException($"Cannot modify WorkOrder {workOrder.OrderNumber} in status '{workOrder.Status}'.");
             }
 
+            if (!string.IsNullOrEmpty(dto.ConcurrencyToken) && !string.IsNullOrEmpty(workOrder.ConcurrencyToken) && workOrder.ConcurrencyToken != dto.ConcurrencyToken)
+            {
+                throw new DbUpdateConcurrencyException("تم تعديل هذا السجل من جهاز آخر، أعد التحميل");
+            }
+            workOrder.ConcurrencyToken = Guid.NewGuid().ToString("N");
+
             // Track mechanic changes
             if (dto.AssignedTechnicianId != workOrder.AssignedTechnicianId)
             {
@@ -467,6 +474,11 @@ namespace AutoFix.Services
             }
 
             await _db.SaveChangesAsync();
+            AutoFix.Controllers.SyncController.UpdateMarker("workorder");
+            if (_realtime != null)
+            {
+                await _realtime.NotifyAsync("workorder-updated", new { OrderId = workOrder.Id, Status = workOrder.Status, OrderNumber = workOrder.OrderNumber });
+            }
             return (await GetByIdAsync(workOrder.Id))!;
         }
 
@@ -931,9 +943,34 @@ namespace AutoFix.Services
 
             var nextInvNum = await InvoiceService.GenerateUniqueInvoiceNumberStaticAsync(_db);
 
-            // Freeze line items snapshot JSON
-            var snapshotItems = workOrder.Lines.Where(l => !l.IsDeleted).Select(l => new
+            int GetWorkOrderLineGroup(WorkOrderLine l)
             {
+                if (l.SparePartId.HasValue || l.IsExternalPart ||
+                    l.LineType.Equals("SparePart", StringComparison.OrdinalIgnoreCase) ||
+                    l.LineType.Equals("Part", StringComparison.OrdinalIgnoreCase) ||
+                    l.Description.Contains("قطع غيار", StringComparison.OrdinalIgnoreCase))
+                {
+                    return 0;
+                }
+                if (l.LineType.StartsWith("Labor", StringComparison.OrdinalIgnoreCase) ||
+                    l.LineType.Equals("Workmanship", StringComparison.OrdinalIgnoreCase) ||
+                    l.Description.Contains("مصنعية", StringComparison.OrdinalIgnoreCase))
+                {
+                    return 2;
+                }
+                return 1;
+            }
+
+            var sortedLines = workOrder.Lines
+                .Where(l => !l.IsDeleted)
+                .OrderBy(GetWorkOrderLineGroup)
+                .ThenBy(l => l.AddedAt)
+                .ThenBy(l => l.Id)
+                .ToList();
+
+            var snapshotItems = sortedLines.Select(l => new
+            {
+                l.Id,
                 l.Description,
                 l.LineType,
                 l.Quantity,
@@ -941,7 +978,11 @@ namespace AutoFix.Services
                 l.UnitPrice,
                 Subtotal = l.Quantity * l.UnitPrice,
                 GrossMargin = (l.Quantity * l.UnitPrice) - (l.Quantity * l.UnitCost),
-                Technician = l.Technician != null ? $"{l.Technician.FirstName} {l.Technician.LastName}" : null
+                Technician = l.Technician != null ? $"{l.Technician.FirstName} {l.Technician.LastName}" : null,
+                l.AddedAt,
+                l.SparePartId,
+                l.ServiceId,
+                l.IsExternalPart
             }).ToList();
 
             var subtotal = workOrder.TotalAmount;
@@ -1045,52 +1086,161 @@ namespace AutoFix.Services
                 Customer customer;
                 if (dto.CustomerId.HasValue && dto.CustomerId.Value > 0)
                 {
-                    customer = await _db.Customers.FindAsync(dto.CustomerId.Value)
-                        ?? throw new KeyNotFoundException($"Customer {dto.CustomerId.Value} not found.");
+                    customer = await _db.Customers.FindAsync(dto.CustomerId.Value);
+                    if (customer == null || customer.IsDeleted)
+                    {
+                        throw new InvalidOperationException($"العميل رقم {dto.CustomerId.Value} غير موجود بالمنظومة");
+                    }
+
+                    if (dto.UpdateCustomerProfile)
+                    {
+                        var oldCustValues = new { customer.FullName, customer.Phone, customer.ExtraPhone, customer.Address, customer.Notes };
+                        var nameChanged = !string.IsNullOrWhiteSpace(dto.CustomerName) && dto.CustomerName.Trim() != customer.FullName;
+                        var phoneChanged = !string.IsNullOrWhiteSpace(dto.CustomerPhone) && dto.CustomerPhone.Trim() != customer.Phone;
+
+                        if (phoneChanged)
+                        {
+                            var phoneNorm = ArabicSearchNormalizer.NormalizePhoneForComparison(dto.CustomerPhone);
+                            var collision = await _db.Customers.AsNoTracking()
+                                .Where(c => !c.IsDeleted && c.Id != customer.Id)
+                                .Select(c => new { c.Id, c.FullName, c.Phone, c.ExtraPhone })
+                                .ToListAsync();
+                            var collMatch = collision.FirstOrDefault(c => 
+                                ArabicSearchNormalizer.NormalizePhoneForComparison(c.Phone) == phoneNorm ||
+                                (!string.IsNullOrEmpty(c.ExtraPhone) && ArabicSearchNormalizer.NormalizePhoneForComparison(c.ExtraPhone) == phoneNorm));
+                            if (collMatch != null)
+                            {
+                                throw new AutoFix.Exceptions.ValidationWarningException("DuplicatePhone", $"رقم الهاتف '{dto.CustomerPhone}' مسجل بالفعل باسم عميل آخر ({collMatch.FullName})", collMatch.Id, collMatch.FullName);
+                            }
+                            customer.Phone = ArabicSearchNormalizer.FormatPhoneForStorage(dto.CustomerPhone);
+                        }
+
+                        if (nameChanged)
+                        {
+                            customer.FullName = dto.CustomerName.Trim();
+                        }
+                        if (!string.IsNullOrWhiteSpace(dto.CustomerNotes))
+                        {
+                            customer.Notes = dto.CustomerNotes.Trim();
+                        }
+
+                        await _db.SaveChangesAsync();
+
+                        var newCustValues = new { customer.FullName, customer.Phone, customer.ExtraPhone, customer.Address, customer.Notes };
+                        _db.AuditLogs.Add(new AuditLog
+                        {
+                            Action = "Update",
+                            EntityName = "Customer",
+                            EntityId = customer.Id.ToString(),
+                            OldValues = System.Text.Json.JsonSerializer.Serialize(oldCustValues),
+                            NewValues = System.Text.Json.JsonSerializer.Serialize(newCustValues),
+                            Details = "Customer profile updated from work order bundle",
+                            Timestamp = DateTime.UtcNow
+                        });
+                        await _db.SaveChangesAsync();
+
+                        await _realtime.NotifyAsync("customer-updated", new { CustomerId = customer.Id });
+                        AutoFix.Controllers.SyncController.NotifyCustomersChanged();
+                    }
                 }
                 else
                 {
                     if (string.IsNullOrWhiteSpace(dto.CustomerName))
-                        throw new InvalidOperationException("Customer name is required.");
+                        throw new InvalidOperationException("اسم العميل مطلوب.");
                     if (string.IsNullOrWhiteSpace(dto.CustomerPhone))
-                        throw new InvalidOperationException("Customer phone is required.");
+                        throw new InvalidOperationException("رقم هاتف العميل مطلوب.");
 
-                    var cleanPhone = ArabicSearchNormalizer.NormalizeDigits(dto.CustomerPhone.Trim());
+                    var normPhone = ArabicSearchNormalizer.NormalizePhoneForComparison(dto.CustomerPhone);
                     if (!dto.AllowDuplicatePhone)
                     {
-                        var existingCust = await _db.Customers.AsNoTracking()
-                            .FirstOrDefaultAsync(c => !c.IsDeleted && (c.Phone == cleanPhone || c.ExtraPhone == cleanPhone));
+                        var allCusts = await _db.Customers.AsNoTracking()
+                            .Where(c => !c.IsDeleted)
+                            .Select(c => new { c.Id, c.FullName, c.Phone, c.ExtraPhone })
+                            .ToListAsync();
+                        var existingCust = allCusts.FirstOrDefault(c => 
+                            ArabicSearchNormalizer.NormalizePhoneForComparison(c.Phone) == normPhone ||
+                            (!string.IsNullOrEmpty(c.ExtraPhone) && ArabicSearchNormalizer.NormalizePhoneForComparison(c.ExtraPhone) == normPhone));
                         if (existingCust != null)
                         {
-                            throw new InvalidOperationException(
-                                $"DuplicatePhoneWarning: Customer with phone '{dto.CustomerPhone}' already exists ({existingCust.FullName}, ID: {existingCust.Id}).");
+                            throw new AutoFix.Exceptions.ValidationWarningException(
+                                "DuplicatePhone",
+                                $"رقم الهاتف '{dto.CustomerPhone}' مسجل بالفعل باسم عميل آخر ({existingCust.FullName})",
+                                existingCust.Id,
+                                existingCust.FullName);
                         }
                     }
 
                     customer = new Customer
                     {
                         FullName = dto.CustomerName.Trim(),
-                        Phone = cleanPhone,
+                        Phone = ArabicSearchNormalizer.FormatPhoneForStorage(dto.CustomerPhone),
                         Notes = dto.CustomerNotes?.Trim() ?? string.Empty,
                         CreatedAt = DateTime.UtcNow
                     };
                     _db.Customers.Add(customer);
                     await _db.SaveChangesAsync();
+
+                    _db.AuditLogs.Add(new AuditLog
+                    {
+                        Action = "Create",
+                        EntityName = "Customer",
+                        EntityId = customer.Id.ToString(),
+                        NewValues = System.Text.Json.JsonSerializer.Serialize(new { customer.FullName, customer.Phone }),
+                        Details = "Customer registered via Reception bundle",
+                        Timestamp = DateTime.UtcNow
+                    });
+                    await _db.SaveChangesAsync();
+
+                    await _realtime.NotifyAsync("customer-created", new { CustomerId = customer.Id });
+                    AutoFix.Controllers.SyncController.NotifyCustomersChanged();
                 }
 
-                // 2. Car
                 Car car;
                 if (dto.CarId.HasValue && dto.CarId.Value > 0)
                 {
-                    car = await _db.Cars.FindAsync(dto.CarId.Value)
-                        ?? throw new KeyNotFoundException($"Car {dto.CarId.Value} not found.");
+                    car = await _db.Cars.FindAsync(dto.CarId.Value);
+                    if (car == null || car.IsDeleted)
+                    {
+                        throw new InvalidOperationException($"السيارة رقم {dto.CarId.Value} غير موجودة");
+                    }
+                    if (car.CustomerId != customer.Id)
+                    {
+                        throw new InvalidOperationException($"السيارة المحددة لا تنتمي لهذا العميل ({customer.FullName})");
+                    }
+
+                    if (dto.UpdateCarProfile)
+                    {
+                        var oldCarValues = new { car.Make, car.Model, car.Year, car.LicensePlate, car.VIN, car.CurrentOdometerKm };
+                        if (!string.IsNullOrWhiteSpace(dto.Make)) car.Make = dto.Make.Trim();
+                        if (!string.IsNullOrWhiteSpace(dto.Model)) car.Model = dto.Model.Trim();
+                        if (dto.Year > 1900) car.Year = dto.Year;
+                        if (!string.IsNullOrWhiteSpace(dto.LicensePlate)) car.LicensePlate = ArabicSearchNormalizer.NormalizeDigits(dto.LicensePlate.Trim());
+                        if (!string.IsNullOrWhiteSpace(dto.VIN)) car.VIN = dto.VIN.Trim().ToUpperInvariant();
+                        await _db.SaveChangesAsync();
+
+                        var newCarValues = new { car.Make, car.Model, car.Year, car.LicensePlate, car.VIN, car.CurrentOdometerKm };
+                        _db.AuditLogs.Add(new AuditLog
+                        {
+                            Action = "Update",
+                            EntityName = "Car",
+                            EntityId = car.Id.ToString(),
+                            OldValues = System.Text.Json.JsonSerializer.Serialize(oldCarValues),
+                            NewValues = System.Text.Json.JsonSerializer.Serialize(newCarValues),
+                            Details = "Car profile updated from work order bundle",
+                            Timestamp = DateTime.UtcNow
+                        });
+                        await _db.SaveChangesAsync();
+                    }
 
                     var oldKm = car.CurrentOdometerKm;
                     var newKm = dto.OdometerInKm ?? 0;
                     if (newKm > 0 && newKm < oldKm && !dto.AllowLowerOdometer)
                     {
-                        throw new InvalidOperationException(
-                            $"LowerOdometerWarning: New reading ({newKm} km) is lower than previous reading ({oldKm} km). Confirmation required.");
+                        throw new AutoFix.Exceptions.ValidationWarningException(
+                            "LowerOdometer",
+                            $"قراءة العداد الحالية ({newKm} كم) أقل من القراءة السابقة المسجلة ({oldKm} كم). هل تريد التأكيد؟",
+                            car.Id,
+                            $"قراءة سابقة: {oldKm} كم");
                     }
 
                     if (newKm > 0 && newKm != oldKm)
@@ -1104,16 +1254,17 @@ namespace AutoFix.Services
                             IsLowerReadingWarning = newKm < oldKm
                         });
                         car.CurrentOdometerKm = newKm;
+                        await _db.SaveChangesAsync();
                     }
                 }
                 else
                 {
                     if (string.IsNullOrWhiteSpace(dto.Make))
-                        throw new InvalidOperationException("Car make is required.");
+                        throw new InvalidOperationException("ماركة السيارة مطلوبة.");
                     if (string.IsNullOrWhiteSpace(dto.Model))
-                        throw new InvalidOperationException("Car model is required.");
+                        throw new InvalidOperationException("موديل السيارة مطلوب.");
                     if (string.IsNullOrWhiteSpace(dto.LicensePlate))
-                        throw new InvalidOperationException("Car license plate is required.");
+                        throw new InvalidOperationException("رقم اللوحة مطلوب.");
 
                     var cleanPlate = ArabicSearchNormalizer.NormalizeDigits(dto.LicensePlate.Trim());
                     var cleanVin = !string.IsNullOrWhiteSpace(dto.VIN) ? dto.VIN.Trim().ToUpperInvariant() : null;
@@ -1129,9 +1280,12 @@ namespace AutoFix.Services
 
                         if (existingCar != null)
                         {
-                            var matchReason = existingCar.LicensePlate == cleanPlate ? $"plate '{cleanPlate}'" : $"VIN '{cleanVin}'";
-                            throw new InvalidOperationException(
-                                $"DuplicateCarWarning: Car with {matchReason} already exists (Car ID: {existingCar.Id}, Owner: {existingCar.Customer?.FullName ?? "Unknown"}).");
+                            var matchReason = existingCar.LicensePlate == cleanPlate ? $"لوحة '{cleanPlate}'" : $"شاسيه '{cleanVin}'";
+                            throw new AutoFix.Exceptions.ValidationWarningException(
+                                "DuplicateCar",
+                                $"السيارة ذات {matchReason} مسجلة بالفعل باسم ({existingCar.Customer?.FullName ?? "غير معروف"})",
+                                existingCar.Id,
+                                existingCar.Customer?.FullName);
                         }
                     }
 
@@ -1146,6 +1300,17 @@ namespace AutoFix.Services
                         CurrentOdometerKm = dto.OdometerInKm ?? 0
                     };
                     _db.Cars.Add(car);
+                    await _db.SaveChangesAsync();
+
+                    _db.AuditLogs.Add(new AuditLog
+                    {
+                        Action = "Create",
+                        EntityName = "Car",
+                        EntityId = car.Id.ToString(),
+                        NewValues = System.Text.Json.JsonSerializer.Serialize(new { car.Make, car.Model, car.LicensePlate, car.CustomerId }),
+                        Details = "Car registered via Reception bundle",
+                        Timestamp = DateTime.UtcNow
+                    });
                     await _db.SaveChangesAsync();
 
                     if (car.CurrentOdometerKm > 0)

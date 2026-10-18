@@ -80,6 +80,7 @@ namespace AutoFix.DTOs.WorkOrder
         public string? WorkDone { get; set; }
         public string? WorkToBeDone { get; set; }
         public string? Notes { get; set; }
+        public string? ConcurrencyToken { get; set; }
         public DateTime? ExpectedDeliveryAt { get; set; }
         public List<CreateWorkOrderLineDto> Lines { get; set; } = new();
     }
@@ -125,6 +126,7 @@ namespace AutoFix.DTOs.WorkOrder
     {
         public int Id { get; set; }
         public string OrderNumber { get; set; } = string.Empty;
+        public string ConcurrencyToken { get; set; } = string.Empty;
 
         public int CustomerId { get; set; }
         public string CustomerName { get; set; } = string.Empty;

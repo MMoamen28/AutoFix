@@ -34,6 +34,15 @@ namespace AutoFix.Controllers
         [Authorize(Roles = "Admin,Owner")]
         public async Task<IActionResult> UpdateSettings([FromBody] AutoFix.DTOs.Settings.WorkshopSettingsDto dto)
         {
+            if (!string.IsNullOrWhiteSpace(dto.FixedIpAddress))
+            {
+                var trimmed = dto.FixedIpAddress.Trim();
+                if (!System.Net.IPAddress.TryParse(trimmed, out var ip) || !IsPrivateIPv4(ip))
+                {
+                    return BadRequest(new { message = "العنوان الثابت يجب أن يكون عنوان IPv4 خاص صحيح (مثل 192.168.x.x أو 10.x.x.x أو 172.16-31.x.x)" });
+                }
+                dto.FixedIpAddress = trimmed;
+            }
             var updated = await _settingsService.UpdateSettingsAsync(dto);
             return Ok(updated);
         }
@@ -278,6 +287,37 @@ namespace AutoFix.Controllers
             using var sha = System.Security.Cryptography.SHA256.Create();
             var bytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(raw));
             return System.Convert.ToHexString(bytes);
+        }
+
+        private static bool IsPrivateIPv4(System.Net.IPAddress ip)
+        {
+            if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork || System.Net.IPAddress.IsLoopback(ip))
+            {
+                return false;
+            }
+
+            var bytes = ip.GetAddressBytes();
+            if (bytes[0] == 169 && bytes[1] == 254)
+            {
+                return false;
+            }
+
+            if (bytes[0] == 10)
+            {
+                return true;
+            }
+
+            if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+            {
+                return true;
+            }
+
+            if (bytes[0] == 192 && bytes[1] == 168)
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }

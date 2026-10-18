@@ -12,16 +12,9 @@ echo.
 set URL=http://localhost:5000
 set HEALTH_URL=%URL%/api/health
 
-:: Detect Primary Local LAN IP for Phone and other laptops
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4 Address" /c:"Adresse IPv4"') do (
-    set RAW_IP=%%a
-    set IP=!RAW_IP: =!
-    if "!IP:~0,4!"=="192." set LOCAL_LAN_IP=!IP!
-    if "!IP:~0,3!"=="10." set LOCAL_LAN_IP=!IP!
-)
-if "!LOCAL_LAN_IP!"=="" set LOCAL_LAN_IP=192.168.1.X
+set LOCAL_LAN_IP=
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "(Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.IPv4Address -notlike '169.254*' -and $_.InterfaceAlias -notlike '*Loopback*' -and $_.InterfaceAlias -notlike '*WSL*' -and $_.InterfaceAlias -notlike '*Docker*' -and $_.InterfaceAlias -notlike '*Hyper-V*' } | Select-Object -ExpandProperty IPv4Address | Select-Object -First 1).IPAddress"`) do set LOCAL_LAN_IP=%%i
 
-:: Check if already running
 curl -s --max-time 2 %HEALTH_URL% >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     echo [INFO] AutoFix is already running!
@@ -29,7 +22,11 @@ if %ERRORLEVEL% EQU 0 (
     echo ========================================================
     echo   AutoFix is ONLINE:
     echo   - On this Laptop:   %URL%
-    echo   - On Phone / Other Laptops:  http://!LOCAL_LAN_IP!:5000
+    if "!LOCAL_LAN_IP!"=="" (
+        echo   - On Phone / Other Laptops:  (No active Wi-Fi/LAN connection detected)
+    ) else (
+        echo   - On Phone / Other Laptops:  http://!LOCAL_LAN_IP!:5000
+    )
     echo ========================================================
     echo.
     start "" %URL%
@@ -81,7 +78,11 @@ echo   [THIS LAPTOP]
 echo     %URL%
 echo.
 echo   [PHONE ^& OTHER LAPTOPS ON SAME WI-FI]
-echo     http://!LOCAL_LAN_IP!:5000
+if "!LOCAL_LAN_IP!"=="" (
+    echo     (No active Wi-Fi/LAN connection detected)
+) else (
+    echo     http://!LOCAL_LAN_IP!:5000
+)
 echo.
 echo   To safely stop the system, run Stop-AutoFix.bat
 echo ========================================================

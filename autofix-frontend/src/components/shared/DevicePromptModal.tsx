@@ -1,17 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Laptop, Check, AlertCircle } from 'lucide-react';
+import { Smartphone, Laptop, Check, AlertCircle, X } from 'lucide-react';
 import axiosClient from '../../services/axiosClient';
 
 export const DevicePromptModal: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [error, setError] = useState('');
+  const [hasExisting, setHasExisting] = useState(false);
 
   useEffect(() => {
     const existing = localStorage.getItem('autofix_device_name');
     if (!existing) {
       setIsOpen(true);
+      setHasExisting(false);
+    } else {
+      setHasExisting(true);
     }
+
+    const handleOpen = () => {
+      const current = localStorage.getItem('autofix_device_name') || '';
+      setDeviceName(current);
+      setHasExisting(!!current);
+      setError('');
+      setIsOpen(true);
+    };
+
+    window.addEventListener('open-device-prompt', handleOpen);
+    return () => window.removeEventListener('open-device-prompt', handleOpen);
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -24,13 +39,12 @@ export const DevicePromptModal: React.FC = () => {
 
     try {
       localStorage.setItem('autofix_device_name', trimmed);
-      // Register with backend for connected devices list
+      window.dispatchEvent(new CustomEvent('device-name-changed', { detail: { deviceName: trimmed } }));
       try {
         await axiosClient.post('/settings/register-device', { deviceName: trimmed });
-      } catch (err) {
-        // Backend register failure shouldn't block local storage
-      }
+      } catch {}
       setIsOpen(false);
+      setHasExisting(true);
     } catch {
       setError('حدث خطأ أثناء الحفظ');
     }
@@ -43,6 +57,17 @@ export const DevicePromptModal: React.FC = () => {
   return (
     <div style={overlayStyle} dir="rtl">
       <div style={modalBoxStyle}>
+        {hasExisting && (
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            style={closeBtnStyle}
+            title="إغلاق"
+          >
+            <X size={18} />
+          </button>
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
           <div style={iconBadgeStyle}>
             <Laptop size={28} color="#e52535" />
@@ -116,6 +141,7 @@ const overlayStyle: React.CSSProperties = {
 };
 
 const modalBoxStyle: React.CSSProperties = {
+  position: 'relative',
   backgroundColor: '#161c24',
   border: '1px solid #212c3d',
   borderRadius: '16px',
@@ -123,6 +149,17 @@ const modalBoxStyle: React.CSSProperties = {
   width: '100%',
   maxWidth: '440px',
   boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)'
+};
+
+const closeBtnStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: '16px',
+  left: '16px',
+  background: 'none',
+  border: 'none',
+  color: '#94a3b8',
+  cursor: 'pointer',
+  padding: '4px'
 };
 
 const iconBadgeStyle: React.CSSProperties = {

@@ -637,6 +637,11 @@ namespace AutoFix.Migrations
                     b.Property<int>("CarId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1461,6 +1466,11 @@ namespace AutoFix.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ConcurrencyToken")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("CustomerComplaint")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1558,6 +1568,9 @@ namespace AutoFix.Migrations
 
                     b.HasIndex("InsuranceCompanyId");
 
+                    b.HasIndex("OrderNumber")
+                        .IsUnique();
+
                     b.ToTable("WorkOrders");
                 });
 
@@ -1566,6 +1579,9 @@ namespace AutoFix.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("TEXT");

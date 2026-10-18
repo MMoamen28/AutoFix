@@ -101,15 +101,32 @@ namespace AutoFix.Helpers
         public static string NormalizeEgyptianPhone(string phone)
         {
             if (string.IsNullOrWhiteSpace(phone)) return string.Empty;
+            return NormalizePhoneForComparison(phone);
+        }
+
+        public static string NormalizePhoneForComparison(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return string.Empty;
             var digits = NormalizeDigits(phone);
-            digits = Regex.Replace(digits, @"\D", ""); // keep digits only
-
+            digits = Regex.Replace(digits, @"\D", "");
             if (digits.StartsWith("0020")) digits = digits.Substring(4);
-            else if (digits.StartsWith("20")) digits = digits.Substring(2);
+            else if (digits.StartsWith("20") && digits.Length >= 11) digits = digits.Substring(2);
+            while (digits.StartsWith("0")) digits = digits.Substring(1);
+            return digits;
+        }
 
-            if (digits.StartsWith("0")) digits = digits.Substring(1);
-
-            return digits; // e.g. "1012345678"
+        public static string FormatPhoneForStorage(string? phone)
+        {
+            if (string.IsNullOrWhiteSpace(phone)) return string.Empty;
+            var digits = NormalizeDigits(phone);
+            digits = Regex.Replace(digits, @"\D", "");
+            if (digits.StartsWith("0020")) digits = digits.Substring(4);
+            else if (digits.StartsWith("20") && digits.Length >= 11) digits = digits.Substring(2);
+            if (!digits.StartsWith("0") && digits.Length == 10)
+            {
+                digits = "0" + digits;
+            }
+            return digits;
         }
     }
 }

@@ -29,6 +29,10 @@ axiosClient.interceptors.response.use(
       console.warn('Unauthorized or PIN required');
       window.dispatchEvent(new CustomEvent('autofix-pin-required'));
     }
+    if (error.response && error.response.status === 409 && !error.response.data?.requiresConfirmation) {
+      const msg = error.response.data?.message || 'تم تعديل هذا السجل من جهاز آخر، أعد التحميل';
+      window.dispatchEvent(new CustomEvent('autofix-concurrency-conflict', { detail: { message: msg } }));
+    }
     return Promise.reject(error);
   }
 );

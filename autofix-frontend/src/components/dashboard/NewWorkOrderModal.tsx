@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Car, User, Phone, CheckCircle, Clock, 
-  Wrench, AlertTriangle, AlertCircle, X, Save 
+  Wrench, AlertTriangle, AlertCircle, X, Save, Edit2, Lock, ArrowRight, UserCheck
 } from 'lucide-react';
 import Modal from '../shared/Modal';
 import axiosClient from '../../services/axiosClient';
-import PriceInput from '../shared/PriceInput';
 
 interface NewWorkOrderModalProps {
   isOpen: boolean;
@@ -14,15 +13,15 @@ interface NewWorkOrderModalProps {
 }
 
 export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  // Customer
   const [isNewCustomer, setIsNewCustomer] = useState(true);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<number>(0);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [isCustomerLocked, setIsCustomerLocked] = useState(true);
+  const [originalCustomer, setOriginalCustomer] = useState<{ name: string; phone: string } | null>(null);
 
-  // Car
   const [isNewCar, setIsNewCar] = useState(true);
   const [customerCars, setCustomerCars] = useState<any[]>([]);
   const [selectedCarId, setSelectedCarId] = useState<number>(0);
@@ -32,21 +31,29 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
   const [carYear, setCarYear] = useState(new Date().getFullYear());
   const [carVin, setCarVin] = useState('');
   const [odometerKm, setOdometerKm] = useState<number>(0);
+  const [originalCar, setOriginalCar] = useState<{ plate: string; make: string; model: string; year: number; odometer: number } | null>(null);
 
-  // Job Details
   const [workType, setWorkType] = useState<'Maintenance' | 'Inspection'>('Maintenance');
   const [assignedTechnicianId, setAssignedTechnicianId] = useState<number>(0);
   const [mechanicsList, setMechanicsList] = useState<any[]>([]);
   const [customerComplaint, setCustomerComplaint] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Warnings & State
-  const [warningMessage, setWarningMessage] = useState<string>('');
-  const [warningConfirmed, setWarningConfirmed] = useState(false);
+  const [allowDuplicatePhone, setAllowDuplicatePhone] = useState(false);
+  const [allowDuplicateCar, setAllowDuplicateCar] = useState(false);
+  const [allowLowerOdometer, setAllowLowerOdometer] = useState(false);
+
+  const [duplicatePhoneWarning, setDuplicatePhoneWarning] = useState<{ message: string; id?: number; name?: string } | null>(null);
+  const [duplicateCarWarning, setDuplicateCarWarning] = useState<{ message: string; id?: number; name?: string } | null>(null);
+  const [lowerOdometerWarning, setLowerOdometerWarning] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Load mechanics
+  const [changeDialogVisible, setChangeDialogVisible] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<{ field: string; oldVal: string; newVal: string }[]>([]);
+
+  const isServerOffline = typeof window !== 'undefined' && (window as any).__autofix_is_offline;
+
   useEffect(() => {
     if (isOpen) {
       axiosClient.get('/mechanics')
@@ -59,7 +66,6 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
     }
   }, [isOpen]);
 
-  // Customer search debounced
   useEffect(() => {
     if (customerSearch.trim().length >= 2) {
       const timer = setTimeout(() => {
@@ -73,61 +79,167 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
     }
   }, [customerSearch]);
 
-  const handleSelectCustomer = async (c: any) => {
+  const handleSelectCustomer = (c: any) => {
     setSelectedCustomerId(c.id);
     setCustomerName(c.fullName);
     setCustomerPhone(c.phone || '');
+    setOriginalCustomer({ name: c.fullName, phone: c.phone || '' });
+    setIsCustomerLocked(true);
     setIsNewCustomer(false);
     setCustomerSearchResults([]);
     setCustomerSearch('');
+    setDuplicatePhoneWarning(null);
 
-    // Fetch cars
-    try {
-      const res = await axiosClient.get(`/cars?customerId=${c.id}`);
-      if (Array.isArray(res.data) && res.data.length > 0) {
-        setCustomerCars(res.data);
-        const first = res.data[0];
-        setSelectedCarId(first.id);
-        setCarPlate(first.licensePlate);
-        setCarMake(first.make);
-        setCarModel(first.model);
-        setCarYear(first.year);
-        setCarVin(first.vin || '');
-        setOdometerKm(first.odometerKm || 0);
-        setIsNewCar(false);
-      } else {
-        setCustomerCars([]);
-        setIsNewCar(true);
-      }
-    } catch {}
+    const cars = Array.isArray(c.cars) ? c.cars : [];
+    setCustomerCars(cars);
+
+    if (cars.length === 1) {
+      const first = cars[0];
+      setSelectedCarId(first.id);
+      setCarPlate(first.licensePlate);
+      setCarMake(first.make);
+      setCarModel(first.model);
+      setCarYear(first.year);
+      setCarVin(first.vin || '');
+      setOdometerKm(first.currentOdometerKm || first.odometerKm || 0);
+      setOriginalCar({
+        plate: first.licensePlate,
+        make: first.make,
+        model: first.model,
+        year: first.year,
+        odometer: first.currentOdometerKm || first.odometerKm || 0
+      });
+      setIsNewCar(false);
+    } else if (cars.length > 1) {
+      const first = cars[0];
+      setSelectedCarId(first.id);
+      setCarPlate(first.licensePlate);
+      setCarMake(first.make);
+      setCarModel(first.model);
+      setCarYear(first.year);
+      setCarVin(first.vin || '');
+      setOdometerKm(first.currentOdometerKm || first.odometerKm || 0);
+      setOriginalCar({
+        plate: first.licensePlate,
+        make: first.make,
+        model: first.model,
+        year: first.year,
+        odometer: first.currentOdometerKm || first.odometerKm || 0
+      });
+      setIsNewCar(false);
+    } else {
+      setSelectedCarId(0);
+      setCarPlate('');
+      setCarMake('Toyota');
+      setCarModel('Corolla');
+      setCarYear(new Date().getFullYear());
+      setCarVin('');
+      setOdometerKm(0);
+      setOriginalCar(null);
+      setIsNewCar(true);
+    }
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSelectCarDropdown = (carId: number) => {
+    if (carId === 0) {
+      setSelectedCarId(0);
+      setCarPlate('');
+      setCarMake('Toyota');
+      setCarModel('Corolla');
+      setCarYear(new Date().getFullYear());
+      setCarVin('');
+      setOdometerKm(0);
+      setOriginalCar(null);
+      setIsNewCar(true);
+      return;
+    }
+
+    const found = customerCars.find(c => c.id === carId);
+    if (found) {
+      setSelectedCarId(found.id);
+      setCarPlate(found.licensePlate);
+      setCarMake(found.make);
+      setCarModel(found.model);
+      setCarYear(found.year);
+      setCarVin(found.vin || '');
+      setOdometerKm(found.currentOdometerKm || found.odometerKm || 0);
+      setOriginalCar({
+        plate: found.licensePlate,
+        make: found.make,
+        model: found.model,
+        year: found.year,
+        odometer: found.currentOdometerKm || found.odometerKm || 0
+      });
+      setIsNewCar(false);
+    }
+  };
+
+  const checkChangedFields = () => {
+    const changes: { field: string; oldVal: string; newVal: string }[] = [];
+    if (!isNewCustomer && originalCustomer) {
+      if (customerName.trim() !== originalCustomer.name.trim()) {
+        changes.push({ field: 'اسم العميل', oldVal: originalCustomer.name, newVal: customerName.trim() });
+      }
+      if (customerPhone.trim() !== originalCustomer.phone.trim()) {
+        changes.push({ field: 'رقم الهاتف', oldVal: originalCustomer.phone, newVal: customerPhone.trim() });
+      }
+    }
+    if (!isNewCar && originalCar) {
+      if (carPlate.trim() !== originalCar.plate.trim()) {
+        changes.push({ field: 'رقم اللوحة', oldVal: originalCar.plate, newVal: carPlate.trim() });
+      }
+      if (carMake.trim() !== originalCar.make.trim()) {
+        changes.push({ field: 'الماركة', oldVal: originalCar.make, newVal: carMake.trim() });
+      }
+      if (carModel.trim() !== originalCar.model.trim()) {
+        changes.push({ field: 'الموديل', oldVal: originalCar.model, newVal: carModel.trim() });
+      }
+      if (carYear !== originalCar.year) {
+        changes.push({ field: 'سنة الصنع', oldVal: String(originalCar.year), newVal: String(carYear) });
+      }
+    }
+    return changes;
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+
+    const changes = checkChangedFields();
+    if (changes.length > 0) {
+      setPendingChanges(changes);
+      setChangeDialogVisible(true);
+      return;
+    }
+
+    executeSave(false, false);
+  };
+
+  const executeSave = async (updateCust: boolean, updateCar: boolean) => {
     setIsSaving(true);
+    setErrorMessage('');
 
     const payload = {
-      isNewCustomer,
-      selectedCustomerId: isNewCustomer ? 0 : selectedCustomerId,
+      customerId: isNewCustomer ? null : selectedCustomerId,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      isNewCar,
-      selectedCarId: isNewCar ? 0 : selectedCarId,
+      carId: isNewCar ? null : selectedCarId,
       make: carMake.trim(),
       model: carModel.trim(),
       year: carYear,
       licensePlate: carPlate.trim(),
       vin: carVin.trim(),
-      odometerKm: Number(odometerKm) || 0,
+      odometerInKm: Number(odometerKm) || 0,
       workType,
       assignedTechnicianId: Number(assignedTechnicianId) || null,
       customerComplaint: customerComplaint.trim(),
       notes: notes.trim(),
       lines: [],
-      confirmDuplicatePhone: warningConfirmed,
-      confirmDuplicatePlate: warningConfirmed,
-      confirmLowerOdometer: warningConfirmed
+      allowDuplicatePhone,
+      allowDuplicateCar,
+      allowLowerOdometer,
+      updateCustomerProfile: updateCust,
+      updateCarProfile: updateCar
     };
 
     try {
@@ -137,12 +249,29 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
         onClose();
       }
     } catch (err: any) {
+      const status = err.response?.status;
       const data = err.response?.data;
-      if (data && data.requiresConfirmation) {
-        setWarningMessage(data.message || 'يوجد تحذير يتطلب التأكيد (تكرار رقم الهاتف / اللوحة أو عداد أقل)');
-        setWarningConfirmed(true);
+
+      if (status === 409 && data?.requiresConfirmation) {
+        if (data.code === 'DuplicatePhone') {
+          setDuplicatePhoneWarning({
+            message: data.message,
+            id: data.existingRecordId,
+            name: data.existingRecordName
+          });
+        } else if (data.code === 'DuplicateCar') {
+          setDuplicateCarWarning({
+            message: data.message,
+            id: data.existingRecordId,
+            name: data.existingRecordName
+          });
+        } else if (data.code === 'LowerOdometer') {
+          setLowerOdometerWarning(data.message);
+        } else {
+          setErrorMessage(data.message || 'تحذير تكرار البيانات');
+        }
       } else {
-        setErrorMessage(data?.message || 'فشل إنشاء أمر الشغل');
+        setErrorMessage(data?.message || 'فشل حفظ أمر الشغل');
       }
     } finally {
       setIsSaving(false);
@@ -157,9 +286,8 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
       onClose={onClose}
       title="كارت عمل جديد (استقبال سيارة)"
     >
-      <form onSubmit={handleSave} dir="rtl" style={{ display: 'flex', flexDirection: 'column', gap: '18px', fontFamily: 'Cairo, sans-serif' }}>
+      <form onSubmit={handleFormSubmit} dir="rtl" style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: 'Cairo, sans-serif' }}>
         
-        {/* Customer Section */}
         <div style={sectionBoxStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ fontSize: '13px', fontWeight: 800, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -171,7 +299,15 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
                   type="radio"
                   name="custType"
                   checked={isNewCustomer}
-                  onChange={() => { setIsNewCustomer(true); setSelectedCustomerId(0); }}
+                  onChange={() => {
+                    setIsNewCustomer(true);
+                    setSelectedCustomerId(0);
+                    setIsCustomerLocked(false);
+                    setOriginalCustomer(null);
+                    setCustomerCars([]);
+                    setSelectedCarId(0);
+                    setIsNewCar(true);
+                  }}
                 />
                 <span>عميل جديد</span>
               </label>
@@ -180,7 +316,10 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
                   type="radio"
                   name="custType"
                   checked={!isNewCustomer}
-                  onChange={() => setIsNewCustomer(false)}
+                  onChange={() => {
+                    setIsNewCustomer(false);
+                    setIsCustomerLocked(true);
+                  }}
                 />
                 <span>عميل مسجل</span>
               </label>
@@ -189,13 +328,17 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
 
           {!isNewCustomer && (
             <div style={{ position: 'relative', marginBottom: '12px' }}>
-              <input
-                type="text"
-                placeholder="ابحث بالاسم أو رقم الهاتف..."
-                value={customerSearch}
-                onChange={e => setCustomerSearch(e.target.value)}
-                style={inputStyle}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="ابحث بالاسم أو رقم الهاتف..."
+                  value={customerSearch}
+                  onChange={e => setCustomerSearch(e.target.value)}
+                  style={inputStyle}
+                  autoFocus={!isNewCustomer && selectedCustomerId === 0}
+                />
+                <Search size={16} color="#64748b" style={{ position: 'absolute', left: '10px', top: '10px' }} />
+              </div>
               {customerSearchResults.length > 0 && (
                 <div style={dropdownResultsStyle}>
                   {customerSearchResults.map(c => (
@@ -204,7 +347,10 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
                       onClick={() => handleSelectCustomer(c)}
                       style={dropdownItemStyle}
                     >
-                      <div style={{ fontWeight: 700, color: '#ffffff' }}>{c.fullName}</div>
+                      <div style={{ fontWeight: 700, color: '#ffffff', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{c.fullName}</span>
+                        <span style={{ fontSize: '11px', color: '#10b981' }}>{Array.isArray(c.cars) ? `${c.cars.length} سيارة` : ''}</span>
+                      </div>
                       <div style={{ fontSize: '11px', color: '#94a3b8' }}>{c.phone}</div>
                     </div>
                   ))}
@@ -215,14 +361,37 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div>
-              <label style={labelStyle}>اسم العميل *</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={labelStyle}>اسم العميل *</label>
+                {!isNewCustomer && selectedCustomerId > 0 && isCustomerLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerLocked(false)}
+                    style={editLinkStyle}
+                  >
+                    <Edit2 size={12} />
+                    <span>تعديل</span>
+                  </button>
+                )}
+                {!isNewCustomer && selectedCustomerId > 0 && !isCustomerLocked && (
+                  <span style={{ fontSize: '11px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <Lock size={11} /> جاري التعديل
+                  </span>
+                )}
+              </div>
               <input
                 type="text"
                 required
+                readOnly={!isNewCustomer && isCustomerLocked}
                 value={customerName}
                 onChange={e => setCustomerName(e.target.value)}
                 placeholder="الاسم ثلاثي"
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  backgroundColor: (!isNewCustomer && isCustomerLocked) ? '#111720' : '#0d1117',
+                  color: (!isNewCustomer && isCustomerLocked) ? '#94a3b8' : '#ffffff',
+                  cursor: (!isNewCustomer && isCustomerLocked) ? 'not-allowed' : 'text'
+                }}
               />
             </div>
             <div>
@@ -230,43 +399,40 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
               <input
                 type="tel"
                 required
+                readOnly={!isNewCustomer && isCustomerLocked}
                 value={customerPhone}
                 onChange={e => setCustomerPhone(e.target.value)}
                 placeholder="01xxxxxxxxx"
-                style={inputStyle}
+                style={{
+                  ...inputStyle,
+                  backgroundColor: (!isNewCustomer && isCustomerLocked) ? '#111720' : '#0d1117',
+                  color: (!isNewCustomer && isCustomerLocked) ? '#94a3b8' : '#ffffff',
+                  cursor: (!isNewCustomer && isCustomerLocked) ? 'not-allowed' : 'text'
+                }}
               />
             </div>
           </div>
         </div>
 
-        {/* Car Section */}
         <div style={sectionBoxStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ fontSize: '13px', fontWeight: 800, color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Car size={16} /> بيانات السيارة
             </span>
-            {!isNewCustomer && customerCars.length > 0 && (
-              <select
-                value={selectedCarId}
-                onChange={e => {
-                  const cId = Number(e.target.value);
-                  setSelectedCarId(cId);
-                  const found = customerCars.find(c => c.id === cId);
-                  if (found) {
-                    setCarPlate(found.licensePlate);
-                    setCarMake(found.make);
-                    setCarModel(found.model);
-                    setCarYear(found.year);
-                    setCarVin(found.vin || '');
-                    setOdometerKm(found.odometerKm || 0);
-                  }
-                }}
-                style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: '12px' }}
-              >
-                {customerCars.map(car => (
-                  <option key={car.id} value={car.id}>{car.make} {car.model} ({car.licensePlate})</option>
-                ))}
-              </select>
+            {!isNewCustomer && selectedCustomerId > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>اختر سيارة:</span>
+                <select
+                  value={selectedCarId}
+                  onChange={e => handleSelectCarDropdown(Number(e.target.value))}
+                  style={{ ...inputStyle, width: 'auto', padding: '4px 8px', fontSize: '12px' }}
+                >
+                  {customerCars.map(car => (
+                    <option key={car.id} value={car.id}>{car.make} {car.model} ({car.licensePlate})</option>
+                  ))}
+                  <option value="0">+ سيارة جديدة للعميل</option>
+                </select>
+              </div>
             )}
           </div>
 
@@ -325,7 +491,6 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
           </div>
         </div>
 
-        {/* Work Order Details */}
         <div style={sectionBoxStyle}>
           <div style={{ fontSize: '13px', fontWeight: 800, color: '#f59e0b', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Wrench size={16} /> نوع الخدمة والفني المسؤول
@@ -358,7 +523,7 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
             </div>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
+          <div>
             <label style={labelStyle}>شكوى العميل / الأعمال المطلوبة</label>
             <input
               type="text"
@@ -368,22 +533,99 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
               style={inputStyle}
             />
           </div>
-
-
         </div>
 
-        {/* Warning Alert */}
-        {warningMessage && (
+        {duplicatePhoneWarning && (
           <div style={warningBoxStyle}>
             <AlertTriangle size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
             <div style={{ fontSize: '12px', color: '#fcd34d', flex: 1 }}>
-              {warningMessage}
-              <div style={{ marginTop: '4px', fontWeight: 700 }}>اضغط "تأكيد وحفظ" مرة أخرى للمتابعة رغم التحذير.</div>
+              <div>{duplicatePhoneWarning.message}</div>
+              {isNewCustomer && duplicatePhoneWarning.id && (
+                <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNewCustomer(false);
+                      setSelectedCustomerId(duplicatePhoneWarning.id!);
+                      if (duplicatePhoneWarning.name) setCustomerName(duplicatePhoneWarning.name);
+                      setDuplicatePhoneWarning(null);
+                      axiosClient.get(`/customers/${duplicatePhoneWarning.id}`)
+                        .then(res => {
+                          if (res.data) handleSelectCustomer(res.data);
+                        })
+                        .catch(() => {});
+                    }}
+                    style={actionBtnStyle}
+                  >
+                    <UserCheck size={14} />
+                    <span>استخدام هذا العميل ({duplicatePhoneWarning.name})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAllowDuplicatePhone(true);
+                      setDuplicatePhoneWarning(null);
+                    }}
+                    style={secondaryWarningBtnStyle}
+                  >
+                    <span>متابعة برقم هاتف مكرر</span>
+                  </button>
+                </div>
+              )}
+              {!isNewCustomer && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAllowDuplicatePhone(true);
+                    setDuplicatePhoneWarning(null);
+                  }}
+                  style={{ ...secondaryWarningBtnStyle, marginTop: '6px' }}
+                >
+                  <span>تأكيد المتابعة بالرقم المكرر</span>
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        {/* Error Alert */}
+        {duplicateCarWarning && (
+          <div style={warningBoxStyle}>
+            <AlertTriangle size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: '12px', color: '#fcd34d', flex: 1 }}>
+              <div>{duplicateCarWarning.message}</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAllowDuplicateCar(true);
+                  setDuplicateCarWarning(null);
+                }}
+                style={{ ...secondaryWarningBtnStyle, marginTop: '6px' }}
+              >
+                <span>تأكيد تسجيل السيارة المكررة</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {lowerOdometerWarning && (
+          <div style={warningBoxStyle}>
+            <AlertTriangle size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: '12px', color: '#fcd34d', flex: 1 }}>
+              <div>{lowerOdometerWarning}</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAllowLowerOdometer(true);
+                  setLowerOdometerWarning(null);
+                }}
+                style={{ ...secondaryWarningBtnStyle, marginTop: '6px' }}
+              >
+                <span>تأكيد قراءة العداد الأقل</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {errorMessage && (
           <div style={errorBoxStyle}>
             <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
@@ -393,7 +635,6 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
           </div>
         )}
 
-        {/* Action Buttons */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
           <button
             type="button"
@@ -404,14 +645,73 @@ export const NewWorkOrderModal: React.FC<NewWorkOrderModalProps> = ({ isOpen, on
           </button>
           <button
             type="submit"
-            disabled={isSaving}
-            style={saveBtnStyle}
+            disabled={isSaving || isServerOffline}
+            style={{
+              ...saveBtnStyle,
+              opacity: (isSaving || isServerOffline) ? 0.6 : 1,
+              cursor: (isSaving || isServerOffline) ? 'not-allowed' : 'pointer'
+            }}
           >
             <Plus size={16} strokeWidth={2.5} />
-            <span>{isSaving ? 'جاري الحفظ...' : warningConfirmed ? 'تأكيد وحفظ الكارت' : 'حفظ وفتح الكارت'}</span>
+            <span>{isSaving ? 'جاري الحفظ...' : isServerOffline ? 'السيرفر غير متصل' : 'حفظ وفتح الكارت'}</span>
           </button>
         </div>
       </form>
+
+      {changeDialogVisible && (
+        <div style={confirmModalOverlayStyle} dir="rtl">
+          <div style={confirmModalBoxStyle}>
+            <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', margin: '0 0 10px' }}>
+              هل تريد تحديث بيانات العميل/السيارة للمستقبل؟
+            </h3>
+            <p style={{ fontSize: '12px', color: '#94a3b8', margin: '0 0 14px' }}>
+              تم رصد تغييرات على البيانات المسجلة مسبقاً:
+            </p>
+            <div style={{ backgroundColor: '#0d1117', border: '1px solid #212c3d', borderRadius: '8px', padding: '10px', marginBottom: '16px' }}>
+              {pendingChanges.map((ch, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0', borderBottom: idx < pendingChanges.length - 1 ? '1px solid #1c2430' : 'none' }}>
+                  <span style={{ color: '#94a3b8', fontWeight: 600 }}>{ch.field}:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: '#ef4444', textDecoration: 'line-through' }}>{ch.oldVal}</span>
+                    <ArrowRight size={12} color="#64748b" />
+                    <span style={{ color: '#10b981', fontWeight: 700 }}>{ch.newVal}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setChangeDialogVisible(false);
+                  executeSave(true, true);
+                }}
+                style={dialogUpdateBtnStyle}
+              >
+                تحديث البيانات المسجلة للمستقبل
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setChangeDialogVisible(false);
+                  executeSave(false, false);
+                }}
+                style={dialogSingleBtnStyle}
+              >
+                استخدام التغيير لهذا الكارت فقط
+              </button>
+              <button
+                type="button"
+                onClick={() => setChangeDialogVisible(false)}
+                style={dialogCancelBtnStyle}
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 };
@@ -436,8 +736,20 @@ const labelStyle: React.CSSProperties = {
   fontSize: '11px',
   fontWeight: 700,
   color: '#94a3b8',
-  display: 'block',
-  marginBottom: '4px'
+  display: 'block'
+};
+
+const editLinkStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: '#3b82f6',
+  fontSize: '11px',
+  fontWeight: 700,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: '3px',
+  padding: 0
 };
 
 const inputStyle: React.CSSProperties = {
@@ -478,7 +790,7 @@ const warningBoxStyle: React.CSSProperties = {
   borderRadius: '8px',
   padding: '10px 14px',
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'flex-start',
   gap: '10px'
 };
 
@@ -515,6 +827,90 @@ const cancelBtnStyle: React.CSSProperties = {
   padding: '10px 16px',
   fontSize: '13px',
   fontWeight: 700,
+  cursor: 'pointer',
+  fontFamily: 'Cairo, sans-serif'
+};
+
+const actionBtnStyle: React.CSSProperties = {
+  backgroundColor: '#10b981',
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: '6px',
+  padding: '6px 10px',
+  fontSize: '11px',
+  fontWeight: 700,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  fontFamily: 'Cairo, sans-serif'
+};
+
+const secondaryWarningBtnStyle: React.CSSProperties = {
+  backgroundColor: '#334155',
+  color: '#cbd5e1',
+  border: 'none',
+  borderRadius: '6px',
+  padding: '6px 10px',
+  fontSize: '11px',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'Cairo, sans-serif'
+};
+
+const confirmModalOverlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  backgroundColor: 'rgba(0,0,0,0.8)',
+  backdropFilter: 'blur(4px)',
+  zIndex: 10000,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '16px'
+};
+
+const confirmModalBoxStyle: React.CSSProperties = {
+  backgroundColor: '#161c24',
+  border: '1px solid #3b82f6',
+  borderRadius: '14px',
+  padding: '20px',
+  maxWidth: '420px',
+  width: '100%',
+  boxShadow: '0 20px 30px rgba(0,0,0,0.7)',
+  fontFamily: 'Cairo, sans-serif'
+};
+
+const dialogUpdateBtnStyle: React.CSSProperties = {
+  backgroundColor: '#3b82f6',
+  color: '#ffffff',
+  border: 'none',
+  borderRadius: '8px',
+  padding: '10px',
+  fontSize: '13px',
+  fontWeight: 700,
+  cursor: 'pointer',
+  fontFamily: 'Cairo, sans-serif'
+};
+
+const dialogSingleBtnStyle: React.CSSProperties = {
+  backgroundColor: '#1c2430',
+  color: '#cbd5e1',
+  border: '1px solid #2a3749',
+  borderRadius: '8px',
+  padding: '10px',
+  fontSize: '13px',
+  fontWeight: 700,
+  cursor: 'pointer',
+  fontFamily: 'Cairo, sans-serif'
+};
+
+const dialogCancelBtnStyle: React.CSSProperties = {
+  backgroundColor: 'transparent',
+  color: '#94a3b8',
+  border: 'none',
+  padding: '8px',
+  fontSize: '12px',
   cursor: 'pointer',
   fontFamily: 'Cairo, sans-serif'
 };
